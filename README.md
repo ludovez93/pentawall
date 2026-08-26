@@ -29,6 +29,13 @@ dal PC.
 La scena della tappa 0 (`scenes/test_cube.tscn`) resta: serve a riprovare la catena di
 compilazione quando cambia qualcosa che non c'entra col gioco.
 
+## Si prova qui
+
+### <https://ludovez93.github.io/pentawall/>
+
+Si apre nel browser, anche da telefono, e si gioca col pollice: nessuna installazione, nessun cavo.
+La pagina si rifà a ogni `push`. Per il giudizio sulle prestazioni vale l'app nativa, non questa.
+
 ## Come si gioca
 
 | | Sul telefono | Sul PC |
