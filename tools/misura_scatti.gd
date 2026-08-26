@@ -30,7 +30,10 @@ func _lavora() -> void:
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	Engine.max_fps = 0
 	var argomenti := OS.get_cmdline_user_args()
-	var quale := "angolo" if argomenti.has("angolo") else "poligono"
+	var quale := "poligono"
+	for nome in ["angolo", "arena"]:
+		if argomenti.has(nome):
+			quale = nome
 	var col_fuoco := not argomenti.has("senza-fuoco")
 
 	var scena: Node = load("res://scenes/%s.tscn" % quale).instantiate()

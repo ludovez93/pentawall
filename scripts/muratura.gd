@@ -32,6 +32,9 @@ const LISTELLO := 0.085
 ## distinguono una sponda (`PLAN.md`, tappa 3).
 static var _grana: NoiseTexture2D = null
 
+## Il carattere delle insegne, preparato una volta sola.
+static var _carattere: Font = null
+
 
 ## Un muro: si vede, ci si cammina contro, e **ferma il dardo**.
 static func muro(genitore: Node, centro: Vector3, misura: Vector3, colore: Color,
@@ -80,6 +83,7 @@ static func insegna(genitore: Node, testo: String, dove: Vector3, giro: Vector3,
 		misura: float, colore: Color) -> Label3D:
 	var etichetta := Label3D.new()
 	etichetta.text = testo
+	etichetta.font = carattere()
 	etichetta.font_size = 160
 	etichetta.pixel_size = misura * 0.006
 	etichetta.position = dove
@@ -151,6 +155,27 @@ static func acceso(colore: Color, luce: float) -> StandardMaterial3D:
 	materiale.emission = colore
 	materiale.emission_energy_multiplier = luce
 	return materiale
+
+
+## Il carattere delle insegne, **con le mipmap accese**.
+##
+## Senza, un'insegna guardata da lontano e di scorcio si riduce a pochi pixel e il
+## ritaglio della trasparenza li alterna bianco e nero: da dentro l'arena si vede
+## un quadratino a scacchi, identico a quello con cui Godot dice «qui manca una
+## texture». Non manca niente: è il testo, sottocampionato. Trovato il 26/08/2026
+## sull'insegna TURBO a ventisette metri, isolandola in uno scatto suo
+## (`scatti/96-insegna-di-scorcio.png`) invece di indovinare.
+static func carattere() -> Font:
+	if _carattere != null:
+		return _carattere
+	var base := ThemeDB.fallback_font
+	if base is FontFile:
+		var copia: FontFile = (base as FontFile).duplicate()
+		copia.generate_mipmaps = true
+		_carattere = copia
+	else:
+		_carattere = base
+	return _carattere
 
 
 ## La grana, generata una volta sola per tutta la partita.
@@ -228,3 +253,118 @@ static func _cornice(corpo: Node3D, faccia: Vector2, neon: Color) -> void:
 		pezzo.material_override = materiale
 		pezzo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		corpo.add_child(pezzo)
+
+
+## Un pavimento di forma qualunque, dato il suo contorno visto dall'alto.
+##
+## Serve dalla tappa 5: il catino dell'arena è un ottagono, e un ottagono non si
+## fa con una scatola. Il contorno si dà in metri sul piano orizzontale, la quota
+## è quella del **piano calpestabile** — sotto ci va lo spessore, così camminare
+## a quota zero vuol dire davvero stare a zero.
+##
+## Come i muri: ferma il dardo e non lo rimbalza. Quello che rimbalza si dichiara
+## con `sponda()`, sempre e solo.
+static func piano(genitore: Node, contorno: PackedVector2Array, quota: float,
+		spessore: float, colore: Color) -> StaticBody3D:
+	var corpo := StaticBody3D.new()
+	corpo.collision_layer = Strati.OSTACOLO
+	corpo.collision_mask = 0
+	corpo.add_to_group(GRUPPO_MURI)
+	genitore.add_child(corpo)
+
+	var alto := quota
+	var basso := quota - spessore
+	var punti := PackedVector3Array()
+	for p in contorno:
+		punti.append(Vector3(p.x, alto, p.y))
+	for p in contorno:
+		punti.append(Vector3(p.x, basso, p.y))
+
+	var forma := CollisionShape3D.new()
+	var scatola := ConvexPolygonShape3D.new()
+	scatola.points = punti
+	forma.shape = scatola
+	corpo.add_child(forma)
+
+	var pezzo := MeshInstance3D.new()
+	pezzo.mesh = _prisma(contorno, alto, basso)
+	pezzo.material_override = opaco(colore, Vector3(_larghezza(contorno), spessore,
+			_larghezza(contorno)))
+	corpo.add_child(pezzo)
+	return corpo
+
+
+## Una rampa: un piano inclinato che porta da una quota all'altra.
+##
+## Si dà come la si racconta — da dove a dove, e fra che quote — invece che con
+## un centro e due rotazioni: una rampa descritta con gli angoli di Eulero è una
+## rampa che prima o poi guarda dalla parte sbagliata.
+static func rampa(genitore: Node, da: Vector2, a: Vector2, larghezza: float,
+		quota_da: float, quota_a: float, spessore: float, colore: Color) -> StaticBody3D:
+	var piatto := a - da
+	var dislivello := quota_a - quota_da
+	var lunghezza := sqrt(piatto.length_squared() + dislivello * dislivello)
+	var avanti := Vector3(piatto.x, dislivello, piatto.y).normalized()
+	var destra := avanti.cross(Vector3.UP).normalized()
+	if destra.length_squared() < 0.5:
+		destra = Vector3.RIGHT
+	var su := destra.cross(avanti)
+
+	var corpo := StaticBody3D.new()
+	corpo.collision_layer = Strati.OSTACOLO
+	corpo.collision_mask = 0
+	corpo.add_to_group(GRUPPO_MURI)
+	corpo.transform = Transform3D(Basis(destra, su, -avanti),
+			Vector3((da.x + a.x) * 0.5, (quota_da + quota_a) * 0.5 - spessore * 0.5,
+					(da.y + a.y) * 0.5))
+	genitore.add_child(corpo)
+
+	var misura := Vector3(larghezza, spessore, lunghezza)
+	var forma := CollisionShape3D.new()
+	var scatola := BoxShape3D.new()
+	scatola.size = misura
+	forma.shape = scatola
+	corpo.add_child(forma)
+	_pelle(corpo, misura, opaco(colore, misura))
+	return corpo
+
+
+## Il prisma di un contorno: la faccia di sopra, quella di sotto e i fianchi.
+static func _prisma(contorno: PackedVector2Array, alto: float, basso: float) -> ArrayMesh:
+	var triangoli := Geometry2D.triangulate_polygon(contorno)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+
+	var quanti := triangoli.size()
+	var i := 0
+	while i < quanti:
+		# sopra: si guarda da su, quindi i vertici vanno letti al contrario
+		for k in [2, 1, 0]:
+			var p: Vector2 = contorno[triangoli[i + k]]
+			st.set_uv(p * 0.25)
+			st.add_vertex(Vector3(p.x, alto, p.y))
+		i += 3
+
+	var n := contorno.size()
+	for j in n:
+		var p1: Vector2 = contorno[j]
+		var p2: Vector2 = contorno[(j + 1) % n]
+		var quadro := [
+			Vector3(p1.x, alto, p1.y), Vector3(p2.x, alto, p2.y),
+			Vector3(p2.x, basso, p2.y), Vector3(p1.x, basso, p1.y),
+		]
+		for k in [0, 1, 2, 0, 2, 3]:
+			st.set_uv(Vector2(quadro[k].x + quadro[k].z, quadro[k].y) * 0.25)
+			st.add_vertex(quadro[k])
+
+	st.generate_normals()
+	return st.commit()
+
+
+static func _larghezza(contorno: PackedVector2Array) -> float:
+	var minimo := contorno[0]
+	var massimo := contorno[0]
+	for p in contorno:
+		minimo = minimo.min(p)
+		massimo = massimo.max(p)
+	return maxf(massimo.x - minimo.x, massimo.y - minimo.y)

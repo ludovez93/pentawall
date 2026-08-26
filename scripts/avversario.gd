@@ -88,6 +88,24 @@ const MARGINE_PERICOLO := 0.18
 const DISTANZA_MINIMA := 6.0
 const DISTANZA_MASSIMA := 14.0
 
+## Ogni quanto si richiede la strada. Un percorso è una domanda al motore di
+## navigazione: farla a ogni fotogramma vuol dire pagarla sessanta volte al secondo
+## per una risposta che cambia a passo d'uomo.
+const RICALCOLO_PERCORSO := 0.5
+
+## Quanto ci si avvicina a un passo del percorso prima di puntare al successivo.
+## Più stretto di così si gira attorno ai punti invece di attraversarli.
+const PASSO_PRESO := 1.2
+
+## Quanto tempo di spinta senza moto basta per dire «sono incastrato».
+##
+## Serve perché i punti di un percorso stanno **sugli spigoli**: la rete si ritira
+## di mezzo metro dai muri, e puntare dritto al suo vertice vuol dire strusciare
+## contro l'angolo — dove non c'è niente da far scivolare, perché il muro è quasi
+## perpendicolare al moto. Misurato il 26/08/2026: undici secondi fermo contro il
+## pilastro dell'ocra, con la spinta al massimo e la velocità a zero.
+const PAZIENZA_INCASTRO := 0.45
+
 ## Le tre tarature. Cambiano **solo** come esegue, mai cosa sa fare.
 const TARATURE := [
 	{
@@ -137,6 +155,13 @@ var _prima_occhiata := true
 var _allarmi := {}
 var _gia_schivati := {}
 
+## La strada verso il bersaglio, e a che punto la sta percorrendo.
+var _percorso := PackedVector3Array()
+var _passo := 0
+var _prossimo_percorso := 0.0
+var _stava_camminando := false
+var _fermo_da := 0.0
+
 var _aspetto: Node3D
 var _canna: Node3D
 var _pezzi: Array = []  ## {materiale, luce}: la luce di riposo, per il lampeggio
@@ -174,7 +199,9 @@ func _physics_process(delta: float) -> void:
 		_esamina_i_dardi()
 	_scala_gli_allarmi(delta)
 
+	_aggiorna_il_percorso(delta)
 	_muovi(delta)
+	_controlla_se_sono_incastrato(delta)
 	_mira_e_spara()
 
 
@@ -443,12 +470,21 @@ func _direzione_tattica(delta: float) -> Vector3:
 		if is_on_floor() and randf() < float(TARATURE[_livello]["salto"]):
 			velocity.y = Giocatore.SPINTA_SALTO
 
+	var lo_vede := _lo_vede()
+
+	# Lontano o coperto: si **cammina**, e la strada la dà la rete di cammino. In
+	# una scena che non ne ha — il poligono, l'angolo — la strada è vuota e vale
+	# tutto quello che c'era prima.
+	var strada := _direzione_del_cammino(distanza, lo_vede)
+	if strada != Vector3.ZERO:
+		return strada
+
 	var direzione := lato * _strafe
 	if distanza > DISTANZA_MASSIMA:
 		direzione += verso_lui * 1.2
 	elif distanza < DISTANZA_MINIMA:
 		direzione -= verso_lui * 1.2
-	if not _lo_vede():
+	if not lo_vede:
 		# Coperto: si sposta di lato per riaprirsi la linea, invece di restare lì
 		# a sparare contro un pilastro.
 		direzione += lato * _strafe * 0.8
@@ -462,6 +498,99 @@ func _direzione_tattica(delta: float) -> Vector3:
 			_cambio_strafe = randf_range(0.6, 1.2)
 			direzione = (lato * _strafe).normalized()
 	return direzione
+
+
+# ------------------------------------------------------------------ il cammino
+
+## La strada verso il bersaglio, ricalcolata due volte al secondo.
+##
+## Serve dall'arena intera in poi. In una stanza sola non serviva — girargli
+## intorno bastava, ed era scritto nel codice — ma con rampe, scala e ballatoio un
+## avversario senza percorso si incastra nel primo angolo, e un avversario
+## incastrato rende impossibile giudicare se perdere contro di lui sembra giusto.
+##
+## La rete è **cotta in anticipo** (`tools/cuoci_percorsi.gd`) perché la pagina web
+## gira senza thread: qui si fa solo la domanda. Dove la rete non c'è la risposta è
+## vuota, e allora comanda la tattica di sempre.
+func _aggiorna_il_percorso(delta: float) -> void:
+	_prossimo_percorso -= delta
+	if _prossimo_percorso > 0.0:
+		return
+	_prossimo_percorso = RICALCOLO_PERCORSO
+	if bersaglio == null or not is_instance_valid(bersaglio):
+		_percorso = PackedVector3Array()
+		return
+	var mappa := get_world_3d().navigation_map
+	if NavigationServer3D.map_get_regions(mappa).is_empty():
+		_percorso = PackedVector3Array()
+		return
+	_percorso = NavigationServer3D.map_get_path(mappa, global_position,
+			bersaglio.global_position, true)
+	_passo = 0
+
+
+## Butta la strada che stava seguendo. Serve a chi lo sposta di colpo — la
+## ricomparsa dopo un colpo incassato — perché senza continuerebbe mezzo secondo a
+## camminare verso un punto che ormai sta dall'altra parte dell'arena.
+func ricomincia_il_cammino() -> void:
+	_percorso = PackedVector3Array()
+	_passo = 0
+	_prossimo_percorso = 0.0
+
+
+## Sta seguendo una strada in questo momento. Serve al collaudo, che deve poter
+## distinguere «cammina» da «gli gira intorno» senza aprire il codice.
+func in_cammino() -> bool:
+	return not _percorso.is_empty()
+
+
+## Quando la spinta non produce moto, il passo si dà per preso e si salta: contro
+## uno spigolo un corpo resta lì finché qualcosa non lo smuove, e il salto è quello
+## che farebbe chiunque. La strada non si richiede subito — sarebbe la stessa, con
+## lo stesso spigolo davanti — ma dopo un secondo.
+func _controlla_se_sono_incastrato(delta: float) -> void:
+	if not _stava_camminando:
+		_fermo_da = 0.0
+		return
+	if Vector3(velocity.x, 0.0, velocity.z).length() > 1.0:
+		_fermo_da = 0.0
+		return
+	_fermo_da += delta
+	if _fermo_da < PAZIENZA_INCASTRO:
+		return
+	_fermo_da = 0.0
+	_passo += 1
+	_prossimo_percorso = maxf(_prossimo_percorso, 1.0)
+	if is_on_floor():
+		velocity.y = Giocatore.SPINTA_SALTO
+
+
+func _direzione_del_cammino(distanza: float, lo_vede: bool) -> Vector3:
+	_stava_camminando = false
+	if _percorso.is_empty():
+		return Vector3.ZERO
+	# A tiro e in vista comanda la tattica: avvicinarsi ancora seguendo la strada
+	# vorrebbe dire camminargli addosso in linea retta, che è il modo più semplice
+	# di farsi anticipare.
+	if distanza <= DISTANZA_MASSIMA and lo_vede:
+		return Vector3.ZERO
+	var passo := _prossimo_passo()
+	if passo.length_squared() < 0.04:
+		return Vector3.ZERO
+	_stava_camminando = true
+	return passo.normalized()
+
+
+## Il primo passo che vale ancora la pena inseguire. Quelli che si ha già addosso
+## si buttano, o si resta a girare attorno a un punto raggiunto.
+func _prossimo_passo() -> Vector3:
+	while _passo < _percorso.size():
+		var scarto := _percorso[_passo] - global_position
+		scarto.y = 0.0
+		if scarto.length() > PASSO_PRESO or _passo == _percorso.size() - 1:
+			return scarto
+		_passo += 1
+	return Vector3.ZERO
 
 
 func _lo_vede() -> bool:

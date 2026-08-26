@@ -1,0 +1,260 @@
+{
+  "nome": "palestra",
+  "titolo": "PENTAWALL - palestra",
+  "nota": "La pianta dell'arena di apertura. Sorgente unica: da qui si disegna la planimetria (planimetrie/pianta_nostra.py) e da qui si costruisce la scena. Misure in metri, origine al centro dell'arena, x verso est, z verso sud, y in alto. Riferimento: Amateur del 1999, 80x80 m, rifatta a 66x66 (decisione 12). Seconda stesura, 26/08/2026: applicata la consulenza di Fable sulla pianta.",
+  "misura": {"larghezza": 66, "profondita": 66, "quote": [-2, 0, 3.5, 7], "soffitto_cuore": 12, "soffitto_ali": 8},
+
+  "zone": [
+    {"nome": "catino", "quota": -2, "tinta": "moquette", "etichetta": [0, -4],
+     "poligono": [[-7,-12],[7,-12],[12,-7],[12,7],[7,12],[-7,12],[-12,7],[-12,-7]]},
+
+    {"nome": "ala ocra", "quota": 0, "tinta": "ocra", "etichetta": [2, -27],
+     "poligono": [[-13,-33],[13,-33],[13,-13],[-13,-13]]},
+    {"nome": "piattaforma dell'ocra", "quota": 3.5, "tinta": "ocra",
+     "poligono": [[-13,-33],[-6,-33],[-6,-24],[-13,-24]]},
+    {"nome": "passerella nord", "quota": 3.5, "tinta": "ocra",
+     "poligono": [[-6,-33],[21,-33],[21,-29.5],[-6,-29.5]]},
+
+    {"nome": "ala mattone", "quota": 0, "tinta": "mattone", "etichetta": [19, 0],
+     "poligono": [[13,-13],[33,-13],[33,13],[13,13]]},
+
+    {"nome": "portico", "quota": 0, "tinta": "moquette", "etichetta": [-7, 22],
+     "poligono": [[-13,13],[13,13],[13,33],[-13,33]]},
+    {"nome": "ballatoio", "quota": 7, "tinta": "tribuna", "sospesa": true, "etichetta": [8, 30],
+     "poligono": [[-13,15],[13,15],[13,33],[-13,33]]},
+
+    {"nome": "ala tribuna", "quota": 0, "tinta": "tribuna", "etichetta": [-20, 0],
+     "poligono": [[-33,-13],[-13,-13],[-13,13],[-33,13]]},
+
+    {"nome": "angolo nord-ovest", "quota": 0, "tinta": "ocra", "etichetta": [-24, -28],
+     "poligono": [[-33,-33],[-13,-33],[-13,-13],[-33,-13]]},
+
+    {"nome": "angolo nord-est", "quota": 0, "tinta": "mattone", "etichetta": [16, -16],
+     "poligono": [[13,-33],[33,-33],[33,-13],[13,-13]]},
+    {"nome": "terrazza nord-est", "quota": 3.5, "tinta": "mattone", "etichetta": [27, -27],
+     "poligono": [[21,-33],[33,-33],[33,-21],[21,-21]]},
+
+    {"nome": "angolo sud-est", "quota": 0, "tinta": "mattone", "etichetta": [16, 16],
+     "poligono": [[13,13],[33,13],[33,33],[13,33]]},
+    {"nome": "terrazza sud-est", "quota": 3.5, "tinta": "mattone", "etichetta": [27, 27],
+     "poligono": [[21,21],[33,21],[33,33],[21,33]]},
+
+    {"nome": "angolo sud-ovest", "quota": 0, "tinta": "tribuna", "etichetta": [-16, 16],
+     "poligono": [[-33,13],[-13,13],[-13,33],[-33,33]]},
+    {"nome": "terrazza sud-ovest", "quota": 3.5, "tinta": "tribuna", "etichetta": [-27, 27],
+     "poligono": [[-33,21],[-21,21],[-21,33],[-33,33]]},
+
+    {"nome": "galleria nord-ovest", "quota": 0, "tinta": "moquette",
+     "poligono": [[-12,-7],[-7,-12],[-14,-19],[-19,-14]]},
+    {"nome": "scala nord-est", "quota": 0, "tinta": "mattone",
+     "poligono": [[7,-12],[12,-7],[22,-17],[17,-22]]},
+    {"nome": "passaggio largo sud-est", "quota": 0, "tinta": "mattone",
+     "poligono": [[12,7],[7,12],[16,21],[21,16]]},
+    {"nome": "finestra sud-ovest", "quota": 0, "tinta": "tribuna",
+     "poligono": [[-7,12],[-12,7],[-19,14],[-14,19]]}
+  ],
+
+  "rampe": [
+    {"nome": "catino, rampa nord-ovest", "da": [-6,-6], "a": [-9.5,-9.5], "larghezza": 7, "quota_da": -2, "quota_a": 0},
+    {"nome": "catino, rampa sud-ovest", "da": [-6,6], "a": [-9.5,9.5], "larghezza": 7, "quota_da": -2, "quota_a": 0},
+    {"nome": "catino, rampa sud-est", "da": [6,6], "a": [9.5,9.5], "larghezza": 7, "quota_da": -2, "quota_a": 0},
+    {"nome": "la scala nord-est", "da": [6,-6], "a": [22,-22], "larghezza": 7, "quota_da": -2, "quota_a": 3.5},
+    {"nome": "ocra, sale in piattaforma", "da": [-9.5,-24.5], "a": [-9.5,-19.6], "larghezza": 7, "quota_da": 3.5, "quota_a": 0},
+    {"nome": "sud-est, sale in terrazza", "da": [27,14], "a": [27,21], "larghezza": 6, "quota_da": 0, "quota_a": 3.5},
+    {"nome": "sud-ovest, sale in terrazza", "da": [-27,14], "a": [-27,21], "larghezza": 6, "quota_da": 0, "quota_a": 3.5},
+    {"nome": "dalla terrazza sud-est al ballatoio", "da": [22,27], "a": [13,27], "larghezza": 6, "quota_da": 3.5, "quota_a": 7},
+    {"nome": "dalla terrazza sud-ovest al ballatoio", "da": [-22,27], "a": [-13,27], "larghezza": 6, "quota_da": 3.5, "quota_a": 7}
+  ],
+
+  "muri": [
+    {"nome": "perimetro nord", "centro": [0,-33.4], "misura": [66.8,0.8], "quota": 0, "alto": 12, "tinta": "ocra"},
+    {"nome": "perimetro sud", "centro": [0,33.4], "misura": [66.8,0.8], "quota": 0, "alto": 12, "tinta": "tribuna"},
+    {"nome": "perimetro est", "centro": [33.4,0], "misura": [0.8,66.8], "quota": 0, "alto": 12, "tinta": "mattone"},
+    {"nome": "perimetro ovest", "centro": [-33.4,0], "misura": [0.8,66.8], "quota": 0, "alto": 12, "tinta": "tribuna"},
+
+    {"nome": "catino, faccia nord", "centro": [0,-12], "misura": [14,0.7], "quota": -2, "alto": 14, "tinta": "ocra"},
+    {"nome": "catino, faccia est", "centro": [12,0], "misura": [0.7,14], "quota": -2, "alto": 14, "tinta": "mattone"},
+    {"nome": "catino, faccia sud", "centro": [0,12], "misura": [14,0.7], "quota": -2, "alto": 9, "tinta": "tribuna"},
+    {"nome": "catino, faccia ovest", "centro": [-12,0], "misura": [0.7,14], "quota": -2, "alto": 14, "tinta": "tribuna"},
+    {"nome": "il box del catino", "centro": [0,0], "misura": [5,5], "quota": -2, "alto": 2, "tinta": "moquette"},
+    {"nome": "catino, pilone nord-ovest", "centro": [-7,-7], "misura": [2.6,2.6], "quota": -2, "alto": 14, "tinta": "ocra"},
+    {"nome": "catino, pilone nord-est", "centro": [7,-7], "misura": [2.6,2.6], "quota": -2, "alto": 14, "tinta": "ocra"},
+    {"nome": "catino, pilone sud-est", "centro": [7,7], "misura": [2.6,2.6], "quota": -2, "alto": 14, "tinta": "ocra"},
+    {"nome": "catino, pilone sud-ovest", "centro": [-7,7], "misura": [2.6,2.6], "quota": -2, "alto": 14, "tinta": "ocra"},
+
+    {"nome": "parapetto del ballatoio", "centro": [0,14.6], "misura": [26,0.5], "quota": 7, "alto": 1.2, "tinta": "tribuna"},
+    {"nome": "ballatoio, fianco est, tratto nord", "centro": [12.7,19.5], "misura": [0.5,9], "quota": 7, "alto": 1.2, "tinta": "tribuna"},
+    {"nome": "ballatoio, fianco est, tratto sud", "centro": [12.7,31.5], "misura": [0.5,3], "quota": 7, "alto": 1.2, "tinta": "tribuna"},
+    {"nome": "ballatoio, fianco ovest, tratto nord", "centro": [-12.7,19.5], "misura": [0.5,9], "quota": 7, "alto": 1.2, "tinta": "tribuna"},
+    {"nome": "ballatoio, fianco ovest, tratto sud", "centro": [-12.7,31.5], "misura": [0.5,3], "quota": 7, "alto": 1.2, "tinta": "tribuna"},
+
+    {"nome": "ocra, il divisorio", "centro": [-4,-24], "misura": [8,0.8], "quota": 0, "alto": 4.5, "tinta": "mattone"},
+    {"nome": "ocra, il pilastro", "centro": [8.2,-26], "misura": [2.6,2.6], "quota": 0, "alto": 6, "tinta": "ocra"},
+    {"nome": "ocra, chiude verso l'angolo", "centro": [-13,-28], "misura": [0.8,10], "quota": 0, "alto": 8, "tinta": "mattone"},
+    {"nome": "ocra, sostegno della passerella", "centro": [7.5,-29.7], "misura": [27,0.6], "quota": 0, "alto": 3.5, "tinta": "ocra"},
+    {"nome": "ocra, parapetto della passerella", "centro": [7.5,-29.7], "misura": [27,0.5], "quota": 3.5, "alto": 1.1, "tinta": "ocra"},
+    {"nome": "ocra, cassone est", "centro": [6,-20], "misura": [4,3], "quota": 0, "alto": 2.2, "tinta": "ocra"},
+    {"nome": "ocra, cassone centrale", "centro": [-2,-17], "misura": [3,3], "quota": 0, "alto": 2.2, "tinta": "ocra"},
+    {"nome": "ocra, il muretto d'ingresso", "centro": [11,-16], "misura": [4,0.7], "quota": 0, "alto": 3, "tinta": "ocra"},
+
+    {"nome": "mattone, la spina del corridoio", "centro": [24.5,0], "misura": [0.8,18], "quota": 0, "alto": 6, "tinta": "mattone"},
+    {"nome": "mattone, chiude a nord", "centro": [19,-13], "misura": [12,0.8], "quota": 0, "alto": 8, "tinta": "mattone"},
+    {"nome": "mattone, chiude a sud", "centro": [19,13], "misura": [12,0.8], "quota": 0, "alto": 8, "tinta": "mattone"},
+    {"nome": "mattone, blocco interno", "centro": [17,-4], "misura": [3,6], "quota": 0, "alto": 3.2, "tinta": "mattone"},
+    {"nome": "mattone, blocco interno 2", "centro": [19,8], "misura": [4,3], "quota": 0, "alto": 2.4, "tinta": "mattone"},
+    {"nome": "mattone, il gomito del corridoio", "centro": [29,-10.5], "misura": [8,0.7], "quota": 0, "alto": 4, "tinta": "mattone"},
+
+    {"nome": "portico, colonna 1", "centro": [-8,19], "misura": [1.4,1.4], "quota": 0, "alto": 6.5, "tinta": "moquette"},
+    {"nome": "portico, colonna 2", "centro": [0,19], "misura": [1.4,1.4], "quota": 0, "alto": 6.5, "tinta": "moquette"},
+    {"nome": "portico, colonna 3", "centro": [8,19], "misura": [1.4,1.4], "quota": 0, "alto": 6.5, "tinta": "moquette"},
+    {"nome": "portico, colonna 4", "centro": [-8,28], "misura": [1.4,1.4], "quota": 0, "alto": 6.5, "tinta": "moquette"},
+    {"nome": "portico, colonna 5", "centro": [8,28], "misura": [1.4,1.4], "quota": 0, "alto": 6.5, "tinta": "moquette"},
+    {"nome": "portico, il box del bersaglio", "centro": [0,25], "misura": [7,5], "quota": 0, "alto": 3.2, "tinta": "moquette"},
+
+    {"nome": "tribuna, gradinata nord", "centro": [-30,-6], "misura": [5,12], "quota": 0, "alto": 2.6, "tinta": "tribuna"},
+    {"nome": "tribuna, gradinata sud", "centro": [-30,7], "misura": [5,10], "quota": 0, "alto": 2.6, "tinta": "tribuna"},
+    {"nome": "tribuna, il box del bersaglio", "centro": [-23,-3], "misura": [6,3], "quota": 0, "alto": 3.2, "tinta": "tribuna"},
+    {"nome": "tribuna, il muro corto", "centro": [-19,7], "misura": [0.7,8], "quota": 0, "alto": 4, "tinta": "tribuna"},
+
+    {"nome": "nord-ovest, cassone", "centro": [-22,-28], "misura": [5,4], "quota": 0, "alto": 2.6, "tinta": "ocra"},
+    {"nome": "nord-ovest, cassone 2", "centro": [-27,-24], "misura": [4,4], "quota": 0, "alto": 3.2, "tinta": "ocra"},
+    {"nome": "nord-ovest, cassone 3", "centro": [-18,-25], "misura": [3,5], "quota": 0, "alto": 2.2, "tinta": "ocra"},
+    {"nome": "nord-ovest, il muro corto", "centro": [-27,-18], "misura": [10,0.7], "quota": 0, "alto": 4, "tinta": "ocra"},
+
+    {"nome": "terrazza nord-est, parapetto ovest", "centro": [20.8,-28.5], "misura": [0.5,9], "quota": 3.5, "alto": 1.1, "tinta": "mattone"},
+    {"nome": "terrazza nord-est, parapetto sud", "centro": [28.5,-20.8], "misura": [9,0.5], "quota": 3.5, "alto": 1.1, "tinta": "mattone"},
+    {"nome": "terrazza sud-est, parapetto ovest, tratto nord", "centro": [20.8,22.5], "misura": [0.5,3], "quota": 3.5, "alto": 1.1, "tinta": "mattone"},
+    {"nome": "terrazza sud-est, parapetto ovest, tratto sud", "centro": [20.8,31.5], "misura": [0.5,3], "quota": 3.5, "alto": 1.1, "tinta": "mattone"},
+    {"nome": "terrazza sud-est, parapetto nord", "centro": [31.5,20.8], "misura": [3,0.5], "quota": 3.5, "alto": 1.1, "tinta": "mattone"},
+    {"nome": "terrazza sud-ovest, parapetto est, tratto nord", "centro": [-20.8,22.5], "misura": [0.5,3], "quota": 3.5, "alto": 1.1, "tinta": "tribuna"},
+    {"nome": "terrazza sud-ovest, parapetto est, tratto sud", "centro": [-20.8,31.5], "misura": [0.5,3], "quota": 3.5, "alto": 1.1, "tinta": "tribuna"},
+    {"nome": "terrazza sud-ovest, parapetto nord", "centro": [-31.5,20.8], "misura": [3,0.5], "quota": 3.5, "alto": 1.1, "tinta": "tribuna"},
+
+    {"nome": "galleria nord-ovest, fianco", "centro": [-10.5,-15.5], "misura": [10,0.7], "quota": 0, "alto": 8, "giro": -45, "tinta": "ocra"},
+    {"nome": "scala nord-est, fianco", "centro": [17,-12], "misura": [10,0.7], "quota": 0, "alto": 8, "giro": 45, "tinta": "mattone"},
+    {"nome": "passaggio sud-est, fianco", "centro": [16.5,11.5], "misura": [10,0.7], "quota": 0, "alto": 8, "giro": -45, "tinta": "mattone"},
+    {"nome": "passaggio sud-est, cassa 1", "centro": [13,13], "misura": [2.4,2.4], "quota": 0, "alto": 2.2, "giro": 45, "tinta": "mattone"},
+    {"nome": "passaggio sud-est, cassa 2", "centro": [17,17], "misura": [2.4,2.4], "quota": 0, "alto": 2.6, "giro": 45, "tinta": "mattone"},
+    {"nome": "finestra sud-ovest, fianco", "centro": [-10.5,15.5], "misura": [10,0.7], "quota": 0, "alto": 8, "giro": 45, "tinta": "tribuna"},
+    {"nome": "finestra sud-ovest, il parapetto che ferma i corpi", "centro": [-14.5,14.5], "misura": [8,0.6], "quota": 0, "alto": 1.25, "giro": -45, "tinta": "tribuna"}
+  ],
+
+  "soffitti": [
+    {"nome": "sopra il cuore", "centro": [0,0], "misura": [30,30], "quota": 12, "tinta": "soffitto"},
+    {"nome": "sopra l'ala ocra e gli angoli a nord", "centro": [0,-24], "misura": [66.8,18], "quota": 8, "tinta": "soffitto"},
+    {"nome": "sopra il ballatoio e gli angoli a sud", "centro": [0,24], "misura": [66.8,18], "quota": 12, "tinta": "soffitto"},
+    {"nome": "sopra l'ala mattone", "centro": [24,0], "misura": [18,30], "quota": 8, "tinta": "soffitto"},
+    {"nome": "sopra l'ala tribuna", "centro": [-24,0], "misura": [18,30], "quota": 8, "tinta": "soffitto"}
+  ],
+
+  "lucernari": [
+    {"dove": [-9,-9], "misura": [6,4], "quota": 11.9},
+    {"dove": [9,-9], "misura": [6,4], "quota": 11.9},
+    {"dove": [-9,9], "misura": [6,4], "quota": 11.9},
+    {"dove": [9,9], "misura": [6,4], "quota": 11.9},
+    {"dove": [-7,-22], "misura": [5,3.4], "quota": 7.9},
+    {"dove": [7,-22], "misura": [5,3.4], "quota": 7.9},
+    {"dove": [24,-6], "misura": [4.4,5], "quota": 7.9},
+    {"dove": [24,6], "misura": [4.4,5], "quota": 7.9},
+    {"dove": [-24,-6], "misura": [4.4,5], "quota": 7.9},
+    {"dove": [-24,6], "misura": [4.4,5], "quota": 7.9},
+    {"dove": [-24,-24], "misura": [5,5], "quota": 7.9},
+    {"dove": [24,-24], "misura": [5,5], "quota": 7.9},
+    {"dove": [-24,24], "misura": [5,5], "quota": 11.9},
+    {"dove": [24,24], "misura": [5,5], "quota": 11.9},
+    {"dove": [-16,-16], "misura": [4,4], "quota": 7.9},
+    {"dove": [16,-16], "misura": [4,4], "quota": 7.9},
+    {"dove": [-16,16], "misura": [4,4], "quota": 11.9},
+    {"dove": [16,16], "misura": [4,4], "quota": 11.9},
+    {"dove": [-7,24], "misura": [5,3.4], "quota": 11.9},
+    {"dove": [7,24], "misura": [5,3.4], "quota": 11.9}
+  ],
+
+  "sponde": [
+    {"nome": "catino, nord", "centro": [0,-11.6], "quota": 0.6, "faccia": [10,4], "giro": 0},
+    {"nome": "catino, est", "centro": [11.6,0], "quota": 0.6, "faccia": [10,4], "giro": 90},
+    {"nome": "catino, sud", "centro": [0,11.6], "quota": 0.6, "faccia": [10,4], "giro": 0},
+    {"nome": "catino, ovest", "centro": [-11.6,0], "quota": 0.6, "faccia": [10,4], "giro": 90},
+    {"nome": "catino, radente nord", "centro": [0,-11.6], "quota": -1.4, "faccia": [13,1.16], "giro": 0},
+    {"nome": "box del catino, faccia nord", "centro": [0,-2.6], "quota": -1.05, "faccia": [4.6,1.9], "giro": 0},
+    {"nome": "box del catino, faccia sud", "centro": [0,2.6], "quota": -1.05, "faccia": [4.6,1.9], "giro": 0},
+    {"nome": "box del catino, faccia est", "centro": [2.6,0], "quota": -1.05, "faccia": [4.6,1.9], "giro": 90},
+    {"nome": "box del catino, faccia ovest", "centro": [-2.6,0], "quota": -1.05, "faccia": [4.6,1.9], "giro": 90},
+    {"nome": "catino, il soffitto sopra la buca", "centro": [0,0], "quota": 11.9, "faccia": [11,11], "sdraiata": "soffitto"},
+    {"nome": "il parapetto alto del ballatoio", "centro": [0,14.3], "quota": 7.6, "faccia": [24,1.0], "giro": 0},
+
+    {"nome": "ocra, grande a nord", "centro": [-9,-32.6], "quota": 6.2, "faccia": [6.2,3.4], "giro": 0},
+    {"nome": "ocra, grande a nord 2", "centro": [5.4,-32.6], "quota": 6.2, "faccia": [5.6,3.4], "giro": 0},
+    {"nome": "ocra, quella dietro il divisorio", "centro": [-12.6,-28], "quota": 3.5, "faccia": [7,3.4], "giro": 90},
+    {"nome": "ocra, radente sotto la passerella", "centro": [4,-29.3], "quota": 0.62, "faccia": [20,1.16], "giro": 0},
+    {"nome": "ocra, la faccia del pilastro", "centro": [8.2,-24.6], "quota": 3, "faccia": [2.4,4.4], "giro": 0},
+    {"nome": "ocra, sul divisorio", "centro": [-4,-23.5], "quota": 2.4, "faccia": [7,3.4], "giro": 0},
+
+    {"nome": "mattone, parallela sulla spina", "centro": [24.9,-4], "quota": 2.4, "faccia": [6,2.8], "giro": 90},
+    {"nome": "mattone, parallela sul perimetro", "centro": [32.6,-4], "quota": 2.4, "faccia": [6,2.8], "giro": 90},
+    {"nome": "mattone, parallela sulla spina 2", "centro": [24.9,6], "quota": 2.4, "faccia": [5,2.8], "giro": 90},
+    {"nome": "mattone, parallela sul perimetro 2", "centro": [32.6,6], "quota": 2.4, "faccia": [5,2.8], "giro": 90},
+    {"nome": "mattone, il pavimento del corridoio", "centro": [29,2], "quota": 0.02, "faccia": [4,5], "sdraiata": "pavimento"},
+    {"nome": "mattone, il gomito", "centro": [29,-10.1], "quota": 2, "faccia": [7,3], "giro": 0},
+    {"nome": "mattone, radente", "centro": [18,-12.6], "quota": 0.62, "faccia": [10,1.16], "giro": 0},
+    {"nome": "mattone, sul blocco interno", "centro": [15.4,-4], "quota": 1.6, "faccia": [5,2.8], "giro": 90},
+
+    {"nome": "portico, fra le colonne", "centro": [-4,32.6], "quota": 2.4, "faccia": [7,3.2], "giro": 0},
+    {"nome": "portico, radente", "centro": [6,32.6], "quota": 0.62, "faccia": [12,1.16], "giro": 0},
+    {"nome": "portico, la piastra a terra", "centro": [0,20], "quota": 0.02, "faccia": [5,5], "sdraiata": "pavimento"},
+    {"nome": "portico, sul box del bersaglio", "centro": [0,22.4], "quota": 1.6, "faccia": [6,2.8], "giro": 0},
+    {"nome": "la valvola del ballatoio", "centro": [0,32.6], "quota": 10.2, "faccia": [16,3.2], "giro": 0},
+    {"nome": "ballatoio, sul fianco est", "centro": [12.4,19.5], "quota": 8.3, "faccia": [9,1.1], "giro": 90},
+
+    {"nome": "tribuna, radente ovest", "centro": [-32.6,0], "quota": 0.62, "faccia": [22,1.16], "giro": 90},
+    {"nome": "tribuna, radente nord", "centro": [-22,-12.6], "quota": 0.62, "faccia": [12,1.16], "giro": 0},
+    {"nome": "tribuna, la piastra a terra", "centro": [-24,6], "quota": 0.02, "faccia": [5,5], "sdraiata": "pavimento"},
+    {"nome": "tribuna, sul box del bersaglio", "centro": [-23,-4.6], "quota": 1.6, "faccia": [5,2.8], "giro": 0},
+    {"nome": "tribuna, sul muro corto", "centro": [-18.6,7], "quota": 2.2, "faccia": [7,3], "giro": 90},
+
+    {"nome": "nord-ovest, sul perimetro", "centro": [-26,-32.6], "quota": 3.4, "faccia": [8,3.4], "giro": 0},
+    {"nome": "nord-ovest, sul muro corto", "centro": [-27,-17.6], "quota": 2.2, "faccia": [9,3], "giro": 0},
+
+    {"nome": "galleria nord-ovest, la diagonale", "centro": [-10.8,-15.2], "quota": 3, "faccia": [9,3.6], "giro": -45},
+    {"nome": "scala nord-est, la diagonale", "centro": [16.7,-12.3], "quota": 3.5, "faccia": [9,3.6], "giro": 45},
+    {"nome": "passaggio sud-est, la diagonale", "centro": [16.2,11.8], "quota": 3, "faccia": [9,3.6], "giro": -45},
+    {"nome": "finestra sud-ovest, la diagonale", "centro": [-10.8,15.2], "quota": 3, "faccia": [9,3.6], "giro": 45},
+
+    {"nome": "terrazza nord-est, sul perimetro", "centro": [27,-32.6], "quota": 6, "faccia": [8,3.4], "giro": 0},
+    {"nome": "terrazza sud-est, sul perimetro", "centro": [32.6,27], "quota": 6, "faccia": [8,3.4], "giro": 90},
+    {"nome": "terrazza sud-ovest, sul perimetro", "centro": [-32.6,27], "quota": 6, "faccia": [8,3.4], "giro": 90}
+  ],
+
+  "partenze": [
+    {"nome": "angolo nord-ovest", "dove": [-25,-30], "quota": 0, "giro": 135},
+    {"nome": "ocra, lato est", "dove": [12,-27], "quota": 0, "giro": 190},
+    {"nome": "mattone, fuori dal corridoio", "dove": [17,4], "quota": 0, "giro": 290},
+    {"nome": "ballatoio", "dove": [-5,26], "quota": 7, "giro": 0},
+    {"nome": "tribuna", "dove": [-24,-8], "quota": 0, "giro": 80},
+    {"nome": "terrazza sud-est", "dove": [27,26], "quota": 3.5, "giro": 315}
+  ],
+
+  "bersagli": [
+    {"nome": "ocra, dietro il divisorio", "dove": [-9,-27.5], "quota": 0, "solo_di_sponda": true},
+    {"nome": "mattone, in testa al corridoio", "dove": [29,-7], "quota": 0, "solo_di_sponda": true},
+    {"nome": "portico, dentro il box", "dove": [0,26.5], "quota": 0, "solo_di_sponda": true},
+    {"nome": "tribuna, dietro il box", "dove": [-23,-0.6], "quota": 0, "solo_di_sponda": true}
+  ],
+
+  "segni_per_dopo": [
+    {"nome": "nascita della palla", "dove": [0,0], "quota": -2, "raggio": 2.5,
+     "perche": "la modalita' palla non e' di questa tappa, ma il catino la fa tornare al centro da sola: se un giorno si fa, nasce qui"},
+    {"nome": "porta nord", "dove": [-9,-27.5], "quota": 0, "raggio": 2.5,
+     "perche": "le bocche delle porte piegano la geometria d'approccio: scoprirlo ad arena costruita e' la scoperta che costa"},
+    {"nome": "porta sud", "dove": [0,29.5], "quota": 0, "raggio": 2.5,
+     "perche": "sotto il ballatoio, il fondo opposto: stessa ragione"}
+  ],
+
+  "insegne": [
+    {"testo": "PENTAWALL", "dove": [0,-11.4], "quota": 9.0, "giro": 0, "misura": 2.4},
+    {"testo": "PUNTI", "dove": [-11.4,-4], "quota": 8.4, "giro": 90, "misura": 1.4},
+    {"testo": "OCRA", "dove": [0,-32.4], "quota": 9.0, "giro": 0, "misura": 1.2},
+    {"testo": "TURBO", "dove": [32.4,0], "quota": 5.2, "giro": -90, "misura": 1.2},
+    {"testo": "TRIBUNA", "dove": [-32.4,8], "quota": 5.6, "giro": 90, "misura": 1.2}
+  ]
+}

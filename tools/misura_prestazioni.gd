@@ -13,7 +13,10 @@ func _lavora() -> void:
 	# Dalla tappa 3 le scene sono due: con `-- angolo` si misura l'arena vera.
 	# Una misura senza il suo paragone non dice niente (LEARNED.md 20), e il
 	# paragone di questa e' il poligono sulla stessa macchina.
-	var quale := "angolo" if OS.get_cmdline_user_args().has("angolo") else "poligono"
+	var quale := "poligono"
+	for scena in ["angolo", "arena"]:
+		if OS.get_cmdline_user_args().has(scena):
+			quale = scena
 	var poligono: Node = load("res://scenes/%s.tscn" % quale).instantiate()
 	root.add_child(poligono)
 	var giocatore = null

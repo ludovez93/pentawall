@@ -88,6 +88,15 @@ jobs:
           # Se salta, l'arena resta bella e smette di essere un campo da gioco.
           "$GODOT" --headless --path . -s tools/prova_angolo.gd
 
+      - name: Collauda l'arena intera
+        run: |
+          set -euo pipefail
+          # La tappa 5: la pianta, la rete di cammino e la partita a 500. Meta' di
+          # questi controlli guardano il .json e non il codice — e la rete di
+          # cammino e' cotta a mano, quindi puo' invecchiare senza che nessuno lo
+          # dica: qui si verifica che sia nata dalla pianta di oggi.
+          "$GODOT" --headless --path . -s tools/prova_arena.gd
+
       - name: Esporta per il browser
         run: |
           set -euo pipefail
@@ -96,6 +105,23 @@ jobs:
           ls -la build/web
           test -f build/web/index.html
           test -f build/web/index.wasm
+          test -f build/web/index.pck
+
+      - name: La pianta e la rete sono dentro il pacchetto
+        run: |
+          set -euo pipefail
+          # Godot esporta i file che riconosce: la pianta dell'arena e' un `.json`
+          # e la rete di cammino un `.res`. Se restano fuori, sul telefono l'arena
+          # non si apre e non lo dice nessuno — quindi si guarda **dentro** il
+          # pacchetto, prima di pubblicare e non dopo.
+          for dentro in "arene/palestra.json" "arene/palestra_cammino.res"; do
+            if grep -a -q "$dentro" build/web/index.pck; then
+              echo "  ok   $dentro"
+            else
+              echo "  NO   $dentro non e' nel pacchetto"
+              exit 1
+            fi
+          done
 
       - name: Prepara le pagine
         uses: actions/configure-pages@v5
