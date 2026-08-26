@@ -118,8 +118,14 @@ static func opaco(colore: Color, misura := Vector3.ONE) -> StandardMaterial3D:
 	return materiale
 
 
-## Materiale di una sponda: liscio, chiaro, senza grana. Il contrario del muro su
-## ogni voce, perché è il contrasto che si legge in mezzo secondo su un telefono.
+## Materiale di una sponda: liscio, senza grana, e **con la luce dentro**.
+##
+## La faccia emette, non riflette soltanto. È la correzione del 26/08/2026: prima
+## la sponda era una lastra scura con una cornice accesa attorno, e una superficie
+## scura dice «assorbe» mentre questa deve dire «restituisce». Emettendo si vede
+## anche **di taglio**, che è l'angolo da cui si guarda una sponda quando la si sta
+## per usare — un filo di neon visto a ottanta gradi sparisce, un rettangolo che
+## fa luce no.
 static func lucido(colore: Color) -> StandardMaterial3D:
 	var materiale := StandardMaterial3D.new()
 	materiale.albedo_color = colore
@@ -128,8 +134,10 @@ static func lucido(colore: Color) -> StandardMaterial3D:
 	materiale.metallic_specular = 0.85
 	materiale.emission_enabled = true
 	materiale.emission = colore
-	# Sotto la soglia del bagliore: sopra ci va solo il dardo (DECISIONI.md § B).
-	materiale.emission_energy_multiplier = 0.34
+	# Acceso, ma **sotto la soglia del bagliore**: sopra l'uno ci va solo il dardo,
+	# ed è quello che tiene insieme «arena satura» e «dardo sempre leggibile»
+	# (DECISIONI.md § B).
+	materiale.emission_energy_multiplier = 0.92
 	return materiale
 
 

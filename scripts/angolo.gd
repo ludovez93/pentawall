@@ -43,12 +43,14 @@ const SOFFITTO := Color(0.10, 0.10, 0.21)
 ## sta all'opposto sulla ruota, e nell'originale compare sugli arredi e mai sulle
 ## superfici grandi.
 ##
-## **Scuro, non chiaro.** Il primo giro le sponde erano pannelli azzurro chiaro:
-## si riconoscevano benissimo e facevano diventare l'arena lattiginosa, che è
-## l'esatto contrario del 1999 — dove le superfici grandi sono scure e sature e
-## il neon acceso sta sui bordi. A fare il segnale è la cornice, non la lastra.
-const SPONDA := Color(0.06, 0.27, 0.32)
-const NEON_SPONDA := Color(0.24, 0.95, 0.92)
+## **Satura e accesa, non pallida e non scura.** Ci sono voluti tre giri.
+## Pallida (azzurro chiaro illuminato) rendeva l'arena lattiginosa, che è l'esatto
+## contrario del 1999. Scura con la cornice accesa si riconosceva di faccia e
+## spariva di taglio — e di taglio è proprio l'angolo da cui si guarda una sponda
+## quando la si sta per usare. Accesa e satura fa tutte e due le cose: resta un
+## colore del mondo del 1999 e si vede da ottanta gradi.
+const SPONDA := Color(0.09, 0.60, 0.64)
+const NEON_SPONDA := Color(0.30, 0.99, 0.95)
 
 const PARTENZA := Vector3(7.0, 0.4, 6.0)
 const GIRO_PARTENZA := 49.0
@@ -295,7 +297,9 @@ func _guscio() -> void:
 
 	# Un pilastro, copertura mobile. Porta una sponda su una faccia sola: è il
 	# caso che insegna che la sponda è il pannello, non l'oggetto.
-	Muratura.muro(self, Vector3(6.0, 3.0, -4.0), Vector3(1.6, 6.0, 1.6), OCRA)
+	# Spostato di lato: dove stava prima tagliava a metà l'insegna PENTAWALL da
+	# dove si comincia a giocare, cioè nell'unica inquadratura garantita.
+	Muratura.muro(self, Vector3(8.2, 3.0, -5.0), Vector3(1.6, 6.0, 1.6), OCRA)
 
 	# Il dislivello, con la rampa: sparare dall'alto cambia tutti gli angoli.
 	Muratura.muro(self, Vector3(-9.5, 0.6, 7.0), Vector3(7.0, 1.2, 7.0), MATTONE)
@@ -311,25 +315,25 @@ func _sponde() -> void:
 	var filo := Muratura.SPESSORE_SPONDA * 0.5
 
 	# I due pannelli grandi della parete d'ocra, divisi dal passaggio centrale.
-	Muratura.sponda(self, Vector3(-6.5, 4.2, -meta_z + filo), Vector2(10.0, 5.4),
+	Muratura.sponda(self, Vector3(-7.0, 3.6, -meta_z + filo), Vector2(6.2, 3.4),
 			Vector3.ZERO, SPONDA, NEON_SPONDA)
-	Muratura.sponda(self, Vector3(6.5, 4.2, -meta_z + filo), Vector2(9.0, 5.4),
+	Muratura.sponda(self, Vector3(5.4, 3.6, -meta_z + filo), Vector2(5.6, 3.4),
 			Vector3.ZERO, SPONDA, NEON_SPONDA)
 
 	# Il pannello della parete di mattoni: è quello che porta il dardo dietro il
 	# divisorio, e quindi è quello che fa il gioco.
-	Muratura.sponda(self, Vector3(-meta_x + filo, 4.0, -1.0), Vector2(10.0, 5.0),
+	Muratura.sponda(self, Vector3(-meta_x + filo, 3.5, -1.5), Vector2(7.0, 3.4),
 			Vector3(0, 90, 0), SPONDA, NEON_SPONDA)
 
 	# Le sponde basse lungo il piede delle due pareti: sono quelle del tiro
 	# radente, che è il tiro che si impara per primo.
-	Muratura.sponda(self, Vector3(0, 0.78, -meta_z + filo), Vector2(25.0, 1.5),
+	Muratura.sponda(self, Vector3(0, 0.62, -meta_z + filo), Vector2(25.0, 1.16),
 			Vector3.ZERO, SPONDA, NEON_SPONDA)
-	Muratura.sponda(self, Vector3(-meta_x + filo, 0.78, 0), Vector2(21.0, 1.5),
+	Muratura.sponda(self, Vector3(-meta_x + filo, 0.62, 0), Vector2(21.0, 1.16),
 			Vector3(0, 90, 0), SPONDA, NEON_SPONDA)
 
 	# La faccia buona del pilastro, verso il campo.
-	Muratura.sponda(self, Vector3(6.0, 3.0, -3.2 + filo), Vector2(1.4, 4.4),
+	Muratura.sponda(self, Vector3(8.2, 3.0, -4.2 + filo), Vector2(1.4, 4.4),
 			Vector3.ZERO, SPONDA, NEON_SPONDA)
 
 	# Una piastra a terra: il pavimento è moquette e non rimbalza, ma qui sì. È
@@ -368,7 +372,7 @@ func _arredo() -> void:
 	for posto in [Vector3(-7.0, 0, -5.0), Vector3(4.0, 0, -5.0),
 			Vector3(-7.0, 0, 4.0), Vector3(4.0, 0, 4.0)]:
 		Muratura.decoro(self, posto + Vector3(0, ALTEZZA - 0.06, 0),
-				Vector3(4.4, 0.12, 3.0), Color(0.62, 0.86, 1.0), 1.0)
+				Vector3(4.4, 0.12, 3.0), Color(0.72, 0.52, 0.98), 0.72)
 
 
 ## Le tribune: il pubblico sta in alto, dietro un parapetto, e non ruba campo.
@@ -406,8 +410,8 @@ func _luci() -> void:
 	# Le dodici cifre di Transform3D sono le RIGHE della matrice, non le colonne:
 	# scambiarle mette la luce a illuminare il cielo (LEARNED.md 14).
 	sole.rotation_degrees = Vector3(-54.0, -34.0, 0.0)
-	sole.light_energy = 0.85
-	sole.light_color = Color(1.0, 0.96, 0.90)
+	sole.light_energy = 0.62
+	sole.light_color = Color(0.86, 0.80, 1.0)
 	sole.shadow_enabled = true
 	add_child(sole)
 
@@ -437,13 +441,13 @@ func _insegne() -> void:
 	# le due superfici si contendono lo stesso piano e il testo esce a strisce.
 	Muratura.insegna(self, "PENTAWALL", Vector3(0, 7.6, -meta_z + 0.12), Vector3.ZERO,
 			2.0, Color(0.60, 0.82, 1.0))
-	Muratura.insegna(self, "PUNTI", Vector3(-meta_x + 0.12, 7.4, 5.0), Vector3(0, 90, 0),
+	Muratura.insegna(self, "PUNTI", Vector3(-meta_x + 0.12, 7.4, -6.0), Vector3(0, 90, 0),
 			1.3, Color(0.95, 0.86, 0.42))
-	# Sopra il pannello della parete di mattoni, cioe' sopra una sponda vera: la
-	# prima volta stava sul divisorio, che e' un muro, e diceva il contrario di
-	# quello che faceva la superficie sotto.
-	Muratura.insegna(self, "SPONDA", Vector3(-12.7, 7.0, -1.0), Vector3(0, 90, 0),
-			1.0, NEON_SPONDA)
+	# Nessuna insegna dice «SPONDA». Ce n'era una, ed era la prova che il
+	# linguaggio non reggeva da solo: un linguaggio visivo che funziona non ha
+	# bisogno di sottotitoli, e uno che non funziona non lo salva un cartello.
+	Muratura.insegna(self, "TURBO", Vector3(-meta_x + 0.12, 6.4, 5.5), Vector3(0, 90, 0),
+			1.1, Color(0.98, 0.55, 0.35))
 
 
 func _bersagli_dell_angolo() -> void:
