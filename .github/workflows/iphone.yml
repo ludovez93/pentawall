@@ -1,0 +1,102 @@
+# Compila PENTAWALL per iPhone su una macchina macOS di GitHub Actions.
+#
+# Perche' esiste: iOS non si compila da Windows, e' una restrizione di Apple.
+# Qui si compila su macOS in cloud (gratuito sui repository pubblici) e si
+# consegna un .ipa NON FIRMATO: la firma la mette Sideloadly sul PC di casa,
+# con l'Apple ID di Ludovico. Nessun account da sviluppatore a pagamento.
+#
+# Il risultato si scarica dalla pagina della lavorazione, voce "Artifacts".
+
+name: iPhone
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  GODOT_VERSION: "4.7.2"
+  NOME_BINARIO: "pentawall"
+
+jobs:
+  ipa:
+    name: App per iPhone (non firmata)
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Prendi il codice
+        uses: actions/checkout@v4
+
+      - name: Scarica Godot e i modelli di esportazione
+        run: |
+          set -euo pipefail
+          BASE="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable"
+          curl -fsSL -o godot.zip   "$BASE/Godot_v${GODOT_VERSION}-stable_macos.universal.zip"
+          curl -fsSL -o modelli.tpz "$BASE/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+          unzip -q godot.zip
+          unzip -q modelli.tpz
+          DEST="$HOME/Library/Application Support/Godot/export_templates/${GODOT_VERSION}.stable"
+          mkdir -p "$DEST"
+          mv templates/* "$DEST/"
+          chmod +x "Godot.app/Contents/MacOS/Godot"
+          echo "GODOT=$PWD/Godot.app/Contents/MacOS/Godot" >> "$GITHUB_ENV"
+          ls "$DEST" | head -5
+          "$PWD/Godot.app/Contents/MacOS/Godot" --headless --version
+
+      - name: Importa le risorse
+        run: |
+          set -euo pipefail
+          # Due passate: la prima genera la cartella .godot, la seconda risolve
+          # le risorse che dipendono da quelle importate nella prima.
+          "$GODOT" --headless --path . --import || true
+          "$GODOT" --headless --path . --import
+          test -d .godot
+
+      - name: Esporta il progetto Xcode
+        run: |
+          set -euo pipefail
+          mkdir -p build/ios
+          "$GODOT" --headless --path . --export-debug "iOS" "$PWD/build/ios/${NOME_BINARIO}.ipa"
+          test -d "build/ios/${NOME_BINARIO}.xcodeproj"
+
+      - name: Compila con Xcode, senza firma
+        run: |
+          set -euo pipefail
+          cd build/ios
+          xcodebuild -list -project "${NOME_BINARIO}.xcodeproj"
+          # Lo schema lo battezza Godot: si legge, non si indovina.
+          SCHEMA="$(xcodebuild -list -project "${NOME_BINARIO}.xcodeproj" -json \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["project"]["schemes"][0])')"
+          echo "schema: $SCHEMA"
+          xcodebuild \
+            -project "${NOME_BINARIO}.xcodeproj" \
+            -scheme "$SCHEMA" \
+            -configuration Debug \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath ./dd \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Impacchetta l'ipa non firmato
+        run: |
+          set -euo pipefail
+          APP="$(find build/ios/dd/Build/Products -maxdepth 2 -name '*.app' -type d | head -1)"
+          test -n "$APP"
+          echo "app compilata: $APP"
+          rm -rf build/Payload
+          mkdir -p build/Payload
+          cp -R "$APP" build/Payload/
+          cd build
+          zip -qry "${NOME_BINARIO}-non-firmato.ipa" Payload
+          ls -lh "${NOME_BINARIO}-non-firmato.ipa"
+
+      - name: Consegna l'ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: pentawall-iphone-non-firmato
+          path: build/*.ipa
+          if-no-files-found: error
+          retention-days: 30
