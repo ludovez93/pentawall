@@ -71,13 +71,16 @@ gravità 18,1 m/s², dardo a 19 m/s.
 Godot --path . -s tools/prova_balistica.gd       # 20 controlli sulla riflessione, senza schermo
 Godot --path . -s tools/prova_poligono.gd        # il giro completo: sponda, colpo, punteggio
 Godot --path . -s tools/prova_avversario.gd      # 18 controlli: anticipo, schivata, livelli, partita
+Godot --path . -s tools/prova_comandi.gd         # 15 controlli: muovere e mirare con due pollici
 Godot --path . -s tools/scatti_poligono.gd       # scatti del poligono, in scatti/ (non versionata)
 Godot --path . -s tools/scatti_avversario.gd     # scatti della sfida
 Godot --path . -s tools/misura_prestazioni.gd    # prestazioni; con `-- senza-sfida` per il paragone
 ```
 
 Il collaudo della balistica gira anche a ogni `push`, prima della compilazione: se la riflessione
-si rompe, l'app non viene nemmeno costruita.
+si rompe, l'app non viene nemmeno costruita. Quello dei comandi gira sulla lavorazione **Web**, che
+è la pagina che si tocca col dito: se muovere e mirare insieme torna a far saltare la visuale, la
+pagina non viene pubblicata.
 
 ## Come arriva sull'iPhone
 

@@ -73,6 +73,14 @@ jobs:
           # cinque muri si rompe, non ha senso pubblicare niente.
           "$GODOT" --headless --path . -s tools/prova_balistica.gd
 
+      - name: Collauda i comandi a due pollici
+        run: |
+          set -euo pipefail
+          # Questa pagina si tocca col dito, ed è qui che vive il difetto del
+          # ponte tocchi della piattaforma web (LEARNED.md § 21): se muovere e
+          # mirare insieme torna a far saltare la visuale, non si pubblica.
+          "$GODOT" --headless --path . -s tools/prova_comandi.gd
+
       - name: Esporta per il browser
         run: |
           set -euo pipefail

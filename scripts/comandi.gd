@@ -26,6 +26,11 @@ var _dito_sinistro := -1
 var _dito_destro := -1
 var _centro_leva := Vector2.ZERO
 var _punta_leva := Vector2.ZERO
+## Dove stava il pollice destro l'ultima volta che l'abbiamo visto. Lo teniamo
+## noi invece di fidarci di `evento.relative`: sulla pagina web Godot 4.7.2
+## misura quello scarto contro l'ultima posizione **dell'altro dito**, e con
+## due pollici giù la visuale saltava di mezzo giro (LEARNED.md § 21).
+var _punto_destro := Vector2.ZERO
 var _movimento := Vector2.ZERO
 var _mira := Vector2.ZERO
 var _fuoco := false
@@ -68,6 +73,7 @@ func _unhandled_input(evento: InputEvent) -> void:
 				_punta_leva = evento.position
 			elif evento.position.x >= meta and _dito_destro == -1:
 				_dito_destro = evento.index
+				_punto_destro = evento.position
 				_percorso_destro = 0.0
 				_tempo_destro = 0.0
 		else:
@@ -89,8 +95,12 @@ func _unhandled_input(evento: InputEvent) -> void:
 			else:
 				_movimento = scarto.limit_length(RAGGIO_LEVA) / RAGGIO_LEVA
 		elif evento.index == _dito_destro:
-			_percorso_destro += evento.relative.length()
-			_mira += evento.relative * SENSIBILITA
+			# Lo scarto se lo calcola il gioco, da dove stava questo dito la
+			# volta prima. `evento.relative` sulla pagina web è quello sbagliato.
+			var passo: Vector2 = evento.position - _punto_destro
+			_punto_destro = evento.position
+			_percorso_destro += passo.length()
+			_mira += passo * SENSIBILITA
 
 
 ## Lo scarto della leva, da −1 a 1. La y è positiva verso il basso, come lo schermo.
