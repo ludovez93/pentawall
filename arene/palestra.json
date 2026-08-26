@@ -226,7 +226,7 @@
   ],
 
   "partenze": [
-    {"nome": "angolo nord-ovest", "dove": [-25,-30], "quota": 0, "giro": 135},
+    {"nome": "angolo nord-ovest", "dove": [-29,-29], "quota": 0, "giro": 225},
     {"nome": "ocra, lato est", "dove": [12,-27], "quota": 0, "giro": 190},
     {"nome": "mattone, fuori dal corridoio", "dove": [17,4], "quota": 0, "giro": 290},
     {"nome": "ballatoio", "dove": [-5,26], "quota": 7, "giro": 0},
