@@ -42,6 +42,7 @@ func _lavora() -> void:
 	await process_frame
 	await process_frame
 	_la_scena_dice_la_stessa_cosa(pianta)
+	_il_disegno_paga_il_rimbalzo(pianta)
 	await _la_rete_di_cammino(pianta)
 	await _lavversario_ti_raggiunge(pianta)
 	await _la_partita()
@@ -208,6 +209,78 @@ func _la_rete_di_cammino(pianta: Dictionary) -> void:
 	_conta("fuori dall'arena non ci si arriva",
 			not _ci_si_arriva(mappa, casa, Vector3(0, 0.4, 58.0)),
 			"la prova del percorso passa anche dove non c'è pavimento")
+
+
+# ------------------------------------------------------------------ il disegno
+
+## **Da ogni partenza esiste un colpo a uno o due muri che arriva dove non vedi.**
+##
+## È l'unico controllo che misura il **disegno** invece del codice, ed è la
+## promessa della tappa: se da una partenza non esiste nessun tiro di sponda che
+## porti il dardo in un punto fuori vista, quella zona non è un campo da gioco per
+## questo gioco — è un corridoio con un neon addosso, e il rimbalzo lì non serve a
+## niente.
+##
+## Si cerca come cerca un giocatore: ventaglio di direzioni attorno a sé, qualche
+## alzo, e il **risolutore vero** — la stessa funzione che gli disegna la linea di
+## mira. Non una geometria scritta apposta per la prova.
+func _il_disegno_paga_il_rimbalzo(pianta: Dictionary) -> void:
+	var spazio: PhysicsDirectSpaceState3D = _arena.get_world_3d().direct_space_state
+	var giocatore: Giocatore = _arena.call("giocatore")
+	var esclusi: Array[RID] = [giocatore.get_rid()]
+	var senza: Array[String] = []
+	for p in pianta["partenze"]:
+		var occhi := _dove(p["dove"], float(p["quota"]) + Giocatore.ALTEZZA_OCCHI)
+		if _colpo_di_sponda_al_coperto(spazio, occhi, esclusi) == Vector3.ZERO:
+			senza.append(String(p["nome"]))
+	_conta("da ogni partenza esiste il colpo di sponda verso un punto non in vista",
+			senza.is_empty(), ", ".join(senza))
+
+	# **La controprova** (LEARNED.md § 19), e va fatta o questa misura non vale
+	# niente: si spengono le sponde — le stesse superfici, sullo strato che assorbe
+	# invece di riflettere — e da quella stessa partenza il colpo non deve più
+	# esistere. Se esistesse lo stesso, a trovarlo non erano le sponde ma un
+	# artefatto del conto.
+	var sponde := get_nodes_in_group(Muratura.GRUPPO_SPONDE)
+	for sponda in sponde:
+		(sponda as CollisionObject3D).collision_layer = Strati.OSTACOLO
+	var casa := _dove(pianta["partenze"][0]["dove"],
+			float(pianta["partenze"][0]["quota"]) + Giocatore.ALTEZZA_OCCHI)
+	var senza_sponde := _colpo_di_sponda_al_coperto(spazio, casa, esclusi)
+	for sponda in sponde:
+		(sponda as CollisionObject3D).collision_layer = Strati.MONDO
+	_conta("e spente le sponde non esiste più", senza_sponde == Vector3.ZERO,
+			"lo trova lo stesso: non erano le sponde a farlo")
+
+
+## Cerca un colpo che, dopo uno o due muri, finisca in un punto che da lì non si
+## vede. Restituisce il punto trovato, o zero se non esiste.
+func _colpo_di_sponda_al_coperto(spazio: PhysicsDirectSpaceState3D, occhi: Vector3,
+		esclusi: Array[RID], lontananza := 8.0) -> Vector3:
+	for giro in 144:
+		for alzo in [-16.0, -10.0, -5.0, 0.0, 6.0, 14.0]:
+			var verso := Vector3.FORWARD.rotated(Vector3.RIGHT, deg_to_rad(alzo)) \
+					.rotated(Vector3.UP, deg_to_rad(giro * 2.5))
+			var tratti := Balistica.traiettoria(spazio, occhi, verso,
+					Balistica.PORTATA_MIRA, 2, esclusi)
+			# Meno di due tratti vuol dire nessun rimbalzo: quello è un tiro
+			# diretto, e i tiri diretti li sa fare anche un corridoio.
+			if tratti.size() < 2:
+				continue
+			var ultimo: Balistica.Tratto = tratti[-1]
+			# Il dardo deve finire **su qualcosa**: un tratto che si perde nel
+			# vuoto arriva a centoquaranta metri, cioè fuori dall'arena.
+			if ultimo.corpo == null:
+				continue
+			# Staccato dalla parete, o il raggio di controllo ricolpisce lei.
+			var arrivo: Vector3 = ultimo.a + (ultimo.da - ultimo.a).normalized() * 0.4
+			if occhi.distance_to(arrivo) < lontananza:
+				continue
+			var domanda := PhysicsRayQueryParameters3D.create(occhi, arrivo,
+					Strati.TIRO, esclusi)
+			if not spazio.intersect_ray(domanda).is_empty():
+				return arrivo
+	return Vector3.ZERO
 
 
 ## Ci si arriva a piedi? Non basta che il motore risponda: la risposta va guardata
