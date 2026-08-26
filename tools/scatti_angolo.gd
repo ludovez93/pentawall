@@ -26,10 +26,16 @@ func _lavora() -> void:
 	DirAccess.make_dir_recursive_absolute(CARTELLA)
 	_angolo = load("res://scenes/angolo.tscn").instantiate()
 	root.add_child(_angolo)
-	# La grana dei muri si genera in un thread: senza qualche fotogramma di
-	# pazienza il primo scatto la coglie a metà.
-	await _riposa(40)
+	# Prima di tutto: il dardo che scalda gli shader vive due fotogrammi davanti
+	# alla camera, ed e' grande meno di un pixel. Questo scatto e' li' per
+	# accorgersene se un giorno smettesse di esserlo.
+	await _riposa(3)
 	_giocatore = _angolo.call("giocatore")
+	await _scatta("29-appena-aperta-col-riscaldamento.png")
+
+	# La grana dei muri si genera in un thread: senza qualche fotogramma di
+	# pazienza il primo scatto la coglie a meta'.
+	await _riposa(40)
 
 	# 1. Come si apre: l'angolo intero, terza persona, dal posto di partenza.
 	_metti(Vector3(7.0, 0.6, 6.0), 49.0, -4.0)

@@ -78,6 +78,11 @@ func _ready() -> void:
 	_giocatore.rotation.y = deg_to_rad(20.0)
 	_giocatore.comandi = _comandi
 	_giocatore.incassato.connect(_su_giocatore_incassato)
+	# Il primo colpo di una partita costava un fotogramma intero: il motore
+	# compila lo shader del dardo quando lo disegna, e lo disegnava per la prima
+	# volta proprio li'. Adesso lo disegna adesso, grande meno di un pixel.
+	Proiettile.scalda(self, _giocatore.camera())
+
 	_aggiorna_righe()
 
 

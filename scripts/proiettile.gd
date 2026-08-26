@@ -258,6 +258,60 @@ static func _corredo() -> void:
 	_pelle_scia.albedo_color = scia
 
 
+## Scalda le pelli del dardo, e va chiamata quando la scena si apre.
+##
+## Il motore compila lo shader di un materiale la prima volta che lo **disegna**,
+## non quando lo si costruisce: per questo, anche con le pelli condivise, il primo
+## colpo di ogni partita costava un fotogramma da 27 millisecondi. Qui il dardo
+## viene disegnato subito — grande quattro millesimi e appiccicato davanti alla
+## camera, cioe' meno di un pixel — e quando parte il primo colpo vero il motore
+## ha gia' tutto pronto.
+static func scalda(genitore: Node, camera: Camera3D) -> void:
+	if camera == null:
+		return
+	_corredo()
+	var finto := Node3D.new()
+	genitore.add_child(finto)
+	finto.global_position = camera.global_position - camera.global_transform.basis.z * 0.4
+	finto.scale = Vector3.ONE * 0.0016
+
+	# **Le pelli vere, e devono brillare.** Un primo tentativo le scaldava con dei
+	# gemelli dal colore spento, per essere sicuri che non arrivasse niente allo
+	# schermo: il fotogramma lento al primo colpo e' tornato subito, misurato. Il
+	# motivo e' che quello che costa non e' lo shader del dardo, e' **quello del
+	# bagliore**, e il bagliore il motore lo prepara solo quando c'e' davvero
+	# qualcosa che sfonda la soglia. Un dardo spento non lo sveglia.
+	for pezzo in [
+		{"mesh": _forma_guscio, "pelle": _pelle_filo},
+		{"mesh": _forma_guscio, "pelle": _pelle_guscio},
+		{"mesh": _forma_nucleo, "pelle": _pelle_nucleo},
+		{"mesh": _forma_scia, "pelle": _pelle_scia},
+		{"mesh": _forma_lampo, "pelle": _pelle_lampo()},
+	]:
+		var parte := MeshInstance3D.new()
+		parte.mesh = pezzo["mesh"]
+		parte.material_override = pezzo["pelle"]
+		parte.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		finto.add_child(parte)
+
+	# Si porta l'identificativo, non l'oggetto: fra un quarto di secondo il nodo
+	# potrebbe non esserci piu' (LEARNED.md, nota di lavorazione).
+	var chi := finto.get_instance_id()
+	genitore.get_tree().create_timer(0.25).timeout.connect(func() -> void:
+		var nodo := instance_from_id(chi)
+		if nodo != null and is_instance_valid(nodo):
+			(nodo as Node).queue_free())
+
+
+## Il materiale del lampo: resta suo per ogni dardo, perche' si accende e si
+## spegne per conto proprio e condividerlo li farebbe lampeggiare tutti insieme.
+static func _pelle_lampo() -> StandardMaterial3D:
+	var materiale := _materiale_piatto(Color(2.4, 2.4, 2.4))
+	materiale.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	materiale.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	return materiale
+
+
 func _costruisci() -> void:
 	_corredo()
 	_corpo = Node3D.new()
@@ -295,10 +349,7 @@ func _costruisci() -> void:
 	# Il lampo è l'unico materiale che resta suo: si accende e si spegne per conto
 	# proprio, e condividerlo farebbe lampeggiare insieme tutti i dardi in volo.
 	# Nove allocazioni a colpo sono diventate una.
-	var materiale_lampo := _materiale_piatto(Color(2.4, 2.4, 2.4))
-	materiale_lampo.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	materiale_lampo.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	_lampo.material_override = materiale_lampo
+	_lampo.material_override = _pelle_lampo()
 	_lampo.visible = false
 	add_child(_lampo)
 

@@ -117,6 +117,11 @@ func _ready() -> void:
 	_giocatore.comandi = _comandi
 	_giocatore.punta(GIRO_PARTENZA, -4.0)
 
+	# Il primo colpo di una partita costava un fotogramma intero: il motore
+	# compila lo shader del dardo quando lo disegna, e lo disegnava per la prima
+	# volta proprio li'. Adesso lo disegna adesso, grande meno di un pixel.
+	Proiettile.scalda(self, _giocatore.camera())
+
 	# Ogni dardo che nasce racconta i suoi rimbalzi: è così che la sponda si
 	# accende dove è stata colpita. Il collegamento si fa alla nascita del nodo,
 	# non inseguendo i dardi in volo a ogni fotogramma.
