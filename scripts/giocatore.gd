@@ -12,6 +12,8 @@ extends CharacterBody3D
 ## canna verso quel punto. Cambiare visuale sposta solo la camera (DECISIONI.md 1).
 
 signal sparato(muri_previsti: int)
+## L'hanno preso: `punti` sono quelli che vanno a chi ha sparato.
+signal incassato(punti: int, muri: int)
 
 const VELOCITA := 7.62          ## 400 u/s del 1999
 const ACCELERAZIONE := 39.0     ## 2048 u/s²
@@ -34,12 +36,19 @@ const TEMPO_CAMBIO := 0.16
 const CADENZA := 0.42           ## fuoco manuale: un tocco, un colpo (DECISIONI.md 6)
 const PENDENZA_MASSIMA := 1.4   ## radianti di inclinazione della testa (~80°)
 
+## Quando si viene colpiti: 25 punti a chi ha sparato, raddoppiati a ogni muro,
+## come per i bersagli e per gli avversari — il conto del gioco è uno solo.
+const PUNTI_BASE := 25
+const IMMUNITA := 0.8           ## secondi di pace dopo un colpo incassato
+const CONTRACCOLPO := 3.4       ## m/s di spinta all'indietro
+
 var comandi: Node = null        ## i comandi per il pollice, se ci sono
 
 var _pendenza := 0.0
 var _mescola := 0.0             ## 0 = terza persona, 1 = prima
 var _in_prima := false
 var _ricarica := 0.0
+var _immunita := 0.0
 var _sensibilita_mouse := 0.0022
 
 var _testa: Node3D
@@ -53,7 +62,7 @@ var _linea: LineaMira
 
 
 func _ready() -> void:
-	collision_layer = Strati.GIOCATORE
+	collision_layer = Strati.COMBATTENTI
 	collision_mask = Strati.MONDO
 	_costruisci()
 	# Il mouse si cattura al primo clic, non all'avvio: così gli attrezzi di
@@ -91,6 +100,7 @@ func _physics_process(delta: float) -> void:
 
 func _process(delta: float) -> void:
 	_ricarica = maxf(_ricarica - delta, 0.0)
+	_immunita = maxf(_immunita - delta, 0.0)
 	_aggiorna_camera(delta)
 	_aggiorna_linea()
 
@@ -143,7 +153,7 @@ func spara() -> bool:
 	var tiro := _soluzione_di_tiro()
 	var partenza: Vector3 = tiro[0]
 	var verso: Vector3 = tiro[1]
-	var dardo := Proiettile.lancia(get_parent(), partenza, verso, [get_rid()])
+	var dardo := Proiettile.lancia(get_parent(), partenza, verso, [get_rid()], self)
 	dardo.colpito.connect(_su_colpo)
 	sparato.emit(0)
 	return true
@@ -162,9 +172,33 @@ func camera() -> Camera3D:
 	return _camera
 
 
+## L'hanno preso. Stesso conto di tutti: 25 punti, raddoppiati a ogni muro.
+## Restituisce falso se era immune, così chi ha sparato sa se ha fatto punti.
+func incassa(muri: int, da: Object = null) -> bool:
+	if _immunita > 0.0:
+		return false
+	_immunita = IMMUNITA
+	incassato.emit(PUNTI_BASE * int(pow(2, muri)), muri)
+	if da is Node3D:
+		var indietro := global_position - (da as Node3D).global_position
+		indietro.y = 0.0
+		if indietro.length_squared() > 0.001:
+			velocity += indietro.normalized() * CONTRACCOLPO
+	return true
+
+
+## Da quanto è al riparo: serve a chi disegna, per far vedere che il colpo è
+## arrivato.
+func immune() -> bool:
+	return _immunita > 0.0
+
+
+## Tutto ciò che si può colpire sa incassare, e risponde se il colpo è valso
+## punti: chi spara non ha bisogno di sapere cosa ha colpito.
 func _su_colpo(corpo: Object, _punto: Vector3, _normale: Vector3, muri: int) -> void:
-	if corpo is Bersaglio:
-		(corpo as Bersaglio).incassa(muri)
+	if corpo == null or corpo == self or not corpo.has_method("incassa"):
+		return
+	corpo.call("incassa", muri, self)
 
 
 func _leggi_comandi(delta: float) -> void:

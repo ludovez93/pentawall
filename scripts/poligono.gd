@@ -11,6 +11,11 @@ extends Node3D
 ## La stanza è costruita da codice, da una tabella di blocchi: una scena scritta
 ## a mano può essere valida e inquadrare il vuoto (LEARNED.md 14), mentre questa
 ## si legge, si misura e domani genera le arene vere.
+##
+## Dalla tappa 2 la stanza ha due mestieri: **poligono** com'era, e **sfida** —
+## il pulsante SFIDA fa entrare l'avversario e mette da parte i bersagli. È la
+## stessa stanza perché la domanda della tappa 2 è un'altra: non «il rimbalzo si
+## mira?», ma «un avversario che schiva rende l'anticipo una bravura?».
 
 const LARGHEZZA := 30.0
 const PROFONDITA := 20.0
@@ -26,6 +31,16 @@ const CANDIDATI := [
 	{"nome": "magenta-bianco", "colore": Color(1.0, 0.36, 0.78)},
 ]
 
+## Si vince a 500. Tu ne fai 25 con un colpo diretto e raddoppi a ogni muro; lui
+## spara solo dritto, quindi vale sempre 25. Il conto dice da solo qual è il
+## gioco: giocando dritto siete pari, e si vince di sponda.
+const TRAGUARDO := 500
+const PARTENZA_GIOCATORE := Vector3(-9.0, 0.2, 6.5)
+const PARTENZA_AVVERSARIO := Vector3(10.0, 0.2, 2.0)
+
+## I tasti della lavorazione: sul PC si prova senza toccare i pulsanti.
+const SCORCIATOIE := {KEY_C: "colore", KEY_B: "sfida", KEY_L: "livello"}
+
 var _giocatore: Giocatore
 var _comandi: Comandi
 var _bersagli: Array[Bersaglio] = []
@@ -33,7 +48,14 @@ var _punteggio := 0
 var _migliore := 0
 var _migliore_muri := 0
 var _candidato := 0
-var _cambio_in_corso := false
+var _tasti := {}
+
+var _avversario: Avversario
+var _sfida := false
+var _finita := false
+var _livello := 1
+var _punti_tu := 0
+var _punti_lui := 0
 
 
 func _ready() -> void:
@@ -46,11 +68,14 @@ func _ready() -> void:
 	add_child(_comandi)
 	_comandi.colore_richiesto.connect(_cambia_colore)
 	_comandi.camera_richiesta.connect(func() -> void: _giocatore.cambia_camera())
+	_comandi.sfida_richiesta.connect(commuta_sfida)
+	_comandi.livello_richiesto.connect(cambia_livello)
 	_giocatore = Giocatore.new()
 	add_child(_giocatore)
-	_giocatore.global_position = Vector3(-9.0, 0.2, 6.5)
+	_giocatore.global_position = PARTENZA_GIOCATORE
 	_giocatore.rotation.y = deg_to_rad(20.0)
 	_giocatore.comandi = _comandi
+	_giocatore.incassato.connect(_su_giocatore_incassato)
 	_aggiorna_righe()
 
 
@@ -69,18 +94,29 @@ func passa_al_colore_seguente() -> void:
 
 func _process(_delta: float) -> void:
 	_aggiorna_righe()
-	if Input.is_physical_key_pressed(KEY_C) and not _cambio_in_corso:
-		_cambio_in_corso = true
-		_cambia_colore()
-	elif not Input.is_physical_key_pressed(KEY_C):
-		_cambio_in_corso = false
+	if _sfida and not _finita:
+		_controlla_il_traguardo()
+	for tasto in SCORCIATOIE:
+		var giu := Input.is_physical_key_pressed(tasto)
+		if giu and not bool(_tasti.get(tasto, false)):
+			match String(SCORCIATOIE[tasto]):
+				"colore": _cambia_colore()
+				"sfida": commuta_sfida()
+				"livello": cambia_livello()
+		_tasti[tasto] = giu
 
 
 func _aggiorna_righe() -> void:
 	if _comandi == null:
 		return
-	_comandi.scrivi_alto("%d punti" % _punteggio)
 	var visuale := "prima persona" if _giocatore != null and _giocatore.in_prima_persona() else "terza persona"
+	if _sfida:
+		_comandi.scrivi_alto("TU %d — LUI %d   (a %d)" % [_punti_tu, _punti_lui, TRAGUARDO])
+		_comandi.scrivi_basso("avversario %s · %s · dardo %s · %d fps" % [
+			Avversario.TARATURE[_livello]["nome"], visuale,
+			CANDIDATI[_candidato]["nome"], Engine.get_frames_per_second()])
+		return
+	_comandi.scrivi_alto("%d punti" % _punteggio)
 	var migliore := "—" if _migliore == 0 else "%d con %d muri" % [_migliore, _migliore_muri]
 	_comandi.scrivi_basso("miglior colpo: %s · %s · dardo %s · %d fps" % [
 		migliore, visuale, CANDIDATI[_candidato]["nome"], Engine.get_frames_per_second()])
@@ -105,6 +141,107 @@ func _su_bersaglio_centrato(punti: int, muri: int) -> void:
 		_comandi.annuncia("1 MURO · %d" % punti)
 	else:
 		_comandi.annuncia("%d MURI · %d" % [muri, punti])
+
+
+## L'interruttore. Acceso: entra l'avversario, i bersagli si fanno da parte e i
+## punteggi ripartono da zero. Spento: la stanza torna il poligono di prima.
+func commuta_sfida() -> void:
+	if _sfida:
+		chiudi_sfida()
+	else:
+		avvia_sfida()
+
+
+func avvia_sfida() -> void:
+	_sfida = true
+	_finita = false
+	_punti_tu = 0
+	_punti_lui = 0
+	for bersaglio in _bersagli:
+		bersaglio.metti_in_pausa(true)
+
+	if _avversario == null or not is_instance_valid(_avversario):
+		_avversario = Avversario.crea(self, PARTENZA_AVVERSARIO, _livello)
+		_avversario.centrato.connect(_su_avversario_centrato)
+		_avversario.ha_centrato.connect(_su_avversario_ha_centrato)
+	_avversario.global_position = PARTENZA_AVVERSARIO
+	_avversario.velocity = Vector3.ZERO
+	_avversario.imposta_livello(_livello)
+	_avversario.bersaglio = _giocatore
+	_giocatore.global_position = PARTENZA_GIOCATORE
+	_giocatore.punta(20.0, -3.0)
+
+	_comandi.scrivi_sfida("CHIUDI")
+	_comandi.annuncia("SFIDA · %s" % Avversario.TARATURE[_livello]["nome"].to_upper())
+
+
+func chiudi_sfida() -> void:
+	_sfida = false
+	_finita = false
+	if _avversario != null and is_instance_valid(_avversario):
+		_avversario.bersaglio = null
+		_avversario.queue_free()
+		_avversario = null
+	for bersaglio in _bersagli:
+		bersaglio.metti_in_pausa(false)
+	_comandi.scrivi_sfida("SFIDA")
+	_comandi.annuncia("POLIGONO")
+
+
+## Il livello si cambia dentro la partita: i tre si confrontano col pollice nella
+## stessa stanza, non leggendo una tabella.
+func cambia_livello() -> void:
+	_livello = (_livello + 1) % Avversario.TARATURE.size()
+	if _avversario != null and is_instance_valid(_avversario):
+		_avversario.imposta_livello(_livello)
+	_comandi.annuncia(String(Avversario.TARATURE[_livello]["nome"]).to_upper())
+
+
+func in_sfida() -> bool:
+	return _sfida
+
+
+func avversario() -> Avversario:
+	return _avversario
+
+
+func punteggi() -> Array:
+	return [_punti_tu, _punti_lui]
+
+
+func _su_avversario_centrato(punti: int, muri: int) -> void:
+	if _finita:
+		return
+	_punti_tu += punti
+	if muri == 0:
+		_comandi.annuncia("DIRETTO · %d" % punti)
+	elif muri == 1:
+		_comandi.annuncia("1 MURO · %d" % punti)
+	else:
+		_comandi.annuncia("%d MURI · %d" % [muri, punti])
+
+
+func _su_avversario_ha_centrato(punti: int, _muri: int) -> void:
+	if _finita:
+		return
+	_punti_lui += punti
+
+
+func _su_giocatore_incassato(_punti: int, _muri: int) -> void:
+	if _sfida and not _finita:
+		_comandi.annuncia("COLPITO")
+
+
+## Chi arriva prima a 500. Finita la partita l'avversario smette di giocare, e il
+## pulsante SFIDA ne comincia un'altra da zero.
+func _controlla_il_traguardo() -> void:
+	if _punti_tu < TRAGUARDO and _punti_lui < TRAGUARDO:
+		return
+	_finita = true
+	if _avversario != null and is_instance_valid(_avversario):
+		_avversario.bersaglio = null
+	_comandi.scrivi_sfida("ANCORA")
+	_comandi.annuncia("HAI VINTO" if _punti_tu >= TRAGUARDO else "HAI PERSO")
 
 
 ## L'ambiente. La soglia del bagliore sta a 1.0: sopra ci va solo il proiettile,

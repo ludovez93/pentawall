@@ -25,6 +25,7 @@ var _velocita := 0.0
 var _avanzamento := 0.0
 var _verso := 1.0
 var _spento := 0.0
+var _in_pausa := false
 
 var _aspetto: Node3D
 var _materiale_anello: StandardMaterial3D
@@ -50,6 +51,8 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	if _in_pausa:
+		return
 	if _spento > 0.0:
 		_spento -= delta
 		if _spento <= 0.0:
@@ -68,14 +71,30 @@ func _process(delta: float) -> void:
 		global_position = _da.lerp(_a, _avanzamento)
 
 
-## Chiamata dal poligono quando un dardo arriva. `muri` sono quelli consumati
-## dal dardo prima di arrivare qui: è tutto il punteggio del gioco.
-func incassa(muri: int) -> void:
-	if _spento > 0.0:
-		return
+## Chiamata da chi ha sparato quando il dardo arriva. `muri` sono quelli
+## consumati prima di arrivare qui: è tutto il punteggio del gioco.
+##
+## Firma uguale a quella dell'avversario, e risposta uguale — vero se il colpo
+## è valso punti. Così chi spara non ha bisogno di sapere cosa ha colpito.
+func incassa(muri: int, _da: Object = null) -> bool:
+	if _spento > 0.0 or _in_pausa:
+		return false
 	var punti := PUNTI_BASE * int(pow(2, muri))
 	centrato.emit(punti, muri)
 	_spegni()
+	return true
+
+
+## Durante la sfida i bersagli si fanno da parte: con un avversario in campo
+## sarebbero punti gratis e rumore in mezzo alla linea di tiro.
+func metti_in_pausa(pausa: bool) -> void:
+	_in_pausa = pausa
+	_aspetto.visible = not pausa
+	if pausa:
+		collision_layer = 0
+	else:
+		_spento = 0.0
+		collision_layer = Strati.BERSAGLIO
 
 
 func _spegni() -> void:

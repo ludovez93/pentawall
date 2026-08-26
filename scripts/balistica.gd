@@ -5,8 +5,8 @@ extends RefCounted
 ## la stessa funzione, chiamata da quattro posti diversi, dà
 ##   1. la linea che vedi mentre miri          → linea_mira.gd
 ##   2. la traiettoria del proiettile vero     → proiettile.gd
-##   3. l'allarme al bot che sta per essere colpito   → tappa 2
-##   4. la mira del bot                                → tappa 2
+##   3. l'allarme al bot che sta per essere colpito   → avversario.gd
+##   4. la mira del bot                                → avversario.gd
 ## Se è sbagliata qui, è sbagliato tutto il gioco (PLAN.md, rischio numero 2).
 ## I casi limite sono verificati da `tools/prova_balistica.gd`.
 
@@ -79,7 +79,7 @@ static func traiettoria(spazio: PhysicsDirectSpaceState3D, origine: Vector3, dir
 		var strato := 0
 		if tratto.corpo is CollisionObject3D:
 			strato = (tratto.corpo as CollisionObject3D).collision_layer
-		tratto.bersaglio = (strato & Strati.BERSAGLIO) != 0
+		tratto.bersaglio = (strato & Strati.ASSORBE) != 0
 
 		if tratto.bersaglio:
 			tratti.append(tratto)
@@ -110,6 +110,29 @@ static func muri_usati(tratti: Array) -> int:
 		if tratto.muro and not tratto.esaurito:
 			conto += 1
 	return conto
+
+
+## Quanto vicino passa una traiettoria a un punto, e dopo quanta strada.
+##
+## È il secondo mestiere della riflessione, ed è quello che rende coerente il
+## gioco: la stessa traiettoria che al giocatore serve per mirare, all'avversario
+## serve per sapere che è in pericolo — anche quando il colpo gli arriva dietro
+## l'angolo dopo tre sponde (MIGLIORIE.md § 1). Un raggio non basta, perché un
+## corpo è largo: si misura la distanza dal segmento, non l'urto.
+##
+## Restituisce [distanza minima, strada percorsa fino a quel punto].
+static func avvicinamento(tratti: Array, punto: Vector3) -> Array:
+	var minima := INF
+	var strada_al_minimo := 0.0
+	var strada := 0.0
+	for tratto in tratti:
+		var vicino := Geometry3D.get_closest_point_to_segment(punto, tratto.da, tratto.a)
+		var distanza := vicino.distance_to(punto)
+		if distanza < minima:
+			minima = distanza
+			strada_al_minimo = strada + tratto.da.distance_to(vicino)
+		strada += tratto.lunghezza()
+	return [minima, strada_al_minimo]
 
 
 ## Dove finisce, in tutto, una traiettoria.

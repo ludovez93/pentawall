@@ -22,10 +22,17 @@ const SCIA_MASSIMA := 2.6      ## metri di scia dietro al dardo
 const FRAZIONE_MINIMA := 0.009 ## quota minima di altezza schermo occupata (~0,9%)
 const INGRANDIMENTO_MASSIMO := 5.0
 
+## Il gruppo dei dardi in volo: chi deve schivare li cerca qui.
+const GRUPPO := &"dardi"
+
 ## Il colore riservato al proiettile. Nessuna superficie d'arena può usarlo a
 ## piena saturazione: è la regola che discende da DECISIONI.md § B.
 ## Si conferma qui sul poligono, sulla scena vera — per questo è cambiabile a caldo.
 static var colore_riservato := Color(1.0, 0.62, 0.24)
+
+## Chi l'ha sparato. Serve a chi guarda i dardi in volo per sapere se sono suoi:
+## un avversario non deve schivare i propri colpi.
+var tiratore: Object = null
 
 var _verso := Vector3.FORWARD
 var _muri := 0
@@ -43,12 +50,13 @@ var _scia: MeshInstance3D
 var _lampo: MeshInstance3D
 
 
-## Si lancia così: Proiettile.lancia(scena, canna, verso, esclusi).
+## Si lancia così: Proiettile.lancia(scena, canna, verso, esclusi, chi spara).
 static func lancia(genitore: Node, origine: Vector3, verso: Vector3,
-		esclusi: Array[RID] = []) -> Proiettile:
+		esclusi: Array[RID] = [], chi_spara: Object = null) -> Proiettile:
 	var dardo := Proiettile.new()
 	dardo._verso = verso.normalized()
 	dardo._esclusi = esclusi
+	dardo.tiratore = chi_spara
 	genitore.add_child(dardo)
 	dardo.global_position = origine
 	dardo._coda = origine
@@ -57,7 +65,32 @@ static func lancia(genitore: Node, origine: Vector3, verso: Vector3,
 
 func _ready() -> void:
 	set_as_top_level(true)
+	# Chi deve schivare guarda qui: nessuno ha bisogno di annunciare un colpo,
+	# basta che il dardo esista (MIGLIORIE.md § 1, «ogni colpo avvisa»).
+	add_to_group(GRUPPO)
 	_costruisci()
+
+
+## Dove sta andando adesso: dopo un rimbalzo non è più la direzione di partenza.
+func verso() -> Vector3:
+	return _verso
+
+
+## Quanti muri gli restano. Chi ne prevede la strada deve chiederlo a lui: il
+## conto dei cinque attraversa i fotogrammi, e da fuori non si indovina.
+func muri_restanti() -> int:
+	return maxi(Balistica.MURI_MASSIMI - _muri, 0)
+
+
+## I corpi che questo dardo attraversa: chi l'ha sparato. Chi ne ricalcola la
+## traiettoria deve escluderli anche lui, o prevede un urto che non avverrà.
+func esclusi() -> Array[RID]:
+	return _esclusi
+
+
+## Un dardo che sta morendo non fa più male a nessuno.
+func in_volo() -> bool:
+	return not _spegnimento
 
 
 func _process(delta: float) -> void:

@@ -9,13 +9,22 @@ sta nella cartella superiore e non è pubblicata qui.
 
 ## Stato
 
-**Tappa 1 — il poligono di tiro.** C'è una stanza sola, e dentro c'è il cuore del gioco: un dardo
-che rimbalza fino a cinque muri, la linea che mostra dove batterà il colpo, cinque bersagli — due
-dei quali si prendono **solo** di sponda, perché stanno dietro un angolo — le due visuali e i
-comandi per il pollice. Il punteggio parte da 25 e raddoppia a ogni muro: 25, 50, 100, 200, 400, 800.
+**Tappa 2 — lo sparring partner.** C'è una stanza sola, con due mestieri.
 
-Quello che il poligono deve dimostrare è una cosa sola: **che mirare un rimbalzo col pollice sia
-divertente**. La risposta arriva dal telefono, non dal PC.
+Da **poligono**: un dardo che rimbalza fino a cinque muri, la linea che mostra dove batterà il
+colpo, cinque bersagli — due dei quali si prendono **solo** di sponda, perché stanno dietro un
+angolo — le due visuali e i comandi per il pollice. Il punteggio parte da 25 e raddoppia a ogni
+muro: 25, 50, 100, 200, 400, 800.
+
+Da **sfida** (pulsante SFIDA): entra un avversario e i bersagli si fanno da parte. Lui anticipa,
+schiva, e **schiva anche i rimbalzi** — legge le traiettorie con la stessa funzione che disegna a
+te la linea di mira. Si vince a 500 punti: tu raddoppi a ogni muro, lui spara dritto e vale sempre
+25. Giocando dritto siete pari, e si vince di sponda. Tre livelli, che cambiano solo reazione,
+precisione e cadenza: **nessuno spegne mai una capacità**.
+
+Quello che questa stanza deve dimostrare sono due cose: **che mirare un rimbalzo col pollice sia
+divertente**, e **che perdere contro di lui sembri giusto**. La risposta arriva dal telefono, non
+dal PC.
 
 La scena della tappa 0 (`scenes/test_cube.tscn`) resta: serve a riprovare la catena di
 compilazione quando cambia qualcosa che non c'entra col gioco.
@@ -30,6 +39,8 @@ compilazione quando cambia qualcosa che non c'entra col gioco.
 | Saltare | **SALTA** | barra spaziatrice |
 | Cambiare visuale | **VISUALE** | V |
 | Cambiare il colore del dardo | **COLORE** | C |
+| Accendere o chiudere la sfida | **SFIDA** | B |
+| Cambiare livello dell'avversario | **LIVELLO** | L |
 
 Sul PC il mouse si aggancia al primo clic e si libera con Esc.
 
@@ -37,8 +48,9 @@ Sul PC il mouse si aggancia al primo clic e si libera con Esc.
 
 Il pezzo che regge tutto è `scripts/balistica.gd`: tira un raggio, lo specchia sulla normale a
 ogni muro, si ferma al quinto. Quella funzione sola serve **quattro** cose — la linea che si vede
-mentre si mira, il volo del dardo vero, e (dalla tappa 2) l'allarme al bot che sta per essere
-colpito e la mira del bot. Il dardo si muove a mano a ogni fotogramma, con un raggio che copre
+mentre si mira, il volo del dardo vero, l'allarme all'avversario che sta per essere colpito e la
+sua mira. Le ultime due sono la ragione per cui un avversario schiva un colpo di sponda che gli
+arriva dietro l'angolo: non è un'intelligenza in più, è lo stesso conto letto dall'altra parte. Il dardo si muove a mano a ogni fotogramma, con un raggio che copre
 tutto lo spostamento: a 19 m/s un corpo fisico passerebbe attraverso i muri.
 
 I numeri vengono dall'originale del 1999, convertiti: corsa 7,62 m/s, salto 1,06 m,
@@ -47,10 +59,12 @@ gravità 18,1 m/s², dardo a 19 m/s.
 ## Come si prova sul PC
 
 ```
-Godot --path . -s tools/prova_balistica.gd      # 20 controlli sulla riflessione, senza schermo
-Godot --path . -s tools/prova_poligono.gd       # il giro completo: sponda, colpo, punteggio
-Godot --path . -s tools/scatti_poligono.gd      # una serie di scatti in scatti/ (non versionata)
-Godot --path . -s tools/misura_prestazioni.gd   # quanti fotogrammi al secondo, senza sincronismo
+Godot --path . -s tools/prova_balistica.gd       # 20 controlli sulla riflessione, senza schermo
+Godot --path . -s tools/prova_poligono.gd        # il giro completo: sponda, colpo, punteggio
+Godot --path . -s tools/prova_avversario.gd      # 18 controlli: anticipo, schivata, livelli, partita
+Godot --path . -s tools/scatti_poligono.gd       # scatti del poligono, in scatti/ (non versionata)
+Godot --path . -s tools/scatti_avversario.gd     # scatti della sfida
+Godot --path . -s tools/misura_prestazioni.gd    # prestazioni; con `-- senza-sfida` per il paragone
 ```
 
 Il collaudo della balistica gira anche a ogni `push`, prima della compilazione: se la riflessione

@@ -13,6 +13,8 @@ extends CanvasLayer
 
 signal colore_richiesto
 signal camera_richiesta
+signal sfida_richiesta
+signal livello_richiesto
 
 const RAGGIO_LEVA := 96.0
 const ZONA_MORTA := 12.0
@@ -36,6 +38,7 @@ var _riga_alta: Label
 var _riga_bassa: Label
 var _avviso: Label
 var _tempo_avviso := 0.0
+var _bottone_sfida: Button
 
 
 func _ready() -> void:
@@ -129,6 +132,13 @@ func annuncia(testo: String) -> void:
 	_avviso.modulate.a = 1.0
 
 
+## Il pulsante del duello dice cosa farà, non in che stato è: acceso, l'unica
+## cosa che può fare è chiudere.
+func scrivi_sfida(testo: String) -> void:
+	if _bottone_sfida != null:
+		_bottone_sfida.text = testo
+
+
 func _disegna() -> void:
 	var chiaro := Color(1, 1, 1, 0.5)
 	# Il mirino: al centro, sempre, in tutte e due le visuali.
@@ -183,6 +193,13 @@ func _costruisci() -> void:
 			func() -> void: camera_richiesta.emit())
 	_pulsante("COLORE", Vector2(-160, -430), Vector2(120, 84), Color(0.35, 0.4, 0.55),
 			func() -> void: colore_richiesto.emit())
+	# I due della tappa 2: accendere il duello, e cambiare avversario senza
+	# uscire dalla partita — i tre livelli si confrontano col pollice, non a
+	# parole (MIGLIORIE.md § 1).
+	_bottone_sfida = _pulsante("SFIDA", Vector2(-160, -524), Vector2(120, 84),
+			Color(0.2, 0.75, 0.45), func() -> void: sfida_richiesta.emit())
+	_pulsante("LIVELLO", Vector2(-160, -618), Vector2(120, 84), Color(0.35, 0.4, 0.55),
+			func() -> void: livello_richiesto.emit())
 
 
 func _pulsante(testo: String, scarto: Vector2, misura: Vector2, colore: Color,

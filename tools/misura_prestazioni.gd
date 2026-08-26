@@ -16,8 +16,21 @@ func _lavora() -> void:
 	for i in 40:
 		await process_frame
 	giocatore = poligono.call("giocatore")
+	# Con la sfida accesa: il caso peggiore e' quello vero, non la stanza vuota.
+	# L'avversario ricalcola la traiettoria di ogni dardo in volo venti volte al
+	# secondo, ed e' esattamente il conto che va misurato.
+	# Con `-- senza-sfida` si misura la stanza da sola: e' il termine di paragone,
+	# e un numero senza paragone non dice niente.
+	var con_sfida := not OS.get_cmdline_user_args().has("senza-sfida")
+	if con_sfida:
+		poligono.call("avvia_sfida")
+		for i in 20:
+			await process_frame
 
 	var misure := []
+	var disegno := []
+	var fisica := []
+	var dardi := []
 	var scatti := 0
 	for giro in 400:
 		await process_frame
@@ -29,6 +42,9 @@ func _lavora() -> void:
 			scatti += 1
 		if giro > 60:
 			misure.append(Performance.get_monitor(Performance.TIME_PROCESS) + Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS))
+			disegno.append(Performance.get_monitor(Performance.TIME_PROCESS))
+			fisica.append(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS))
+			dardi.append(root.get_tree().get_nodes_in_group(Proiettile.GRUPPO).size())
 
 	misure.sort()
 	var somma := 0.0
@@ -38,7 +54,17 @@ func _lavora() -> void:
 	var peggiore: float = misure[misure.size() - 1]
 	var mediano: float = misure[misure.size() / 2]
 	print("scheda: ", RenderingServer.get_video_adapter_name())
+	print("sfida: ", "accesa" if con_sfida else "spenta")
 	print("fotogrammi misurati: ", misure.size(), " con ", scatti, " colpi sparati")
 	print("logica di gioco per fotogramma — media %.2f ms, mediana %.2f ms, peggiore %.2f ms" % [media * 1000.0, mediano * 1000.0, peggiore * 1000.0])
+	print("  di cui disegno %.2f ms, fisica %.2f ms (mediane)" % [
+		_mediana(disegno) * 1000.0, _mediana(fisica) * 1000.0])
+	print("dardi in volo: mediana %d, massimo %d" % [_mediana(dardi), dardi.max()])
 	print("fotogrammi al secondo nell'ultimo tratto: ", Engine.get_frames_per_second())
 	quit(0)
+
+
+func _mediana(valori: Array) -> float:
+	var copia := valori.duplicate()
+	copia.sort()
+	return float(copia[copia.size() / 2])
