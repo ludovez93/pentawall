@@ -1,0 +1,28 @@
+; Impostazioni del progetto PENTAWALL.
+; Modalita Compatibility (OpenGL/GLES3): e' quella scelta per girare sul PC di
+; sviluppo e sui telefoni. Non cambiare senza rileggere STATUS.md.
+
+config_version=5
+
+[application]
+
+config/name="PENTAWALL"
+config/description="Sparatutto in arena a punti. Il proiettile rimbalza fino a cinque muri."
+config/version="0.1.0"
+run/main_scene="res://scenes/test_cube.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+config/icon="res://icon.svg"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/handheld/orientation=4
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+anti_aliasing/quality/msaa_3d=2

@@ -1,0 +1,15 @@
+# Godot 4: cartella di importazione, si rigenera da sola
+.godot/
+
+# Prodotti di compilazione
+/build/
+*.ipa
+*.xcarchive
+android/
+
+# Roba di sistema
+.DS_Store
+Thumbs.db
+
+# Scatti delle verifiche visive
+/scatto*.png
