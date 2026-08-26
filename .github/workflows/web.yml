@@ -123,6 +123,35 @@ jobs:
             fi
           done
 
+      - name: L'app che si installa sulla Home, e l'operaio che la tiene aggiornata
+        run: |
+          set -euo pipefail
+          # Con la spunta PWA accesa, Godot genera il manifesto, le icone e un
+          # operaio di servizio che serve **prima la copia in cache**: una versione
+          # appena pubblicata arriverebbe sul telefono solo al secondo avvio, e
+          # si finirebbe a discutere di difetti gia' corretti. Il nostro fa il
+          # contrario — prima la rete, `no-cache`, e la cache solo se manca il
+          # campo — ed e' per questo che qui prende il posto di quello di Godot.
+          test -f build/web/index.service.worker.js
+          cp tools/pwa_service_worker.js build/web/index.service.worker.js
+          grep -q "no-cache" build/web/index.service.worker.js
+          # I pezzi che fanno la differenza fra un'app a schermo intero con la sua
+          # icona e un segnalibro dentro Safari. Se ne manca uno non lo dice
+          # nessuno: sul telefono si vede solo che «e' rimasto come prima».
+          for pezzo in index.manifest.json index.apple-touch-icon.png index.144x144.png index.180x180.png index.512x512.png; do
+            if [ -f "build/web/$pezzo" ]; then
+              echo "  ok   $pezzo"
+            else
+              echo "  NO   manca $pezzo — la spunta PWA e' spenta nel preset?"
+              exit 1
+            fi
+          done
+          grep -q 'rel="manifest"' build/web/index.html
+          grep -q "serviceWorker.register" build/web/index.html
+          grep -q "apple-mobile-web-app-capable" build/web/index.html
+          tr -d ' ' < build/web/index.manifest.json | grep -q '"display":"fullscreen"'
+          cat build/web/index.manifest.json
+
       - name: Prepara le pagine
         uses: actions/configure-pages@v5
 
