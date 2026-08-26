@@ -17,6 +17,41 @@ extends CharacterBody3D
 
 ## Il giocatore l'ha centrato: punti a lui. Stesso segnale dei bersagli, così chi
 ## tiene il punteggio non deve sapere cosa ha colpito.
+## I candidati per il colore dell'alone, che è il **terzo colore riservato** del
+## gioco dopo il bianco-arancio del dardo e il ciano-turchese delle sponde. Si
+## sceglie sulla scena vera con il pulsante ALONE, non su un campionario.
+const ALONI := [
+	{"nome": "verde lime", "colore": Color(0.60, 1.0, 0.24)},
+	{"nome": "bianco", "colore": Color(0.96, 0.96, 0.92)},
+	{"nome": "magenta", "colore": Color(1.0, 0.30, 0.72)},
+]
+
+## Il contorno lavora **da tre a quindici metri**, e oltre si spegne. Non è un
+## limite tecnico, è una regola di gioco: un contorno che ti trova l'avversario
+## in fondo all'arena è il marcatore da sparatutto moderno, e questo è un gioco a
+## punti del 1999 rifatto oggi. Da lontano l'avversario lo si cerca — e quando
+## spara è il suo dardo incandescente a tradirlo.
+const PORTATA_ALONE := 15.0
+const DISSOLVENZA_ALONE := 3.5
+
+## Lo spessore del contorno si misura **sullo schermo, non nel mondo**: `grow`
+## lavora in metri, quindi da vicino diventerebbe un tubo e da lontano un filo.
+## Questo è il numero che tiene fermo il tratto: metri di crescita per metro di
+## distanza.
+const SPESSORE_PER_METRO := 0.0069
+const SPESSORE_FILO := 0.4  ## il filo scuro è una frazione del contorno
+
+## Il contorno si può spegnere, per confrontare col pollice invece che a parole.
+static var ALONE_ACCESO := true
+static var alone_scelto := 0
+
+## Il colore della squadra: cremisi, quella di casa. Non è riservato a niente ed
+## è giusto così — cambia da squadra a squadra, ed è l'alone a rendere leggibile
+## chiunque lo indossi.
+static var colore_squadra := Color(0.86, 0.14, 0.22)
+
+var _contorni: Array[Dictionary] = []
+
 signal centrato(punti: int, muri: int)
 ## Ha centrato il suo bersaglio: punti a sé.
 signal ha_centrato(punti: int, muri: int)
@@ -119,6 +154,12 @@ func _ready() -> void:
 	collision_layer = Strati.COMBATTENTI
 	collision_mask = Strati.SOLIDO
 	_costruisci()
+
+
+## Il contorno si aggiorna con il disegno, non con la fisica: dipende da dove sta
+## la camera, e la camera si muove a ogni fotogramma.
+func _process(_delta: float) -> void:
+	_aggiorna_i_contorni()
 
 
 func _physics_process(delta: float) -> void:
@@ -503,13 +544,53 @@ func _costruisci() -> void:
 	# Cremisi e bianco: la squadra avversaria. Non arancio, non ciano, non
 	# magenta — quei tre sono i candidati del dardo, e il colore del dardo non lo
 	# indossa nessuno (DECISIONI.md § B).
-	var busto := MeshInstance3D.new()
 	var mesh_busto := CapsuleMesh.new()
 	mesh_busto.radius = RAGGIO_CORPO
 	mesh_busto.height = ALTEZZA_CORPO
+
+	# **L'alone.** È la risposta alla domanda della tappa 4, ed è lo stesso
+	# meccanismo del filo scuro del dardo, rovesciato: la stessa capsula un filo
+	# più grande, vista da dentro, così del corpo resta solo il contorno.
+	#
+	# Serve perché il colore del corpo **non può** essere riservato — è quello
+	# della squadra, e le squadre sono il contenuto del gioco (DECISIONI.md 8).
+	# Un cremisi davanti a una parete di mattoni sparisce, e sparirebbe qualunque
+	# tinta davanti alla parete giusta: in un'arena satura non esiste un colore
+	# che vada bene dappertutto. Il contorno invece non dipende dal fondo — è la
+	# stessa strada del dardo, che si separa **per luminanza e per disegno, non
+	# per tinta** (DECISIONI.md § B).
+	if ALONE_ACCESO:
+		var mesh_alone_casco := SphereMesh.new()
+		mesh_alone_casco.radius = 0.3
+		mesh_alone_casco.height = 0.52
+		# **Due gusci, non uno**, ed è di nuovo il dardo: filo scuro attaccato al
+		# corpo, contorno acceso fuori. Con il solo contorno acceso, una squadra
+		# della sua stessa famiglia di colore se lo mangerebbe — il magenta sul
+		# cremisi si fondeva, verificato guardandolo. Il filo scuro in mezzo fa sì
+		# che il contorno non tocchi mai il colore della squadra, **qualunque**
+		# colore sia: è il punto di tutta la tappa.
+		for guscio in [
+			{"grande": false, "colore": Color(0.03, 0.03, 0.06)},
+			{"grande": true, "colore": Color(ALONI[alone_scelto]["colore"])},
+		]:
+			var quota: float = 1.0 if guscio["grande"] else SPESSORE_FILO
+			for pezzo in [
+				{"mesh": mesh_busto, "dove": Vector3(0, ALTEZZA_CORPO * 0.5, 0)},
+				{"mesh": mesh_alone_casco, "dove": Vector3(0, ALTEZZA_CORPO - 0.06, 0)},
+			]:
+				var strato := MeshInstance3D.new()
+				strato.mesh = pezzo["mesh"]
+				strato.position = pezzo["dove"]
+				var pelle := _pelle_alone(guscio["colore"])
+				strato.material_override = pelle
+				strato.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				_aspetto.add_child(strato)
+				_contorni.append({"materiale": pelle, "quota": quota})
+
+	var busto := MeshInstance3D.new()
 	busto.mesh = mesh_busto
 	busto.position = Vector3(0, ALTEZZA_CORPO * 0.5, 0)
-	busto.material_override = _materiale(Color(0.86, 0.14, 0.22), 0.3)
+	busto.material_override = _materiale(colore_squadra, 0.3)
 	_aspetto.add_child(busto)
 
 	var casco := MeshInstance3D.new()
@@ -557,6 +638,42 @@ func _costruisci() -> void:
 	_canna = Node3D.new()
 	_canna.position = Vector3(0.52, ALTEZZA_OCCHI - 0.14, -0.9)
 	_aspetto.add_child(_canna)
+
+
+## La pelle del contorno: la capsula vista **da dentro** e cresciuta di poco, senza
+## luci di scena addosso — così il contorno è identico nella grotta verde e nel
+## tempio rosso, esattamente come il dardo. Resta **sotto la soglia del bagliore**:
+## sopra l'uno ci va solo il dardo, e un avversario non deve mai brillare più del
+## colpo che gli stai tirando.
+static func _pelle_alone(colore: Color) -> StandardMaterial3D:
+	var materiale := StandardMaterial3D.new()
+	materiale.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	materiale.albedo_color = colore
+	materiale.cull_mode = BaseMaterial3D.CULL_FRONT
+	materiale.grow = true
+	materiale.grow_amount = 0.055
+	materiale.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	materiale.disable_receive_shadows = true
+	return materiale
+
+
+## Il contorno, fotogramma per fotogramma: spessore fermo sullo schermo e
+## dissolvenza oltre la portata. Sono le due cose che lo tengono un **segnale**
+## invece che una decorazione che cresce e cala da sola.
+func _aggiorna_i_contorni() -> void:
+	if _contorni.is_empty():
+		return
+	var camera := get_viewport().get_camera_3d()
+	if camera == null:
+		return
+	var distanza := camera.global_position.distance_to(
+			global_position + Vector3(0, ALTEZZA_CORPO * 0.5, 0))
+	var spessore := clampf(distanza * SPESSORE_PER_METRO, 0.02, 0.14)
+	var quanto := clampf((PORTATA_ALONE - distanza) / DISSOLVENZA_ALONE, 0.0, 1.0)
+	for contorno in _contorni:
+		var materiale: StandardMaterial3D = contorno["materiale"]
+		materiale.grow_amount = spessore * float(contorno["quota"])
+		materiale.albedo_color.a = quanto
 
 
 func _materiale(colore: Color, luce: float) -> StandardMaterial3D:

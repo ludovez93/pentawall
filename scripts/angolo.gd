@@ -55,6 +55,10 @@ const NEON_SPONDA := Color(0.30, 0.99, 0.95)
 const PARTENZA := Vector3(7.0, 0.4, 6.0)
 const GIRO_PARTENZA := 49.0
 
+## Dove entra l'avversario: davanti alla parete di mattoni, che è il fondo su cui
+## oggi si perde — è il caso peggiore, ed è quello che va guardato (tappa 4).
+const PARTENZA_AVVERSARIO := Vector3(-6.0, 0.4, -6.0)
+
 ## Gli stessi tre candidati del poligono: il colore del dardo si sceglie sulla
 ## scena vera, e adesso le scene vere sono due.
 const CANDIDATI := [
@@ -64,7 +68,8 @@ const CANDIDATI := [
 ]
 
 ## I tasti della lavorazione: sul PC si prova senza toccare i pulsanti.
-const SCORCIATOIE := {KEY_C: "colore", KEY_S: "sponde", KEY_A: "poligono"}
+const SCORCIATOIE := {KEY_C: "colore", KEY_S: "sponde", KEY_A: "poligono",
+	KEY_B: "avversario", KEY_N: "alone"}
 
 const SEME := 20260826  ## il pubblico dev'essere sempre lo stesso, o gli scatti non si confrontano
 
@@ -83,6 +88,8 @@ var _candidato := 0
 var _tasti := {}
 var _solo_sponde := true
 var _bottone_sponde: Button
+var _avversario: Avversario
+var _bottone_avversario: Button
 var _anelli: Array[MeshInstance3D] = []
 var _vita_anelli: Array[float] = []
 var _prossimo_anello := 0
@@ -109,6 +116,9 @@ func _ready() -> void:
 	_comandi.spegni_il_duello()
 	_bottone_sponde = _comandi.pulsante_di_scena("SPONDE", Color(0.2, 0.75, 0.7),
 			commuta_sponde)
+	_bottone_avversario = _comandi.pulsante_di_scena("AVVERSARIO", Color(0.2, 0.75, 0.45),
+			commuta_avversario)
+	_comandi.pulsante_di_scena("ALONE", Color(0.45, 0.55, 0.35), cambia_alone)
 	_comandi.pulsante_di_scena("POLIGONO", Color(0.35, 0.4, 0.55), torna_al_poligono)
 
 	_giocatore = Giocatore.new()
@@ -163,6 +173,58 @@ func commuta_sponde() -> void:
 	_comandi.annuncia("SOLO LE SPONDE" if _solo_sponde else "RIMBALZA TUTTO")
 
 
+## L'avversario, qui, non serve a giocare: serve a **guardarlo**. È la tappa 4 —
+## il dardo ha il suo colore riservato, le sponde hanno il loro, e lui non ha
+## niente: davanti alla parete di mattoni è quasi della stessa tinta del muro.
+func commuta_avversario() -> void:
+	if _avversario != null and is_instance_valid(_avversario):
+		_avversario.bersaglio = null
+		_avversario.queue_free()
+		_avversario = null
+		_bottone_avversario.text = "AVVERSARIO"
+		_comandi.annuncia("VIA L'AVVERSARIO")
+		return
+	_avversario = Avversario.crea(self, PARTENZA_AVVERSARIO, 1)
+	_avversario.bersaglio = _giocatore
+	_bottone_avversario.text = "VIA LUI"
+	_comandi.annuncia("AVVERSARIO")
+
+
+## Il contorno degli avversari si sceglie qui, sulla stanza vera e col pollice —
+## come il colore del dardo e come il livello. Passa anche per «spento», perché
+## il paragone con il prima è metà della scelta.
+func cambia_alone() -> void:
+	var quanti := Avversario.ALONI.size()
+	if not Avversario.ALONE_ACCESO:
+		Avversario.ALONE_ACCESO = true
+		Avversario.alone_scelto = 0
+	elif Avversario.alone_scelto + 1 < quanti:
+		Avversario.alone_scelto += 1
+	else:
+		Avversario.ALONE_ACCESO = false
+	_rifai_lavversario()
+	_comandi.annuncia("SENZA CONTORNO" if not Avversario.ALONE_ACCESO
+			else String(Avversario.ALONI[Avversario.alone_scelto]["nome"]).to_upper())
+
+
+## L'aspetto si costruisce quando l'avversario nasce, quindi per cambiargli il
+## contorno lo si rifà. Se non c'era, non compare dal nulla.
+func _rifai_lavversario() -> void:
+	if _avversario == null or not is_instance_valid(_avversario):
+		return
+	var dove := _avversario.global_position
+	var chi := _avversario.bersaglio
+	_avversario.bersaglio = null
+	_avversario.queue_free()
+	_avversario = Avversario.crea(self, dove, 1)
+	_avversario.bersaglio = chi
+
+
+## Serve agli attrezzi degli scatti, che lo devono piazzare davanti ai vari fondi.
+func avversario() -> Avversario:
+	return _avversario
+
+
 func torna_al_poligono() -> void:
 	get_tree().change_scene_to_file("res://scenes/poligono.tscn")
 
@@ -177,6 +239,8 @@ func _process(delta: float) -> void:
 				"colore": _cambia_colore()
 				"sponde": commuta_sponde()
 				"poligono": torna_al_poligono()
+				"avversario": commuta_avversario()
+				"alone": cambia_alone()
 		_tasti[tasto] = giu
 
 
@@ -199,9 +263,11 @@ func _aggiorna_righe() -> void:
 	var visuale := "prima persona" if _giocatore != null and _giocatore.in_prima_persona() else "terza persona"
 	_comandi.scrivi_alto("%d punti" % _punteggio)
 	var migliore := "—" if _migliore == 0 else "%d con %d muri" % [_migliore, _migliore_muri]
-	_comandi.scrivi_basso("%s · miglior colpo: %s · %s · dardo %s · %d fps" % [
+	var contorno := "senza contorno" if not Avversario.ALONE_ACCESO 			else "contorno %s" % Avversario.ALONI[Avversario.alone_scelto]["nome"]
+	_comandi.scrivi_basso("%s · %s · miglior colpo: %s · %s · dardo %s · %d fps" % [
 		"rimbalza solo sulle sponde" if _solo_sponde else "rimbalza tutto",
-		migliore, visuale, CANDIDATI[_candidato]["nome"], Engine.get_frames_per_second()])
+		contorno, migliore, visuale, CANDIDATI[_candidato]["nome"],
+		Engine.get_frames_per_second()])
 
 
 func _cambia_colore() -> void:
