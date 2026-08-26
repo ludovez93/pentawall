@@ -68,6 +68,11 @@ const SCORCIATOIE := {KEY_C: "colore", KEY_S: "sponde", KEY_A: "poligono"}
 
 const SEME := 20260826  ## il pubblico dev'essere sempre lo stesso, o gli scatti non si confrontano
 
+## Gli anelli del rimbalzo si preparano all'avvio e si riciclano: nascerne uno a
+## ogni impatto e' quello che faceva scattare l'immagine sparando a raffica.
+const ANELLI_IN_RISERVA := 12
+const VITA_ANELLO := 0.36
+
 var _giocatore: Giocatore
 var _comandi: Comandi
 var _bersagli: Array[Bersaglio] = []
@@ -78,6 +83,9 @@ var _candidato := 0
 var _tasti := {}
 var _solo_sponde := true
 var _bottone_sponde: Button
+var _anelli: Array[MeshInstance3D] = []
+var _vita_anelli: Array[float] = []
+var _prossimo_anello := 0
 var _nascosto: Bersaglio
 
 
@@ -90,6 +98,7 @@ func _ready() -> void:
 	_luci()
 	_insegne()
 	_bersagli_dell_angolo()
+	_prepara_gli_anelli()
 
 	_comandi = Comandi.new()
 	add_child(_comandi)
@@ -153,8 +162,9 @@ func torna_al_poligono() -> void:
 	get_tree().change_scene_to_file("res://scenes/poligono.tscn")
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	_aggiorna_righe()
+	_respiro_degli_anelli(delta)
 	for tasto in SCORCIATOIE:
 		var giu := Input.is_physical_key_pressed(tasto)
 		if giu and not bool(_tasti.get(tasto, false)):
@@ -215,25 +225,49 @@ func _su_nodo_nuovo(nodo: Node) -> void:
 		(nodo as Proiettile).rimbalzato.connect(_su_rimbalzo)
 
 
+## La riserva degli anelli, pronta all'avvio e riciclata per sempre.
+##
+## Prima ne nasceva uno nuovo a ogni rimbalzo — nodo, mesh e materiale da zero,
+## piu' un'animazione — e sparando a raffica erano decine in pochi secondi:
+## e' da li' che veniva lo scatto riportato dal telefono il 26/08/2026.
+## Adesso non si alloca piu' niente mentre si gioca: dodici anelli girano a
+## rotazione, e dodici bastano perche' ognuno dura poco piu' di un terzo di
+## secondo e un dardo puo' fare al massimo cinque muri.
+func _prepara_gli_anelli() -> void:
+	var forma := TorusMesh.new()
+	forma.inner_radius = 0.24
+	forma.outer_radius = 0.34
+	forma.rings = 20
+	forma.ring_segments = 5
+	for i in ANELLI_IN_RISERVA:
+		var anello := MeshInstance3D.new()
+		# La forma e' una sola, prestata a tutti: e' il materiale che deve essere
+		# suo, perche' ognuno sbiadisce per conto proprio.
+		anello.mesh = forma
+		var materiale := StandardMaterial3D.new()
+		materiale.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		materiale.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		materiale.albedo_color = Color(NEON_SPONDA.r, NEON_SPONDA.g, NEON_SPONDA.b, 0.0)
+		materiale.disable_receive_shadows = true
+		anello.material_override = materiale
+		anello.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		anello.visible = false
+		add_child(anello)
+		_anelli.append(anello)
+		_vita_anelli.append(0.0)
+
+
 ## Il terzo segnale, e l'unico che non si vede stando fermi: la sponda si accende
 ## dove il dardo l'ha presa. Serve a imparare la regola giocando invece che
 ## leggendola, e a far contare i cinque muri a occhio.
 func _su_rimbalzo(punto: Vector3, normale: Vector3, _muri: int) -> void:
-	var anello := MeshInstance3D.new()
-	var mesh := TorusMesh.new()
-	mesh.inner_radius = 0.24
-	mesh.outer_radius = 0.34
-	mesh.rings = 20
-	mesh.ring_segments = 5
-	anello.mesh = mesh
-	var materiale := StandardMaterial3D.new()
-	materiale.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	materiale.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	materiale.albedo_color = Color(NEON_SPONDA.r, NEON_SPONDA.g, NEON_SPONDA.b, 0.95)
-	materiale.disable_receive_shadows = true
-	anello.material_override = materiale
-	anello.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(anello)
+	var quale := _prossimo_anello
+	_prossimo_anello = (_prossimo_anello + 1) % ANELLI_IN_RISERVA
+	var anello := _anelli[quale]
+	_vita_anelli[quale] = VITA_ANELLO
+	anello.visible = true
+	anello.scale = Vector3.ONE * 0.5
+	anello.rotation = Vector3.ZERO
 	anello.global_position = punto + normale * 0.05
 	# Il toro nasce sdraiato sul piano orizzontale: va coricato sulla superficie.
 	if absf(normale.dot(Vector3.UP)) < 0.999:
@@ -241,10 +275,23 @@ func _su_rimbalzo(punto: Vector3, normale: Vector3, _muri: int) -> void:
 				Vector3.UP, true)
 		anello.rotate_object_local(Vector3.RIGHT, PI * 0.5)
 
-	var respiro := create_tween()
-	respiro.tween_property(anello, "scale", Vector3.ONE * 3.4, 0.36)
-	respiro.parallel().tween_property(materiale, "albedo_color:a", 0.0, 0.36)
-	respiro.tween_callback(anello.queue_free)
+
+## L'anello si allarga e sbiadisce. A mano invece che con un'animazione del
+## motore: un'animazione e' un oggetto in piu' che nasce a ogni rimbalzo, e il
+## conto qui sono due righe.
+func _respiro_degli_anelli(delta: float) -> void:
+	for i in _anelli.size():
+		if _vita_anelli[i] <= 0.0:
+			continue
+		_vita_anelli[i] -= delta
+		var anello := _anelli[i]
+		if _vita_anelli[i] <= 0.0:
+			anello.visible = false
+			continue
+		var quanto := 1.0 - _vita_anelli[i] / VITA_ANELLO
+		anello.scale = Vector3.ONE * (0.5 + quanto * 2.9)
+		var materiale: StandardMaterial3D = anello.material_override
+		materiale.albedo_color.a = 0.95 * (1.0 - quanto)
 
 
 ## L'ambiente. La soglia del bagliore sta a 1.0: sopra ci va solo il dardo, e

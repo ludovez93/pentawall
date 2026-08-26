@@ -204,59 +204,97 @@ func _aggiorna_dimensione() -> void:
 	_corpo.scale = Vector3.ONE * fattore
 
 
+## Le forme e i materiali del dardo, fatti **una volta sola** e prestati a tutti.
+##
+## Prima nascevano da zero a ogni colpo: nove fra mesh e materiali, e ognuno vuole
+## la sua fetta di memoria sulla scheda video. Misurato il 26/08/2026, dopo che il
+## difetto era arrivato dal telefono — *«se faccio fuoco tante volte mentre mi
+## muovo c'è qualche scatto»*: **sedici fotogrammi lenti su milleduecento, e tutti
+## e sedici erano quello subito dopo lo sparo**. Non era il volo, non erano i
+## rimbalzi: era la nascita.
+static var _forma_guscio: SphereMesh = null
+static var _forma_nucleo: SphereMesh = null
+static var _forma_scia: BoxMesh = null
+static var _forma_lampo: QuadMesh = null
+static var _pelle_filo: StandardMaterial3D = null
+static var _pelle_guscio: StandardMaterial3D = null
+static var _pelle_nucleo: StandardMaterial3D = null
+static var _pelle_scia: StandardMaterial3D = null
+
+
+## Prepara il corredo condiviso, se non c'è già, e gli rimette il colore riservato
+## del momento. Le tre assegnazioni di colore costano nulla e tolgono di mezzo il
+## problema di tenere sincronizzato un materiale statico con un pulsante che lo
+## cambia a caldo: chi nasce adesso nasce già del colore giusto.
+static func _corredo() -> void:
+	if _forma_guscio == null:
+		_forma_guscio = _sfera(RAGGIO)
+		_forma_nucleo = _sfera(RAGGIO * 0.34)
+		_forma_scia = BoxMesh.new()
+		_forma_scia.size = Vector3(0.05, 0.05, 1.0)
+		_forma_lampo = QuadMesh.new()
+		_forma_lampo.size = Vector2(0.55, 0.55)
+
+		# Filo scuro: la stessa sfera vista da dentro, un filo più grande. Serve a
+		# staccare il dardo dai fondi chiari, come il nucleo lo stacca dagli scuri.
+		_pelle_filo = _materiale_piatto(Color(0.02, 0.02, 0.05))
+		_pelle_filo.cull_mode = BaseMaterial3D.CULL_FRONT
+		_pelle_filo.grow = true
+		# Sottile: a dieci pixel di distanza un filo grosso si mangia il guscio
+		# colorato e il dardo diventa una palla nera. Verificato guardandolo.
+		_pelle_filo.grow_amount = 0.012
+
+		_pelle_guscio = _materiale_piatto(colore_riservato * 1.9)
+		# Nucleo bianco puro: è lui che sfonda il bianco e prende il bagliore.
+		# Piccolo, perché serve a staccare il dardo dai fondi scuri, non a essere
+		# tutto il dardo: se cresce, i colori riservati diventano indistinguibili.
+		_pelle_nucleo = _materiale_piatto(Color(3.4, 3.4, 3.4))
+		_pelle_scia = _materiale_piatto(colore_riservato * 1.25)
+		_pelle_scia.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+
+	_pelle_guscio.albedo_color = colore_riservato * 1.9
+	var scia := colore_riservato * 1.25
+	scia.a = 0.5
+	_pelle_scia.albedo_color = scia
+
+
 func _costruisci() -> void:
+	_corredo()
 	_corpo = Node3D.new()
 	add_child(_corpo)
 
-	# Filo scuro: la stessa sfera vista da dentro, un filo più grande. Serve a
-	# staccare il dardo dai fondi chiari, come il nucleo bianco lo stacca dagli scuri.
 	_filo = MeshInstance3D.new()
 	_senza_ombra(_filo)
-	_filo.mesh = _sfera(RAGGIO)
-	var materiale_filo := _materiale_piatto(Color(0.02, 0.02, 0.05))
-	materiale_filo.cull_mode = BaseMaterial3D.CULL_FRONT
-	materiale_filo.grow = true
-	# Sottile: a dieci pixel di distanza un filo grosso si mangia il guscio
-	# colorato e il dardo diventa una palla nera. Verificato guardandolo.
-	materiale_filo.grow_amount = 0.012
-	_filo.material_override = materiale_filo
+	_filo.mesh = _forma_guscio
+	_filo.material_override = _pelle_filo
 	_corpo.add_child(_filo)
 
-	# Guscio nel colore riservato, sopra la soglia del bagliore.
 	_guscio = MeshInstance3D.new()
 	_senza_ombra(_guscio)
-	_guscio.mesh = _sfera(RAGGIO)
-	_guscio.material_override = _materiale_piatto(colore_riservato * 1.9)
+	_guscio.mesh = _forma_guscio
+	_guscio.material_override = _pelle_guscio
 	_corpo.add_child(_guscio)
 
-	# Nucleo bianco puro: è lui che sfonda il bianco e prende il bagliore.
 	_nucleo = MeshInstance3D.new()
 	_senza_ombra(_nucleo)
-	# Piccolo: il nucleo serve a staccare il dardo dai fondi scuri, non a essere
-	# tutto il dardo. Se cresce, i colori riservati diventano indistinguibili
-	# fra loro — sono tutti una palla bianca.
-	_nucleo.mesh = _sfera(RAGGIO * 0.34)
-	_nucleo.material_override = _materiale_piatto(Color(3.4, 3.4, 3.4))
+	_nucleo.mesh = _forma_nucleo
+	_nucleo.material_override = _pelle_nucleo
 	_corpo.add_child(_nucleo)
 
 	_scia = MeshInstance3D.new()
 	_senza_ombra(_scia)
 	_scia.set_as_top_level(true)
-	var mesh_scia := BoxMesh.new()
-	mesh_scia.size = Vector3(0.05, 0.05, 1.0)
-	_scia.mesh = mesh_scia
-	var materiale_scia := _materiale_piatto(colore_riservato * 1.25)
-	materiale_scia.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	materiale_scia.albedo_color.a = 0.5
-	_scia.material_override = materiale_scia
+	_scia.mesh = _forma_scia
+	_scia.material_override = _pelle_scia
 	add_child(_scia)
 
 	_lampo = MeshInstance3D.new()
 	_senza_ombra(_lampo)
 	_lampo.set_as_top_level(true)
-	var mesh_lampo := QuadMesh.new()
-	mesh_lampo.size = Vector2(0.55, 0.55)
-	_lampo.mesh = mesh_lampo
+	_lampo.mesh = _forma_lampo
+	# Il lampo è l'unico materiale che resta suo: si accende e si spegne per conto
+	# proprio, e condividerlo farebbe lampeggiare insieme tutti i dardi in volo.
+	# Nove allocazioni a colpo sono diventate una.
 	var materiale_lampo := _materiale_piatto(Color(2.4, 2.4, 2.4))
 	materiale_lampo.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	materiale_lampo.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
@@ -272,7 +310,7 @@ func _senza_ombra(pezzo: GeometryInstance3D) -> GeometryInstance3D:
 	return pezzo
 
 
-func _sfera(raggio: float) -> SphereMesh:
+static func _sfera(raggio: float) -> SphereMesh:
 	var mesh := SphereMesh.new()
 	mesh.radius = raggio
 	mesh.height = raggio * 2.0
@@ -284,7 +322,7 @@ func _sfera(raggio: float) -> SphereMesh:
 ## Senza luci di scena addosso: il dardo è identico nella grotta verde, nel tempio
 ## rosso e nel nero dello spazio. In un materiale non illuminato il colore finale
 ## è l'albedo, e per questo l'albedo può superare 1: è così che prende il bagliore.
-func _materiale_piatto(colore: Color) -> StandardMaterial3D:
+static func _materiale_piatto(colore: Color) -> StandardMaterial3D:
 	var materiale := StandardMaterial3D.new()
 	materiale.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	materiale.albedo_color = colore
