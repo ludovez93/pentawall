@@ -36,6 +36,20 @@ compilazione quando cambia qualcosa che non c'entra col gioco.
 Si apre nel browser, anche da telefono, e si gioca col pollice: nessuna installazione, nessun cavo.
 La pagina si rifà a ogni `push`. Per il giudizio sulle prestazioni vale l'app nativa, non questa.
 
+**Dall'iPhone conviene metterlo sulla schermata Home**: menù di condivisione di Safari, *Aggiungi
+alla schermata Home*. Da lì si apre **a schermo intero**, senza le barre di Safari sopra e sotto —
+che su un gioco sono arena rubata — e con la sua icona.
+
+**E resta sempre aggiornato.** Dentro c'è un operaio di servizio (`tools/pwa_service_worker.js`)
+che a ogni avvio chiede al server «è cambiato?» invece di fidarsi della copia che ha in tasca:
+quello che genera Godot fa il contrario, e una pubblicazione nuova arriverebbe solo al secondo
+avvio — cioè si finirebbe a discutere di difetti già chiusi. Se non è cambiato niente non si
+scarica niente, quindi l'avvio resta svelto anche con i 38 MB di `index.wasm`; e senza campo il
+gioco parte lo stesso, con l'ultima versione scaricata.
+
+Quale versione stai guardando lo dice <https://ludovez93.github.io/pentawall/versione.txt>: la
+firma della pubblicazione e l'ora.
+
 ## Come si gioca
 
 | | Sul telefono | Sul PC |
