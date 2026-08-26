@@ -9,18 +9,52 @@ sta nella cartella superiore e non è pubblicata qui.
 
 ## Stato
 
-**Tappa 0 — l'impianto.** Non c'è ancora gioco: c'è un cubo che gira, e serve a provare che la
-catena di compilazione arriva fino al telefono. Sullo schermo si leggono fotogrammi al secondo,
-scheda video e numero di tocchi; il cubo è emissivo sopra la soglia HDR per verificare che il
-**bagliore** funzioni, perché è su quello che poggerà la leggibilità del proiettile.
+**Tappa 1 — il poligono di tiro.** C'è una stanza sola, e dentro c'è il cuore del gioco: un dardo
+che rimbalza fino a cinque muri, la linea che mostra dove batterà il colpo, cinque bersagli — due
+dei quali si prendono **solo** di sponda, perché stanno dietro un angolo — le due visuali e i
+comandi per il pollice. Il punteggio parte da 25 e raddoppia a ogni muro: 25, 50, 100, 200, 400, 800.
+
+Quello che il poligono deve dimostrare è una cosa sola: **che mirare un rimbalzo col pollice sia
+divertente**. La risposta arriva dal telefono, non dal PC.
+
+La scena della tappa 0 (`scenes/test_cube.tscn`) resta: serve a riprovare la catena di
+compilazione quando cambia qualcosa che non c'entra col gioco.
+
+## Come si gioca
+
+| | Sul telefono | Sul PC |
+|---|---|---|
+| Muoversi | pollice sulla metà sinistra | W A S D |
+| Mirare | pollice sulla metà destra | mouse |
+| Sparare | tocco secco a destra, o **FUOCO** | clic sinistro |
+| Saltare | **SALTA** | barra spaziatrice |
+| Cambiare visuale | **VISUALE** | V |
+| Cambiare il colore del dardo | **COLORE** | C |
+
+Sul PC il mouse si aggancia al primo clic e si libera con Esc.
+
+## Com'è fatto dentro
+
+Il pezzo che regge tutto è `scripts/balistica.gd`: tira un raggio, lo specchia sulla normale a
+ogni muro, si ferma al quinto. Quella funzione sola serve **quattro** cose — la linea che si vede
+mentre si mira, il volo del dardo vero, e (dalla tappa 2) l'allarme al bot che sta per essere
+colpito e la mira del bot. Il dardo si muove a mano a ogni fotogramma, con un raggio che copre
+tutto lo spostamento: a 19 m/s un corpo fisico passerebbe attraverso i muri.
+
+I numeri vengono dall'originale del 1999, convertiti: corsa 7,62 m/s, salto 1,06 m,
+gravità 18,1 m/s², dardo a 19 m/s.
 
 ## Come si prova sul PC
 
-Aprire la cartella con Godot 4.7.2 e premere play. Per uno scatto senza aprire l'editor:
+```
+Godot --path . -s tools/prova_balistica.gd      # 20 controlli sulla riflessione, senza schermo
+Godot --path . -s tools/prova_poligono.gd       # il giro completo: sponda, colpo, punteggio
+Godot --path . -s tools/scatti_poligono.gd      # una serie di scatti in scatti/ (non versionata)
+Godot --path . -s tools/misura_prestazioni.gd   # quanti fotogrammi al secondo, senza sincronismo
+```
 
-```
-Godot --path . -s tools/scatto.gd -- res://scenes/test_cube.tscn scatto.png
-```
+Il collaudo della balistica gira anche a ogni `push`, prima della compilazione: se la riflessione
+si rompe, l'app non viene nemmeno costruita.
 
 ## Come arriva sull'iPhone
 

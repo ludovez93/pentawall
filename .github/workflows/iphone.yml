@@ -53,6 +53,13 @@ jobs:
           "$GODOT" --headless --path . --import
           test -d .godot
 
+      - name: Collauda la balistica
+        run: |
+          set -euo pipefail
+          # La riflessione a cinque muri e' il codice piu' riusato del progetto:
+          # se si rompe, non ha senso costruire l'app. Venti controlli, un secondo.
+          "$GODOT" --headless --path . -s tools/prova_balistica.gd
+
       - name: Esporta il progetto Xcode
         run: |
           set -euo pipefail

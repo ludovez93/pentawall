@@ -9,7 +9,7 @@ config_version=5
 config/name="PENTAWALL"
 config/description="Sparatutto in arena a punti. Il proiettile rimbalza fino a cinque muri."
 config/version="0.1.0"
-run/main_scene="res://scenes/test_cube.tscn"
+run/main_scene="res://scenes/poligono.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
 
@@ -29,3 +29,10 @@ renderer/rendering_method.mobile="gl_compatibility"
 ; e non dice nemmeno perche' (il controllo e' muto).
 textures/vram_compression/import_etc2_astc=true
 anti_aliasing/quality/msaa_3d=2
+
+[layer_names]
+
+; Gli stessi numeri di scripts/strati.gd, qui solo perche' l'editor li mostri.
+3d_physics/layer_1="mondo"
+3d_physics/layer_2="giocatore"
+3d_physics/layer_3="bersagli"
