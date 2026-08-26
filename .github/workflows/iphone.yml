@@ -9,10 +9,20 @@
 
 name: iPhone
 
+# Quando parte. Finche' si prova dal browser, l'.ipa serve solo quando lo si
+# chiede: girare a ogni push vuol dire costruire 27 MB che nessuno scarica.
+# Resta pero' la guardia della catena verso lo store, e le sue trappole non
+# stanno nel codice del gioco (quello lo collauda la lavorazione Web): stanno
+# nelle impostazioni del progetto, nel preset di esportazione e qui dentro.
+# Quindi: il clic quando serve, e la partenza da sola solo se cambia la catena.
 on:
+  workflow_dispatch:
   push:
     branches: [main]
-  workflow_dispatch:
+    paths:
+      - 'project.godot'
+      - 'export_presets.cfg'
+      - '.github/workflows/iphone.yml'
 
 env:
   GODOT_VERSION: "4.7.2"
