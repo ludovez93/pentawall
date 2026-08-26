@@ -1,0 +1,95 @@
+# Pubblica PENTAWALL come pagina web, per provarlo dal telefono senza installare
+# niente: si apre un link in Safari e si gioca col pollice.
+#
+# Perche' esiste: l'app vera per iPhone va firmata da un PC col cavo, e la prima
+# volta richiede iTunes e Sideloadly. Questa e' la via corta per la domanda che
+# conta — «mirare un rimbalzo col pollice e' divertente?» — anche se il giudizio
+# serio sulle prestazioni resta quello dell'app nativa.
+#
+# Girano senza thread (`variant/thread_support=false`): cosi' non servono gli
+# header COOP/COEP, che su GitHub Pages non si possono impostare.
+
+name: Web
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Una pubblicazione alla volta, e vince l'ultima.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: "4.7.2"
+
+jobs:
+  pagina:
+    name: Pagina giocabile
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: github-pages
+      url: ${{ steps.pubblica.outputs.page_url }}
+
+    steps:
+      - name: Prendi il codice
+        uses: actions/checkout@v5
+
+      - name: Scarica Godot e i modelli di esportazione
+        run: |
+          set -euo pipefail
+          BASE="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable"
+          curl -fsSL -o godot.zip   "$BASE/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          curl -fsSL -o modelli.tpz "$BASE/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+          unzip -q godot.zip
+          unzip -q modelli.tpz
+          DEST="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
+          mkdir -p "$DEST"
+          mv templates/* "$DEST/"
+          chmod +x "Godot_v${GODOT_VERSION}-stable_linux.x86_64"
+          echo "GODOT=$PWD/Godot_v${GODOT_VERSION}-stable_linux.x86_64" >> "$GITHUB_ENV"
+          ls "$DEST" | grep -i web
+
+      - name: Importa le risorse
+        run: |
+          set -euo pipefail
+          # Due passate: la prima genera la cartella .godot, la seconda risolve
+          # le risorse che dipendono da quelle importate nella prima.
+          "$GODOT" --headless --path . --import || true
+          "$GODOT" --headless --path . --import
+          test -d .godot
+
+      - name: Collauda la balistica
+        run: |
+          set -euo pipefail
+          # Stessa guardia della lavorazione per iPhone: se la riflessione a
+          # cinque muri si rompe, non ha senso pubblicare niente.
+          "$GODOT" --headless --path . -s tools/prova_balistica.gd
+
+      - name: Esporta per il browser
+        run: |
+          set -euo pipefail
+          mkdir -p build/web
+          "$GODOT" --headless --path . --export-release "Web" "$PWD/build/web/index.html"
+          ls -la build/web
+          test -f build/web/index.html
+          test -f build/web/index.wasm
+
+      - name: Prepara le pagine
+        uses: actions/configure-pages@v5
+
+      - name: Carica la cartella
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+      - name: Pubblica
+        id: pubblica
+        uses: actions/deploy-pages@v4

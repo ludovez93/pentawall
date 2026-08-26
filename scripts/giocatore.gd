@@ -61,6 +61,13 @@ var _canna: Node3D
 var _linea: LineaMira
 
 
+## Si gioca col pollice? Sul telefono, e anche **nel browser del telefono** — dove
+## il tag «mobile» non esiste e i tocchi arrivano accompagnati da eventi del mouse
+## finti: senza questo controllo, un tocco solo farebbe partire due colpi.
+static func a_pollice() -> bool:
+	return OS.has_feature("mobile") or OS.has_feature("web_ios") or OS.has_feature("web_android")
+
+
 func _ready() -> void:
 	collision_layer = Strati.COMBATTENTI
 	collision_mask = Strati.MONDO
@@ -73,7 +80,7 @@ func _ready() -> void:
 func _unhandled_input(evento: InputEvent) -> void:
 	# Sul telefono ogni tocco genera anche un finto evento del mouse: se non lo
 	# si scarta, un colpo solo ne fa partire due.
-	if OS.has_feature("mobile") and (evento is InputEventMouse):
+	if a_pollice() and (evento is InputEventMouse):
 		return
 
 	if evento is InputEventMouseMotion and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
@@ -87,7 +94,7 @@ func _unhandled_input(evento: InputEvent) -> void:
 			KEY_ESCAPE:
 				Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	elif evento is InputEventMouseButton and evento.pressed:
-		if Input.get_mouse_mode() != Input.MOUSE_MODE_CAPTURED and not OS.has_feature("mobile"):
+		if Input.get_mouse_mode() != Input.MOUSE_MODE_CAPTURED and not a_pollice():
 			Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 		elif evento.button_index == MOUSE_BUTTON_LEFT:
 			spara()
@@ -213,7 +220,7 @@ func _leggi_comandi(delta: float) -> void:
 			salta()
 	if Input.is_physical_key_pressed(KEY_SPACE):
 		salta()
-	if not OS.has_feature("mobile"):
+	if not a_pollice():
 		# La mira con le frecce serve quando il mouse è libero, cioè quando si
 		# guarda la scena da fermi durante la lavorazione.
 		var frecce := Vector2(
