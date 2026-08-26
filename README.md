@@ -57,8 +57,10 @@ Il pezzo che regge tutto è `scripts/balistica.gd`: tira un raggio, lo specchia 
 ogni muro, si ferma al quinto. Quella funzione sola serve **quattro** cose — la linea che si vede
 mentre si mira, il volo del dardo vero, l'allarme all'avversario che sta per essere colpito e la
 sua mira. Le ultime due sono la ragione per cui un avversario schiva un colpo di sponda che gli
-arriva dietro l'angolo: non è un'intelligenza in più, è lo stesso conto letto dall'altra parte. Il dardo si muove a mano a ogni fotogramma, con un raggio che copre
-tutto lo spostamento: a 19 m/s un corpo fisico passerebbe attraverso i muri.
+arriva dietro l'angolo: non è un'intelligenza in più, è lo stesso conto letto dall'altra parte.
+
+Il dardo si muove a mano a ogni fotogramma, con un raggio che copre tutto lo spostamento: a 19 m/s
+un corpo fisico passerebbe attraverso i muri.
 
 I numeri vengono dall'originale del 1999, convertiti: corsa 7,62 m/s, salto 1,06 m,
 gravità 18,1 m/s², dardo a 19 m/s.
