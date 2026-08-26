@@ -95,7 +95,7 @@ jobs:
           ls -lh "${NOME_BINARIO}-non-firmato.ipa"
 
       - name: Consegna l'ipa
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: pentawall-iphone-non-firmato
           path: build/*.ipa
