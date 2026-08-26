@@ -151,6 +151,12 @@ jobs:
           grep -q "apple-mobile-web-app-capable" build/web/index.html
           tr -d ' ' < build/web/index.manifest.json | grep -q '"display":"fullscreen"'
           cat build/web/index.manifest.json
+          # Una riga che dice quale versione sta servendo la pagina. E' la sonda
+          # con cui si controlla da fuori, in un secondo, che il telefono non sia
+          # rimasto a una pubblicazione vecchia — e serve anche di la', il giorno
+          # che un difetto sembra non essersi mai chiuso.
+          printf '%s %s\n' "$GITHUB_SHA" "$(date -u '+%Y-%m-%dT%H:%MZ')" > build/web/versione.txt
+          cat build/web/versione.txt
 
       - name: Prepara le pagine
         uses: actions/configure-pages@v5
