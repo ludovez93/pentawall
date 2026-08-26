@@ -84,9 +84,15 @@ pagina non viene pubblicata.
 
 ## Come arriva sull'iPhone
 
-iOS non si compila da Windows: è una restrizione di Apple. Ogni `push` su `main` fa partire
+iOS non si compila da Windows: è una restrizione di Apple. Ci pensa
 `.github/workflows/iphone.yml`, che compila su una macchina macOS di GitHub Actions e consegna
-un **`.ipa` non firmato** fra gli *Artifacts* della lavorazione. La firma la mette **Sideloadly**
+un **`.ipa` non firmato** fra gli *Artifacts* della lavorazione.
+
+**L'app si chiede, non esce da sola.** Finché si prova dal browser non ha senso costruire 27 MB a
+ogni modifica: si lancia con un clic dalla pagina delle lavorazioni (voce **iPhone**, *Run
+workflow*). Riparte da sola soltanto quando cambia la catena — `project.godot`,
+`export_presets.cfg` o la lavorazione stessa — perché è lì che stanno le sue trappole, non nel
+codice del gioco. La firma la mette **Sideloadly**
 sul PC di casa con un Apple ID normale: nessun account da sviluppatore, nessuna spesa.
 L'app installata così dura sette giorni e si rifirma con un clic.
 
