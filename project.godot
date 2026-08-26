@@ -25,4 +25,7 @@ window/stretch/aspect="expand"
 
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+; Obbligatoria per esportare su telefono: senza, Godot rifiuta l'esportazione
+; e non dice nemmeno perche' (il controllo e' muto).
+textures/vram_compression/import_etc2_astc=true
 anti_aliasing/quality/msaa_3d=2
