@@ -39,7 +39,7 @@ const PARTENZA_GIOCATORE := Vector3(-9.0, 0.2, 6.5)
 const PARTENZA_AVVERSARIO := Vector3(10.0, 0.2, 2.0)
 
 ## I tasti della lavorazione: sul PC si prova senza toccare i pulsanti.
-const SCORCIATOIE := {KEY_C: "colore", KEY_B: "sfida", KEY_L: "livello"}
+const SCORCIATOIE := {KEY_C: "colore", KEY_B: "sfida", KEY_L: "livello", KEY_A: "arena"}
 
 var _giocatore: Giocatore
 var _comandi: Comandi
@@ -70,6 +70,8 @@ func _ready() -> void:
 	_comandi.camera_richiesta.connect(func() -> void: _giocatore.cambia_camera())
 	_comandi.sfida_richiesta.connect(commuta_sfida)
 	_comandi.livello_richiesto.connect(cambia_livello)
+	# Dalla tappa 3 le stanze sono due: qui si collauda, di là si guarda.
+	_comandi.pulsante_di_scena("ARENA", Color(0.35, 0.4, 0.55), vai_all_angolo)
 	_giocatore = Giocatore.new()
 	add_child(_giocatore)
 	_giocatore.global_position = PARTENZA_GIOCATORE
@@ -103,6 +105,7 @@ func _process(_delta: float) -> void:
 				"colore": _cambia_colore()
 				"sfida": commuta_sfida()
 				"livello": cambia_livello()
+				"arena": vai_all_angolo()
 		_tasti[tasto] = giu
 
 
@@ -195,6 +198,12 @@ func cambia_livello() -> void:
 	if _avversario != null and is_instance_valid(_avversario):
 		_avversario.imposta_livello(_livello)
 	_comandi.annuncia(String(Avversario.TARATURE[_livello]["nome"]).to_upper())
+
+
+## L'angolo di arena della tappa 3: si va e si torna con lo stesso pulsante, per
+## poter confrontare col pollice la stanza dei collaudi e l'arena vera.
+func vai_all_angolo() -> void:
+	get_tree().change_scene_to_file("res://scenes/angolo.tscn")
 
 
 func in_sfida() -> bool:

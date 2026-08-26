@@ -81,6 +81,13 @@ jobs:
           # mirare insieme torna a far saltare la visuale, non si pubblica.
           "$GODOT" --headless --path . -s tools/prova_comandi.gd
 
+      - name: Collauda l'angolo di arena
+        run: |
+          set -euo pipefail
+          # La regola della tappa 3: si rimbalza sulle sponde e su nient'altro.
+          # Se salta, l'arena resta bella e smette di essere un campo da gioco.
+          "$GODOT" --headless --path . -s tools/prova_angolo.gd
+
       - name: Esporta per il browser
         run: |
           set -euo pipefail

@@ -22,6 +22,12 @@ const SOGLIA_TRASCINAMENTO := 16.0  ## pixel oltre i quali un tocco è mira, non
 const TEMPO_COLPO := 0.28           ## secondi entro cui un tocco breve vale come colpo
 const SENSIBILITA := 0.0034
 
+## La seconda colonna di pulsanti, quella che riempie la scena: a sinistra della
+## prima e più in alto di SALTA, così non si accavalla con niente.
+const COLONNA_SCENA := -300.0
+const ALTEZZA_SCENA := -330.0
+const PASSO_SCENA := -94.0
+
 var _dito_sinistro := -1
 var _dito_destro := -1
 var _centro_leva := Vector2.ZERO
@@ -44,6 +50,8 @@ var _riga_bassa: Label
 var _avviso: Label
 var _tempo_avviso := 0.0
 var _bottone_sfida: Button
+var _bottone_livello: Button
+var _pulsanti_di_scena := 0
 
 
 func _ready() -> void:
@@ -149,6 +157,26 @@ func scrivi_sfida(testo: String) -> void:
 		_bottone_sfida.text = testo
 
 
+## Spegne i due pulsanti del duello, per le scene che non ne hanno uno. Si
+## nascondono invece di non essere costruiti, così i sei che il pollice ha già
+## imparato restano dove stanno in tutte le scene.
+func spegni_il_duello() -> void:
+	if _bottone_sfida != null:
+		_bottone_sfida.visible = false
+	if _bottone_livello != null:
+		_bottone_livello.visible = false
+
+
+## Un pulsante che chiede la scena, non i comandi: si impila in una **seconda
+## colonna** a sinistra della prima, così i sei che il pollice ha già imparato
+## non si spostano di un pixel. Serve da quando le scene sono due e ognuna ha
+## roba sua da accendere.
+func pulsante_di_scena(testo: String, colore: Color, azione: Callable) -> Button:
+	var alto := ALTEZZA_SCENA + PASSO_SCENA * _pulsanti_di_scena
+	_pulsanti_di_scena += 1
+	return _pulsante(testo, Vector2(COLONNA_SCENA, alto), Vector2(126, 84), colore, azione)
+
+
 func _disegna() -> void:
 	var chiaro := Color(1, 1, 1, 0.5)
 	# Il mirino: al centro, sempre, in tutte e due le visuali.
@@ -208,8 +236,8 @@ func _costruisci() -> void:
 	# parole (MIGLIORIE.md § 1).
 	_bottone_sfida = _pulsante("SFIDA", Vector2(-160, -524), Vector2(120, 84),
 			Color(0.2, 0.75, 0.45), func() -> void: sfida_richiesta.emit())
-	_pulsante("LIVELLO", Vector2(-160, -618), Vector2(120, 84), Color(0.35, 0.4, 0.55),
-			func() -> void: livello_richiesto.emit())
+	_bottone_livello = _pulsante("LIVELLO", Vector2(-160, -618), Vector2(120, 84),
+			Color(0.35, 0.4, 0.55), func() -> void: livello_richiesto.emit())
 
 
 func _pulsante(testo: String, scarto: Vector2, misura: Vector2, colore: Color,

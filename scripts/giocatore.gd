@@ -70,7 +70,7 @@ static func a_pollice() -> bool:
 
 func _ready() -> void:
 	collision_layer = Strati.COMBATTENTI
-	collision_mask = Strati.MONDO
+	collision_mask = Strati.SOLIDO
 	_costruisci()
 	# Il mouse si cattura al primo clic, non all'avvio: così gli attrezzi di
 	# lavorazione possono aprire la scena per uno scatto senza rubare il
@@ -306,7 +306,7 @@ func _soluzione_di_tiro() -> Array:
 func _bocca(spazio: PhysicsDirectSpaceState3D) -> Vector3:
 	var testa := _testa.global_position
 	var bocca := _canna.global_position
-	var domanda := PhysicsRayQueryParameters3D.create(testa, bocca, Strati.MONDO, [get_rid()])
+	var domanda := PhysicsRayQueryParameters3D.create(testa, bocca, Strati.SOLIDO, [get_rid()])
 	var esito := spazio.intersect_ray(domanda)
 	if esito.is_empty():
 		return bocca
@@ -392,7 +392,7 @@ func _costruisci() -> void:
 	# degli occhi, in terza persona il proprio corpo si mangia il centro dello
 	# schermo, che è esattamente dove si mira.
 	_braccio.position = Vector3(SPALLA_TERZA, 0.22, 0)
-	_braccio.collision_mask = Strati.MONDO
+	_braccio.collision_mask = Strati.SOLIDO
 	_braccio.margin = 0.3
 	_testa.add_child(_braccio)
 

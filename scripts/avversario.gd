@@ -117,7 +117,7 @@ static func crea(genitore: Node, dove: Vector3, livello: int = 1) -> Avversario:
 
 func _ready() -> void:
 	collision_layer = Strati.COMBATTENTI
-	collision_mask = Strati.MONDO
+	collision_mask = Strati.SOLIDO
 	_costruisci()
 
 
@@ -233,7 +233,7 @@ func _centro_del_bersaglio() -> Vector3:
 func _bocca() -> Vector3:
 	var spalla := global_position + Vector3(0, ALTEZZA_OCCHI, 0)
 	var punta := _canna.global_position
-	var domanda := PhysicsRayQueryParameters3D.create(spalla, punta, Strati.MONDO, [get_rid()])
+	var domanda := PhysicsRayQueryParameters3D.create(spalla, punta, Strati.SOLIDO, [get_rid()])
 	var esito := get_world_3d().direct_space_state.intersect_ray(domanda)
 	if esito.is_empty():
 		return punta
@@ -344,7 +344,7 @@ func _spazio_libero(verso: Vector3) -> float:
 	var portata := SPAZIO_MINIMO_SCHIVATA + 1.5
 	var da := _centro_del_corpo()
 	var domanda := PhysicsRayQueryParameters3D.create(da, da + verso * portata,
-			Strati.MONDO, [get_rid()])
+			Strati.SOLIDO, [get_rid()])
 	var esito := get_world_3d().direct_space_state.intersect_ray(domanda)
 	if esito.is_empty():
 		return portata
