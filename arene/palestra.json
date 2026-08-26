@@ -13,7 +13,7 @@
     {"nome": "piattaforma dell'ocra", "quota": 3.5, "tinta": "ocra",
      "poligono": [[-13,-33],[-6,-33],[-6,-24],[-13,-24]]},
     {"nome": "passerella nord", "quota": 3.5, "tinta": "ocra",
-     "poligono": [[-6,-33],[21,-33],[21,-29.5],[-6,-29.5]]},
+     "poligono": [[-6,-33],[21,-33],[21,-28],[-6,-28]]},
 
     {"nome": "ala mattone", "quota": 0, "tinta": "mattone", "etichetta": [19, 0],
      "poligono": [[13,-13],[33,-13],[33,13],[13,13]]},
@@ -91,8 +91,8 @@
     {"nome": "ocra, il divisorio", "centro": [-4,-24], "misura": [8,0.8], "quota": 0, "alto": 4.5, "tinta": "mattone"},
     {"nome": "ocra, il pilastro", "centro": [8.2,-26], "misura": [2.6,2.6], "quota": 0, "alto": 6, "tinta": "ocra"},
     {"nome": "ocra, chiude verso l'angolo", "centro": [-13,-28], "misura": [0.8,10], "quota": 0, "alto": 8, "tinta": "mattone"},
-    {"nome": "ocra, sostegno della passerella", "centro": [7.5,-29.7], "misura": [27,0.6], "quota": 0, "alto": 3.5, "tinta": "ocra"},
-    {"nome": "ocra, parapetto della passerella", "centro": [7.5,-29.7], "misura": [27,0.5], "quota": 3.5, "alto": 1.1, "tinta": "ocra"},
+    {"nome": "ocra, sostegno della passerella", "centro": [7.5,-28.2], "misura": [27,0.6], "quota": 0, "alto": 3.5, "tinta": "ocra"},
+    {"nome": "ocra, parapetto della passerella", "centro": [7.5,-28.2], "misura": [27,0.5], "quota": 3.5, "alto": 0.8, "tinta": "ocra"},
     {"nome": "ocra, cassone est", "centro": [6,-20], "misura": [4,3], "quota": 0, "alto": 2.2, "tinta": "ocra"},
     {"nome": "ocra, cassone centrale", "centro": [-2,-17], "misura": [3,3], "quota": 0, "alto": 2.2, "tinta": "ocra"},
     {"nome": "ocra, il muretto d'ingresso", "centro": [11,-16], "misura": [4,0.7], "quota": 0, "alto": 3, "tinta": "ocra"},
@@ -186,7 +186,7 @@
     {"nome": "ocra, grande a nord", "centro": [-9,-32.6], "quota": 6.2, "faccia": [6.2,3.4], "giro": 0},
     {"nome": "ocra, grande a nord 2", "centro": [5.4,-32.6], "quota": 6.2, "faccia": [5.6,3.4], "giro": 0},
     {"nome": "ocra, quella dietro il divisorio", "centro": [-12.6,-28], "quota": 3.5, "faccia": [7,3.4], "giro": 90},
-    {"nome": "ocra, radente sotto la passerella", "centro": [4,-29.3], "quota": 0.62, "faccia": [20,1.16], "giro": 0},
+    {"nome": "ocra, radente sotto la passerella", "centro": [4,-27.83], "quota": 0.62, "faccia": [20,1.16], "giro": 0},
     {"nome": "ocra, la faccia del pilastro", "centro": [8.2,-24.6], "quota": 3, "faccia": [2.4,4.4], "giro": 0},
     {"nome": "ocra, sul divisorio", "centro": [-4,-23.5], "quota": 2.4, "faccia": [7,3.4], "giro": 0},
 

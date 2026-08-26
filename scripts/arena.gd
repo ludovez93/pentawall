@@ -139,6 +139,8 @@ func _costruisci() -> void:
 		Muratura.piano(self, _contorno(zona["poligono"]), float(zona["quota"]),
 				SPESSORE_PIANO, _tinta(zona["tinta"]))
 
+	_cordoli()
+
 	for r in _pianta["rampe"]:
 		Muratura.rampa(self, _punto(r["da"]), _punto(r["a"]), float(r["larghezza"]),
 				float(r["quota_da"]), float(r["quota_a"]), SPESSORE_RAMPA,
@@ -184,6 +186,59 @@ func _costruisci() -> void:
 				Vector3(float(i["dove"][0]), float(i["quota"]), float(i["dove"][1])),
 				Vector3(0, float(i["giro"]), 0), float(i["misura"]),
 				Color(0.60, 0.82, 1.0))
+
+
+## Il cordolo: una riga chiara sul **bordo che dà sul vuoto** di ogni piano alto.
+##
+## Serve a rispondere a una cosa arrivata dal telefono il 26/08/2026, e sono le
+## parole di Ludovico: *«qui sono salito su qualcosa ma sembro sospeso nel vuoto»*.
+## Non era un difetto di collisione — sotto i piedi il pavimento c'era. Era che
+## **non si vedeva**: il piano della passerella è ocra come la parete che le sta
+## dietro, stessa tinta e stessa grana, e in terza persona la camera lo guarda
+## quasi a filo. Un piano visto di taglio, senza un bordo che lo stacchi, non è un
+## piano: è una fascia di colore.
+##
+## Il poligono e l'angolo ce l'avevano già (zoccoli e segnatura a terra), e per lo
+## stesso motivo: *senza, una stanza di scatole tutte dello stesso colore non dice
+## dove finisce il pavimento*. L'arena intera se n'era dimenticata.
+##
+## Il cordolo va **solo dove serve**: sui lati oltre i quali non c'è pavimento alla
+## stessa quota. Fra due zone che si toccano sarebbe una riga in mezzo al niente.
+func _cordoli() -> void:
+	var tinta := Color(0.78, 0.72, 0.95)
+	for zona in _pianta["zone"]:
+		var quota := float(zona["quota"])
+		if quota <= 0.0:
+			continue
+		var contorno := _contorno(zona["poligono"])
+		for i in contorno.size():
+			var da := contorno[i]
+			var a := contorno[(i + 1) % contorno.size()]
+			var lungo := da.distance_to(a)
+			if lungo < 0.6:
+				continue
+			var mezzo := (da + a) * 0.5
+			var verso := (a - da).normalized()
+			var fuori := Vector2(verso.y, -verso.x)
+			# Un lato che confina con un altro piano alla stessa quota non è un
+			# bordo: è una giuntura, e segnarla vorrebbe dire disegnare una riga
+			# in mezzo al pavimento.
+			if _piano_alla_quota(mezzo + fuori * 0.8, quota):
+				continue
+			Muratura.decoro(self, Vector3(mezzo.x, quota + 0.03, mezzo.y),
+					Vector3(lungo, 0.06, 0.18), tinta, 0.55,
+					Vector3(0, rad_to_deg(atan2(-verso.y, verso.x)), 0))
+
+
+## C'è un pavimento a quella quota, in quel punto della pianta? Si guarda la
+## pianta, non la scena: qui la scena non è ancora costruita.
+func _piano_alla_quota(dove: Vector2, quota: float) -> bool:
+	for zona in _pianta["zone"]:
+		if absf(float(zona["quota"]) - quota) > 0.2:
+			continue
+		if Geometry2D.is_point_in_polygon(dove, _contorno(zona["poligono"])):
+			return true
+	return false
 
 
 ## La rete di cammino: si carica, non si cuoce.
