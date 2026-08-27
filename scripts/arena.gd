@@ -147,7 +147,9 @@ var _finita := false
 var _livello := 1
 var _prossima_riscelta := 0.0
 var _turno_riscelta := 0
-## Chi deve ancora entrare in campo: `{"nome", "partenza"}`, uno per fotogramma.
+## Chi deve ancora nascere: `{"riga", "partenza"}`, un corpo per fotogramma. In
+## classifica ci sono già tutti dal fischio d'inizio — è il **corpo** ad arrivare
+## un attimo dopo, non il concorrente.
 var _in_arrivo: Array[Dictionary] = []
 
 
@@ -645,8 +647,14 @@ func avvia_sfida() -> void:
 	var quanti := mini(NOMI.size(), quante - 1)
 	_in_arrivo.clear()
 	for i in quanti:
-		_in_arrivo.append({"nome": String(NOMI[i]), "partenza": (_partenza + 1 + i) % quante})
-	_fai_entrare_il_prossimo()
+		_concorrenti.append({"nome": String(NOMI[i]), "corpo": null, "punti": 0})
+		_in_arrivo.append({"riga": _concorrenti.size() - 1,
+				"partenza": (_partenza + 1 + i) % quante})
+	# Nemmeno il primo nasce adesso: il fotogramma in cui si preme il pulsante ha
+	# già da fare — i bersagli che si fanno da parte, il giocatore che va alla
+	# partenza, la classifica che si accende — e sommarci un corpo lo portava a
+	# quarantacinque millesimi. Il primo entra al fotogramma dopo, e la partita
+	# comincia lo stesso: nessuno spara nei primi otto centesimi di secondo.
 
 	_prossima_riscelta = RISCELTA
 	_turno_riscelta = 0
@@ -664,7 +672,7 @@ func _fai_entrare_il_prossimo() -> void:
 	var chi: Dictionary = _in_arrivo.pop_front()
 	var bot := Avversario.crea(self, _dove_partenza(int(chi["partenza"])), _livello)
 	bot.preso_da.connect(_su_colpo_valido.bind(bot))
-	_concorrenti.append({"nome": String(chi["nome"]), "corpo": bot, "punti": 0})
+	_concorrenti[int(chi["riga"])]["corpo"] = bot
 	bot.punta_a(_chi_attaccare(bot))
 	_aggiorna_la_classifica()
 
@@ -918,6 +926,10 @@ func _su_colpo_valido(chi_spara: Object, punti: int, muri: int, chi_incassa: Nod
 ## In che riga della partita sta un corpo. Sei righe: cercarle una per una costa
 ## meno che tenere in piedi un secondo elenco da mantenere allineato.
 func _riga_di(corpo: Object) -> int:
+	# Senza questa riga, un colpo senza padrone troverebbe la prima riga con il
+	# corpo ancora da nascere e gli accrediterebbe i punti.
+	if corpo == null:
+		return -1
 	for i in _concorrenti.size():
 		if _concorrenti[i]["corpo"] == corpo:
 			return i
