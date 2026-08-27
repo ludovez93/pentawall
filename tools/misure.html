@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>PENTAWALL — misure dello schermo</title>
+<style>
+  html, body { margin: 0; background: #12131a; color: #e8ecf5;
+               font: 500 17px/1.5 -apple-system, system-ui, sans-serif; }
+  main { padding: env(safe-area-inset-top) env(safe-area-inset-right)
+                 env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  .dentro { padding: 18px 20px 28px; }
+  h1 { font-size: 19px; margin: 0 0 4px; color: #7aa2f7; letter-spacing: .02em; }
+  p.sotto { margin: 0 0 18px; color: #9aa3b8; font-size: 14px; }
+  table { border-collapse: collapse; width: 100%; }
+  td { padding: 7px 0; border-bottom: 1px solid #232634; vertical-align: baseline; }
+  td.nome { color: #9aa3b8; padding-right: 14px; }
+  td.valore { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+  .bordo { position: fixed; inset: 0; border: 2px solid #ff9b3d; pointer-events: none; }
+</style>
+</head>
+<body>
+<div class="bordo"></div>
+<main><div class="dentro">
+  <h1>Misure di questo schermo</h1>
+  <p class="sotto">La cornice arancio segna il bordo della finestra che il telefono dichiara.
+     Se resta staccata da un lato, e' li' che il gioco perde spazio.</p>
+  <table id="tabella"></table>
+</div></main>
+<script>
+function riga(nome, valore) {
+  return '<tr><td class="nome">' + nome + '</td><td class="valore">' + valore + '</td></tr>';
+}
+function calcolata(nome) {
+  var v = getComputedStyle(document.documentElement).getPropertyValue(nome);
+  return v && v.trim() ? v.trim() : '0px';
+}
+var prova = document.createElement('div');
+prova.style.cssText = 'position:fixed;top:0;left:0;padding-top:env(safe-area-inset-top);'
+  + 'padding-right:env(safe-area-inset-right);padding-bottom:env(safe-area-inset-bottom);'
+  + 'padding-left:env(safe-area-inset-left);visibility:hidden;';
+document.body.appendChild(prova);
+var s = getComputedStyle(prova);
+var righe = [
+  riga('finestra dichiarata', window.innerWidth + ' x ' + window.innerHeight),
+  riga('schermo intero', screen.width + ' x ' + screen.height),
+  riga('punti per pixel', window.devicePixelRatio),
+  riga('bordi sicuri (sopra/destra/sotto/sinistra)',
+       [s.paddingTop, s.paddingRight, s.paddingBottom, s.paddingLeft].join(' ')),
+  riga('aperta dalla schermata Home',
+       (window.navigator.standalone === true || matchMedia('(display-mode: fullscreen)').matches
+        || matchMedia('(display-mode: standalone)').matches) ? 'si' : 'no (dentro il browser)'),
+  riga('orientamento', window.innerWidth >= window.innerHeight ? 'orizzontale' : 'verticale')
+];
+document.getElementById('tabella').innerHTML = righe.join('');
+addEventListener('resize', function () { setTimeout(function () { location.reload(); }, 250); });
+</script>
+</body>
+</html>

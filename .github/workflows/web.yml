@@ -157,6 +157,10 @@ jobs:
           # che un difetto sembra non essersi mai chiuso.
           printf '%s %s\n' "$GITHUB_SHA" "$(date -u '+%Y-%m-%dT%H:%MZ')" > build/web/versione.txt
           cat build/web/versione.txt
+          # La paginetta che misura lo schermo del telefono: serve quando il gioco
+          # si vede storto e bisogna sapere che finestra dichiara iOS, invece di
+          # provare rimedi a caso.
+          cp tools/misure.html build/web/misure.html
 
       - name: Prepara le pagine
         uses: actions/configure-pages@v5
