@@ -72,8 +72,37 @@ func _lavora() -> void:
 	await _riposa(20)
 	await _scatta("96-insegna-di-scorcio.png")
 
+	await _la_tribuna()
+	await _la_partita_a_sei()
 	print("\nfatti.")
 	quit()
+
+
+# 8. La tribuna col pubblico (tappa 6). Erano due blocchi vuoti: da qui si vede
+#    se le figure si leggono da dentro il campo, che e' l'unica distanza da cui
+#    qualcuno le guardera' davvero. Lo scatto sta in coda al giro.
+func _la_tribuna() -> void:
+	_metti(Vector3(-16.0, 0.6, 6.0), 105.0, 4.0)
+	await _riposa(20)
+	await _scatta("99-la-tribuna-col-pubblico.png")
+
+
+# 9. **La partita a sei** (tappa 6): la classifica in alto a sinistra e il campo
+#    con dentro tutti. La classifica e' l'interfaccia della partita, e va
+#    guardata prima di consegnarla.
+func _la_partita_a_sei() -> void:
+	_arena.call("avvia_sfida")
+	var scadenza := Time.get_ticks_msec() + 4000
+	while Time.get_ticks_msec() < scadenza:
+		await process_frame
+		if (_arena.call("avversari") as Array).size() >= 5:
+			break
+	# Qualche secondo di partita vera: i punti si muovono, e una classifica tutta
+	# a zero non direbbe se i numeri stanno al loro posto.
+	await _riposa(240)
+	_metti(Vector3(0.0, 7.6, 20.0), 0.0, -8.0)
+	await _riposa(20)
+	await _scatta("98-la-partita-a-sei.png")
 
 
 func _metti(dove: Vector3, giro_gradi: float, pendenza_gradi: float) -> void:

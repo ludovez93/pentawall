@@ -28,9 +28,51 @@ const SPESSORE_PIANO := 0.6
 const SPESSORE_RAMPA := 0.45
 
 ## Si vince a 500, come al poligono. Tu fai 25 con un colpo diretto e raddoppi a
-## ogni muro; lui spara solo dritto, quindi vale sempre 25: giocando dritto siete
-## pari, e si vince di sponda.
+## ogni muro; loro sparano solo dritto, quindi valgono sempre 25: giocando dritto
+## siete pari, e si vince di sponda.
 const TRAGUARDO := 500
+
+## **I cinque avversari.** Il numero non è nostro: la partita di carriera del 1999
+## girava con cinque bot più il giocatore (`RICERCA-ORIGINALE.md` § 2), ed è anche
+## il motivo per cui questa pianta ha sei partenze. Uno per partenza, nessuno
+## avanza.
+##
+## I nomi servono alla classifica: cinque avversari senza nome sono cinque
+## capsule, e in classifica sarebbero cinque righe uguali.
+const NOMI := ["BRACE", "QUARZO", "LAMPO", "NEBBIA", "TORO"]
+
+## Quante righe di classifica si vedono mentre si gioca, oltre alla tua.
+const PODIO := 3
+
+## Ogni quanto un avversario si guarda intorno e sceglie di nuovo chi attaccare.
+## Non tutti insieme: **uno per volta, a turno**, così i raggi di vista sono
+## cinque ogni sei decimi di secondo invece di venticinque tutti nello stesso
+## fotogramma. È il primo dei quattro rimedi del piano, e costa così poco che si
+## spende subito.
+const RISCELTA := 0.6
+
+## Quanti dei più vicini si controllano davvero con un raggio. Guardarli tutti
+## costerebbe cinque volte tanto per cambiare idea quasi mai: chi è il quarto più
+## vicino, in un'arena da sessantasei metri, è lontano comunque.
+const CANDIDATI_VISTA := 3
+
+## Quanto tiene il bersaglio che si ha già. Senza questo margine un avversario
+## cambierebbe preda a ogni riscelta — due nemici quasi alla stessa distanza se lo
+## rimpallerebbero — e da fuori si vedrebbe uno che gira su se stesso.
+const AFFEZIONE := 1.4
+
+## La ricomparsa: quanto conta trovare qualcun altro già lì. Le sei partenze sono
+## tutte assegnate a inizio partita, quindi «libera» non esiste: esiste **meno
+## occupata**.
+const RAGGIO_LIBERO := 6.0
+const PENALITA_OCCUPATA := 30.0
+
+## E la ricomparsa deve **spostare**: la partenza in cui si sta già non è
+## candidata. Senza, chi viene colpito appena nato resta esattamente dov'è — la
+## sua partenza è lontana da chi ha sparato e non è occupata da nessun altro,
+## quindi vince il confronto e la ricomparsa non si vede (trovato dal collaudo
+## dell'arena, 27/08/2026).
+const SCARTO_MINIMO := 3.0
 
 ## Quanto pesa, nella scelta di dove ricomparire, l'essere in vista dell'altro:
 ## sessanta metri su un'arena la cui diagonale ne misura novantatré. Non azzera la
@@ -47,6 +89,21 @@ const TINTE := {
 	"tribuna": Color(0.19, 0.16, 0.38),
 	"soffitto": Color(0.10, 0.10, 0.21),
 }
+
+## **Il pubblico sulle gradinate.** Tre file per gradinata, una più alta
+## dell'altra: le gradinate sono blocchi lisci, e sono i posti sfalsati a
+## raccontare il gradino. Le tinte sono quelle sature del gioco, che da
+## venticinque metri sono l'unica cosa che si legge di una figura alta un metro.
+const FILE_PUBBLICO := 4
+const PASSO_FILA := 1.15     ## quanto dista una fila dall'altra, verso il campo
+const GRADINO := 0.4         ## quanto sale ogni fila
+const PASSO_POSTO := 0.7     ## quanto è largo un posto
+const ALTEZZA_SEDUTO := 0.5  ## mezzo busto sopra il piano: seduti, non in piedi
+const POSTI_VUOTI := 0.12    ## una tribuna piena al centesimo non è una tribuna
+const TINTE_PUBBLICO := [
+	Color(0.98, 0.78, 0.22), Color(0.30, 0.85, 0.95), Color(0.95, 0.35, 0.62),
+	Color(0.55, 0.90, 0.40), Color(0.92, 0.92, 0.88), Color(0.99, 0.55, 0.25),
+]
 
 const SPONDA := Color(0.09, 0.60, 0.64)
 const NEON_SPONDA := Color(0.30, 0.99, 0.95)
@@ -81,18 +138,24 @@ var _anelli: Array[MeshInstance3D] = []
 var _vita_anelli: Array[float] = []
 var _prossimo_anello := 0
 
-var _avversario: Avversario
+## Chi è in campo: `{"nome": String, "corpo": Node3D, "punti": int}`. Il giocatore
+## è una riga come le altre — è la differenza fra una partita a sei e un duello
+## con quattro comparse.
+var _concorrenti: Array[Dictionary] = []
 var _sfida := false
 var _finita := false
 var _livello := 1
-var _punti_tu := 0
-var _punti_lui := 0
+var _prossima_riscelta := 0.0
+var _turno_riscelta := 0
+## Chi deve ancora entrare in campo: `{"nome", "partenza"}`, uno per fotogramma.
+var _in_arrivo: Array[Dictionary] = []
 
 
 func _ready() -> void:
 	_pianta = carica_pianta()
 	_ambiente()
 	_costruisci()
+	_pubblico()
 	_rete_di_cammino()
 	_luci()
 	_prepara_gli_anelli()
@@ -110,7 +173,9 @@ func _ready() -> void:
 	_giocatore = Giocatore.new()
 	add_child(_giocatore)
 	_giocatore.comandi = _comandi
-	_giocatore.incassato.connect(_su_giocatore_incassato)
+	# Si collega una volta sola, non a ogni partita: `preso_da` porta **chi** ha
+	# sparato, ed è l'unico posto da cui passano i punti di chiunque.
+	_giocatore.preso_da.connect(_su_colpo_valido.bind(_giocatore))
 	_mettiti_alla_partenza(0)
 
 	# Il primo colpo di una partita costava un fotogramma intero: si scalda lo
@@ -293,6 +358,116 @@ func _aggiungi_bersaglio(dove: Vector3, colore: Color) -> Bersaglio:
 
 # ------------------------------------------------------------------ luce
 
+## **Il pubblico.** Le gradinate erano due blocchi vuoti, ed erano la cosa che più
+## faceva sembrare l'arena un cantiere: un posto dove si gioca una partita ha
+## qualcuno che guarda.
+##
+## Un disegno solo, ripetuto: `MultiMesh` è **una passata sola** per la scheda
+## video, quante che siano le figure — ottanta capsule messe una per una sarebbero
+## ottanta passate, e su un telefono si sentirebbero. Nessuna collisione, nessuna
+## animazione: il pubblico riempie, non gioca.
+##
+## Dove stanno lo dice **la pianta**, non questo file: si prendono i muri che si
+## chiamano «gradinata» e ci si siede sopra. Sposta la gradinata nel `.json` e il
+## pubblico la segue.
+func _pubblico() -> void:
+	var posti: Array[Transform3D] = []
+	var tinte: Array[Color] = []
+	# Seme fisso: la tribuna dev'essere la stessa a ogni apertura, o due scatti
+	# dello stesso posto non si possono confrontare.
+	var caso := RandomNumberGenerator.new()
+	caso.seed = 20260827
+
+	for muro in _pianta["muri"]:
+		var nome := String(muro.get("nome", ""))
+		if not nome.contains("gradinata"):
+			continue
+		var centro := _punto(muro["centro"])
+		var misura := _punto(muro["misura"])
+		var piano := float(muro["quota"]) + float(muro["alto"])
+		# Il cordolo sul bordo che dà sul campo. Senza, la folla sembra sospesa
+		# sul niente: la gradinata è un blocco scuro e il suo piano non si legge
+		# — è la lezione della passerella nord (`LEARNED.md` § 31), applicata a
+		# un piano su cui non si cammina ma si guarda.
+		Muratura.decoro(self, Vector3(centro.x + misura.x * 0.5, piano + 0.03, centro.y),
+				Vector3(misura.y, 0.06, 0.18), Color(0.78, 0.72, 0.95), 0.55,
+				Vector3(0, 90, 0))
+		# Le file guardano l'arena, che sta a est: corrono lungo la profondità
+		# della gradinata e si susseguono verso ovest, ognuna un gradino più su.
+		for fila in FILE_PUBBLICO:
+			var x := centro.x - misura.x * 0.5 + PASSO_FILA * (float(fila) + 0.6)
+			var alto := piano + GRADINO * float(fila)
+			var quanti := int(misura.y / PASSO_POSTO)
+			for posto in quanti:
+				if caso.randf() < POSTI_VUOTI:
+					continue
+				var z := centro.y - misura.y * 0.5 + PASSO_POSTO * (float(posto) + 0.5)
+				var dove := Vector3(x + caso.randf_range(-0.1, 0.1), alto + ALTEZZA_SEDUTO,
+						z + caso.randf_range(-0.08, 0.08))
+				var giro := Transform3D(Basis(Vector3.UP, caso.randf_range(-0.4, 0.4)), dove)
+				posti.append(giro)
+				tinte.append(TINTE_PUBBLICO[caso.randi() % TINTE_PUBBLICO.size()])
+
+	if posti.is_empty():
+		return
+
+	# **Busti e teste, due passate in tutto.** Una capsula da sola, a venticinque
+	# metri, non è una persona: è un birillo — guardato in uno scatto il
+	# 27/08/2026, ed è la testa a fare la differenza. Fonderle in una mesh sola
+	# avrebbe risparmiato una passata su centoquaranta figure: non vale il codice
+	# che costa.
+	var busto := CapsuleMesh.new()
+	busto.radius = 0.26
+	busto.height = 1.0
+	busto.radial_segments = 6
+	busto.rings = 2
+	_folla("pubblico", busto, posti, tinte, Vector3.ZERO, 1.0)
+
+	var testa := SphereMesh.new()
+	testa.radius = 0.2
+	testa.height = 0.4
+	testa.radial_segments = 6
+	testa.rings = 4
+	# La testa è la stessa tinta, ma scura: senza, una fila di teste chiare
+	# sembra una fila di lampadine.
+	_folla("pubblico_teste", testa, posti, tinte, Vector3(0, 0.66, 0), 0.42)
+
+
+## Una folla: la stessa figura ripetuta, una passata sola per la scheda video.
+## `scuro` moltiplica la tinta, `alzata` sposta la figura rispetto al posto.
+func _folla(nome: String, figura: Mesh, posti: Array[Transform3D], tinte: Array[Color],
+		alzata: Vector3, scuro: float) -> void:
+	var pelle := StandardMaterial3D.new()
+	pelle.vertex_color_use_as_albedo = true
+	pelle.roughness = 0.85
+	pelle.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+
+	var folla := MultiMesh.new()
+	folla.transform_format = MultiMesh.TRANSFORM_3D
+	folla.use_colors = true
+	folla.mesh = figura
+	folla.instance_count = posti.size()
+	for i in posti.size():
+		folla.set_instance_transform(i, posti[i].translated(alzata))
+		folla.set_instance_color(i, tinte[i] * scuro)
+
+	var nodo := MultiMeshInstance3D.new()
+	nodo.name = nome
+	nodo.multimesh = folla
+	nodo.material_override = pelle
+	nodo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(nodo)
+
+
+## Quante figure ci sono. Serve al collaudo: una tribuna vuota si vede solo
+## guardandola, e un errore nella pianta la svuoterebbe in silenzio.
+func quanto_pubblico() -> int:
+	var nodo := get_node_or_null("pubblico") as MultiMeshInstance3D
+	if nodo == null or nodo.multimesh == null:
+		return 0
+	return nodo.multimesh.instance_count
+
+
 func _ambiente() -> void:
 	var mondo := WorldEnvironment.new()
 	var ambiente := Environment.new()
@@ -416,6 +591,7 @@ func _process(delta: float) -> void:
 	_aggiorna_righe()
 	_respiro_degli_anelli(delta)
 	if _sfida and not _finita:
+		_scegli_i_bersagli(delta)
 		_controlla_il_traguardo()
 	for tasto in SCORCIATOIE:
 		var giu := Input.is_physical_key_pressed(tasto)
@@ -432,9 +608,9 @@ func _process(delta: float) -> void:
 
 # ------------------------------------------------------------------ la partita
 
-## L'interruttore. Acceso: entra l'avversario, i bersagli si fanno da parte e i
-## punteggi ripartono da zero. Spento: l'arena torna il posto in cui si gira per
-## guardarla.
+## L'interruttore. Acceso: entrano i cinque avversari, i bersagli si fanno da
+## parte e i punteggi ripartono da zero. Spento: l'arena torna il posto in cui si
+## gira per guardarla.
 func commuta_sfida() -> void:
 	if _sfida:
 		chiudi_sfida()
@@ -442,46 +618,89 @@ func commuta_sfida() -> void:
 		avvia_sfida()
 
 
+## **La partita a sei.** Uno per partenza: tu dove sei, i cinque avversari sulle
+## altre cinque. Nessuno avanza e nessuno nasce addosso a un altro — è la ragione
+## per cui la pianta ne ha sei, e viene dal 1999 (`RICERCA-ORIGINALE.md` § 2).
+##
+## Tutti contro tutti, non a squadre: le squadre nell'originale esistevano solo
+## nei menù di rete, e la carriera non le usava mai. Qui vuol dire che **anche i
+## colpi fra avversari valgono punti**, e senza quello gli altri quattro sarebbero
+## arredamento intorno al duello di sempre.
 func avvia_sfida() -> void:
 	_sfida = true
 	_finita = false
-	_punti_tu = 0
-	_punti_lui = 0
 	for bersaglio in _bersagli:
 		bersaglio.metti_in_pausa(true)
 
+	_svuota_il_campo()
 	_mettiti_alla_partenza(_partenza)
-	if _avversario == null or not is_instance_valid(_avversario):
-		_avversario = Avversario.crea(self, _dove_partenza(_partenza), _livello)
-		_avversario.centrato.connect(_su_avversario_centrato)
-		_avversario.ha_centrato.connect(_su_avversario_ha_centrato)
-	_avversario.imposta_livello(_livello)
-	_avversario.bersaglio = _giocatore
-	_porta_alla_partenza(_avversario, _partenza_lontana_da(_giocatore, _partenza))
+	_concorrenti.append({"nome": "TU", "corpo": _giocatore, "punti": 0})
 
+	# **Entrano uno per fotogramma.** Costruire un corpo — mesh, materiali, i due
+	# gusci del contorno — costa tredici millesimi di secondo, e cinque tutti
+	# insieme facevano un fotogramma da sessantatré: un inciampo netto proprio nel
+	# momento in cui si preme SFIDA (misurato il 27/08/2026). Distribuiti, nessun
+	# fotogramma supera i venti, e in un decimo di secondo ci sono tutti.
+	var quante := int(_pianta["partenze"].size())
+	var quanti := mini(NOMI.size(), quante - 1)
+	_in_arrivo.clear()
+	for i in quanti:
+		_in_arrivo.append({"nome": String(NOMI[i]), "partenza": (_partenza + 1 + i) % quante})
+	_fai_entrare_il_prossimo()
+
+	_prossima_riscelta = RISCELTA
+	_turno_riscelta = 0
+	_aggiorna_la_classifica()
 	_comandi.scrivi_sfida("CHIUDI")
-	_comandi.annuncia("SFIDA · %s" % String(Avversario.TARATURE[_livello]["nome"]).to_upper())
+	_comandi.annuncia("PARTITA · %s" % String(Avversario.TARATURE[_livello]["nome"]).to_upper())
+
+
+## Uno solo per fotogramma, finché la coda non è vuota. Il bersaglio se lo
+## sceglie appena entrato: chi arriva per ultimo trova gli altri già in campo, e
+## chi era già dentro lo aggiusta al suo turno di riscelta.
+func _fai_entrare_il_prossimo() -> void:
+	if _in_arrivo.is_empty():
+		return
+	var chi: Dictionary = _in_arrivo.pop_front()
+	var bot := Avversario.crea(self, _dove_partenza(int(chi["partenza"])), _livello)
+	bot.preso_da.connect(_su_colpo_valido.bind(bot))
+	_concorrenti.append({"nome": String(chi["nome"]), "corpo": bot, "punti": 0})
+	bot.punta_a(_chi_attaccare(bot))
+	_aggiorna_la_classifica()
 
 
 func chiudi_sfida() -> void:
 	_sfida = false
 	_finita = false
-	if _avversario != null and is_instance_valid(_avversario):
-		_avversario.bersaglio = null
-		_avversario.queue_free()
-		_avversario = null
+	_in_arrivo.clear()
+	_svuota_il_campo()
 	for bersaglio in _bersagli:
 		bersaglio.metti_in_pausa(false)
+	_comandi.spegni_la_classifica()
 	_comandi.scrivi_sfida("SFIDA")
 	_comandi.annuncia("ARENA")
 
 
+## Manda via chi è in campo. Il bersaglio si toglie **prima** di liberare il
+## corpo: un avversario che se ne va mentre gli altri lo stanno inseguendo
+## lascerebbe in giro riferimenti a un nodo che non c'è più.
+func _svuota_il_campo() -> void:
+	for riga in _concorrenti:
+		var corpo: Node3D = riga["corpo"]
+		if corpo is Avversario and is_instance_valid(corpo):
+			(corpo as Avversario).bersaglio = null
+			corpo.queue_free()
+	_concorrenti.clear()
+
+
 ## Il livello si cambia dentro la partita: i tre si confrontano col pollice nello
-## stesso posto, non leggendo una tabella.
+## stesso posto, non leggendo una tabella. Vale per tutti e cinque insieme —
+## avversari di livelli diversi nella stessa partita non direbbero niente su
+## nessuno dei tre.
 func cambia_livello() -> void:
 	_livello = (_livello + 1) % Avversario.TARATURE.size()
-	if _avversario != null and is_instance_valid(_avversario):
-		_avversario.imposta_livello(_livello)
+	for bot in avversari():
+		bot.imposta_livello(_livello)
 	_comandi.annuncia(String(Avversario.TARATURE[_livello]["nome"]).to_upper())
 
 
@@ -489,50 +708,229 @@ func in_sfida() -> bool:
 	return _sfida
 
 
+## Il primo degli avversari. Resta per chi ne guarda **uno** — i collaudi della
+## tappa 2 e gli attrezzi degli scatti, che di corpi ne vogliono uno solo.
 func avversario() -> Avversario:
-	return _avversario
+	for bot in avversari():
+		return bot
+	return null
 
 
+## Tutti gli avversari vivi, in ordine di entrata.
+func avversari() -> Array[Avversario]:
+	var elenco: Array[Avversario] = []
+	for riga in _concorrenti:
+		var corpo: Node3D = riga["corpo"]
+		if corpo is Avversario and is_instance_valid(corpo):
+			elenco.append(corpo as Avversario)
+	return elenco
+
+
+## I tuoi punti e quelli del migliore fra gli avversari. Serve a chi vuole sapere
+## come sta andando senza leggere tutta la classifica.
 func punteggi() -> Array:
-	return [_punti_tu, _punti_lui]
+	var miei := 0
+	var loro := 0
+	for riga in _concorrenti:
+		var punti := int(riga["punti"])
+		if riga["corpo"] == _giocatore:
+			miei = punti
+		else:
+			loro = maxi(loro, punti)
+	return [miei, loro]
 
 
-## Chi arriva prima a 500. Finita la partita l'avversario smette di giocare, e il
-## pulsante ne comincia un'altra da zero.
+## La classifica: `{"nome", "punti", "tu"}`, dal primo all'ultimo. A pari punti
+## resta avanti chi è entrato prima, che è l'ordine delle partenze: senza una
+## seconda chiave l'ordinamento potrebbe cambiare da solo fra un fotogramma e
+## l'altro, e la classifica ballerebbe senza motivo.
+func classifica() -> Array:
+	var righe: Array = []
+	for i in _concorrenti.size():
+		var riga: Dictionary = _concorrenti[i]
+		righe.append({
+			"nome": String(riga["nome"]),
+			"punti": int(riga["punti"]),
+			"tu": riga["corpo"] == _giocatore,
+			"ordine": i,
+		})
+	righe.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if int(a["punti"]) != int(b["punti"]):
+			return int(a["punti"]) > int(b["punti"])
+		return int(a["ordine"]) < int(b["ordine"]))
+	for i in righe.size():
+		righe[i]["posizione"] = i + 1
+	return righe
+
+
+## Quella che si vede in partita: **le prime tre e la tua**. Tutte e sei stanno
+## in centonovanta punti d'altezza, e sul telefono in orizzontale lo schermo ne ha
+## trecentonovanta: la classifica arriverebbe in mezzo al pollice sinistro.
+## A partita finita si mostrano tutte — l'ordine d'arrivo è la cosa per cui si è
+## giocato, e il pollice a quel punto non serve più.
+func classifica_da_mostrare() -> Array:
+	var righe := classifica()
+	if _finita or righe.size() <= PODIO + 1:
+		return righe
+	var corte := righe.slice(0, PODIO)
+	for riga in righe:
+		if bool(riga["tu"]) and int(riga["posizione"]) > PODIO:
+			corte.append(riga)
+	return corte
+
+
+## In che posizione stai. È il numero che in partita si guarda per primo.
+func posizione_mia() -> int:
+	var righe := classifica()
+	for i in righe.size():
+		if bool(righe[i]["tu"]):
+			return i + 1
+	return 0
+
+
+func _aggiorna_la_classifica() -> void:
+	if _comandi != null:
+		_comandi.classifica(classifica_da_mostrare())
+
+
+# ------------------------------------------------------------- chi attacca chi
+
+## **A turno, uno per volta.** Ogni avversario si guarda intorno ogni sei decimi
+## di secondo, ma non tutti nello stesso fotogramma: il turno gira, e in un
+## fotogramma si paga un giro di raggi solo, non cinque.
+func _scegli_i_bersagli(delta: float) -> void:
+	if not _in_arrivo.is_empty():
+		_fai_entrare_il_prossimo()
+		return
+	var quanti := _concorrenti.size() - 1
+	if quanti <= 0:
+		return
+	_prossima_riscelta -= delta
+	if _prossima_riscelta > 0.0:
+		return
+	_prossima_riscelta = RISCELTA / float(quanti)
+	_turno_riscelta = (_turno_riscelta + 1) % quanti
+	var corpo: Node3D = _concorrenti[_turno_riscelta + 1]["corpo"]
+	if corpo is Avversario and is_instance_valid(corpo):
+		var bot := corpo as Avversario
+		bot.punta_a(_chi_attaccare(bot))
+
+
+## Chi attaccare: **il più vicino che si vede**, e in mancanza di meglio il più
+## vicino e basta — perché la rete di cammino sa portarcelo, e un avversario senza
+## nessuno da cercare resterebbe fermo.
+##
+## Si controllano col raggio solo i tre più vicini: il quarto, in un'arena da
+## sessantasei metri, è dall'altra parte comunque.
+func _chi_attaccare(bot: Avversario) -> Node3D:
+	var altri: Array = []
+	for riga in _concorrenti:
+		var corpo: Node3D = riga["corpo"]
+		if corpo == null or corpo == bot or not is_instance_valid(corpo):
+			continue
+		altri.append({"corpo": corpo,
+				"quanto": bot.global_position.distance_to(corpo.global_position)})
+	if altri.is_empty():
+		return null
+	altri.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a["quanto"]) < float(b["quanto"]))
+
+	var scelto: Node3D = null
+	var quanto_scelto := 0.0
+	for i in mini(CANDIDATI_VISTA, altri.size()):
+		var corpo: Node3D = altri[i]["corpo"]
+		if _si_vedono(bot, corpo):
+			scelto = corpo
+			quanto_scelto = float(altri[i]["quanto"])
+			break
+	if scelto == null:
+		return altri[0]["corpo"] as Node3D
+
+	# Chi ce l'ha già davanti se lo tiene, se non è molto più lontano di quello
+	# nuovo: cambiare preda per mezzo metro vuol dire non attaccarne mai nessuno.
+	var attuale := bot.bersaglio
+	if attuale != null and is_instance_valid(attuale) and attuale != scelto:
+		var quanto := bot.global_position.distance_to(attuale.global_position)
+		if quanto <= quanto_scelto * AFFEZIONE and _si_vedono(bot, attuale):
+			return attuale
+	return scelto
+
+
+## Due corpi si vedono? Lo stesso raggio con cui l'avversario decide se ha la
+## linea libera per sparare: i combattenti stanno su un altro strato, quindi non
+## si fanno ombra a vicenda.
+func _si_vedono(uno: Node3D, altro: Node3D) -> bool:
+	var da := uno.global_position + Vector3(0, Avversario.ALTEZZA_PETTO, 0)
+	var a := altro.global_position + Vector3(0, Avversario.ALTEZZA_PETTO, 0)
+	var domanda := PhysicsRayQueryParameters3D.create(da, a, Strati.SOLIDO)
+	return get_world_3d().direct_space_state.intersect_ray(domanda).is_empty()
+
+
+# ------------------------------------------------------------------------ i punti
+
+## Chi arriva per primo a 500. Finita la partita nessuno gioca più, e il pulsante
+## ne comincia un'altra da zero.
 func _controlla_il_traguardo() -> void:
-	if _punti_tu < TRAGUARDO and _punti_lui < TRAGUARDO:
+	var vincitore := -1
+	for i in _concorrenti.size():
+		if int(_concorrenti[i]["punti"]) < TRAGUARDO:
+			continue
+		if vincitore < 0 or int(_concorrenti[i]["punti"]) > int(_concorrenti[vincitore]["punti"]):
+			vincitore = i
+	if vincitore < 0:
 		return
+
 	_finita = true
-	if _avversario != null and is_instance_valid(_avversario):
-		_avversario.bersaglio = null
+	for bot in avversari():
+		bot.bersaglio = null
+	_aggiorna_la_classifica()
 	_comandi.scrivi_sfida("ANCORA")
-	_comandi.annuncia("HAI VINTO" if _punti_tu >= TRAGUARDO else "HAI PERSO")
+	if _concorrenti[vincitore]["corpo"] == _giocatore:
+		_comandi.annuncia("HAI VINTO")
+	else:
+		_comandi.annuncia("VINCE %s · SEI %d°" %
+				[String(_concorrenti[vincitore]["nome"]), posizione_mia()])
 
 
-func _su_avversario_centrato(punti: int, muri: int) -> void:
-	if _finita:
+## **L'unico posto da cui passano i punti.** Ogni corpo che si può colpire dice
+## chi l'ha preso e quanto vale; qui si accredita a chi ha sparato, si annuncia se
+## la cosa ti riguarda, e si fa ricomparire chi ha incassato.
+##
+## Nel duello bastava sapere che qualcuno era stato colpito, perché chi sparava
+## era per forza l'altro. In sei no: senza il nome di chi ha sparato, un colpo fra
+## avversari finirebbe nel tuo punteggio.
+func _su_colpo_valido(chi_spara: Object, punti: int, muri: int, chi_incassa: Node3D) -> void:
+	if not _sfida or _finita:
 		return
-	_punti_tu += punti
+	var autore := _riga_di(chi_spara)
+	if autore >= 0:
+		_concorrenti[autore]["punti"] = int(_concorrenti[autore]["punti"]) + punti
+		if chi_spara == _giocatore:
+			_annuncia_il_colpo(punti, muri)
+		elif chi_incassa == _giocatore:
+			_comandi.annuncia("COLPITO DA %s" % String(_concorrenti[autore]["nome"]))
+	elif chi_incassa == _giocatore:
+		_comandi.annuncia("COLPITO")
+	_aggiorna_la_classifica()
+	_ricompari.call_deferred(chi_incassa, chi_spara)
+
+
+## In che riga della partita sta un corpo. Sei righe: cercarle una per una costa
+## meno che tenere in piedi un secondo elenco da mantenere allineato.
+func _riga_di(corpo: Object) -> int:
+	for i in _concorrenti.size():
+		if _concorrenti[i]["corpo"] == corpo:
+			return i
+	return -1
+
+
+func _annuncia_il_colpo(punti: int, muri: int) -> void:
 	if muri == 0:
 		_comandi.annuncia("DIRETTO · %d" % punti)
 	elif muri == 1:
 		_comandi.annuncia("1 MURO · %d" % punti)
 	else:
 		_comandi.annuncia("%d MURI · %d" % [muri, punti])
-	_ricompari_avversario.call_deferred()
-
-
-func _su_avversario_ha_centrato(punti: int, _muri: int) -> void:
-	if _finita:
-		return
-	_punti_lui += punti
-
-
-func _su_giocatore_incassato(_punti: int, _muri: int) -> void:
-	if not _sfida or _finita:
-		return
-	_comandi.annuncia("COLPITO")
-	_ricompari_giocatore.call_deferred()
 
 
 ## **La ricomparsa.** Nel nostro gioco un colpo non toglie la vita — dà venticinque
@@ -546,17 +944,18 @@ func _su_giocatore_incassato(_punti: int, _muri: int) -> void:
 ## l'altro lo tiene sotto tiro fino a 500, e le altre cinque partenze non servono a
 ## niente. Con la ricomparsa la caccia ricomincia a ogni colpo, e l'arena serve
 ## tutta.
-func _ricompari_giocatore() -> void:
-	if not _sfida or _finita or _avversario == null or not is_instance_valid(_avversario):
+func _ricompari(chi: Node3D, da: Object) -> void:
+	if not _sfida or _finita or chi == null or not is_instance_valid(chi):
 		return
-	_mettiti_alla_partenza(_partenza_lontana_da(_avversario, _partenza))
-
-
-func _ricompari_avversario() -> void:
-	if not _sfida or _finita or _avversario == null or not is_instance_valid(_avversario):
-		return
-	_porta_alla_partenza(_avversario, _partenza_lontana_da(_giocatore, -1))
-	_avversario.ricomincia_il_cammino()
+	var lontano_da := chi
+	if da is Node3D and is_instance_valid(da as Node3D):
+		lontano_da = da as Node3D
+	var dove := _dove_ricomparire(lontano_da, chi)
+	if chi == _giocatore:
+		_mettiti_alla_partenza(dove)
+	elif chi is Avversario:
+		_porta_alla_partenza(chi as CharacterBody3D, dove)
+		(chi as Avversario).ricomincia_il_cammino()
 
 
 func _porta_alla_partenza(chi: CharacterBody3D, quale: int) -> void:
@@ -564,24 +963,35 @@ func _porta_alla_partenza(chi: CharacterBody3D, quale: int) -> void:
 	chi.velocity = Vector3.ZERO
 
 
-## Quale partenza sta più lontana da qualcuno — e soprattutto **fuori dalla sua
-## vista**.
+## Dove ricomparire: lontano da chi ti ha appena preso, **fuori dalla sua vista**,
+## e possibilmente non in braccio a un terzo.
 ##
-## È il criterio del 1999: fra i candidati il gioco penalizzava pesantemente quelli
-## vicini o in linea di vista di un giocatore vivo (`RICERCA-ORIGINALE.md` § 2).
-## Nascere davanti a chi ti ha appena preso è la cosa che rende irrespirabile
-## un'arena, e con sei partenze non c'è nessun motivo per farlo.
-func _partenza_lontana_da(chi: Node3D, evita: int) -> int:
+## Il criterio è quello del 1999: fra i candidati il gioco penalizzava pesantemente
+## quelli vicini o in linea di vista di un giocatore vivo (`RICERCA-ORIGINALE.md`
+## § 2). Nascere davanti a chi ti ha appena preso è la cosa che rende irrespirabile
+## un'arena.
+##
+## In sei c'è una penalità in più che nel duello non serviva: a inizio partita le
+## sei partenze sono **tutte** assegnate, quindi non ne esiste una libera — esiste
+## la meno occupata, e quella basta, perché dopo tre secondi nessuno è più dove è
+## nato.
+func _dove_ricomparire(lontano_da: Node3D, chi_torna: Node3D) -> int:
 	var quante := int(_pianta["partenze"].size())
 	var migliore := 0
 	var punteggio := -INF
 	for i in quante:
-		if i == evita and quante > 1:
-			continue
 		var dove := _dove_partenza(i)
-		var quanto := dove.distance_to(chi.global_position)
-		if _in_vista(dove, chi):
+		if dove.distance_to(chi_torna.global_position) < SCARTO_MINIMO:
+			continue
+		var quanto := dove.distance_to(lontano_da.global_position)
+		if _in_vista(dove, lontano_da):
 			quanto -= PENALITA_IN_VISTA
+		for riga in _concorrenti:
+			var altro: Node3D = riga["corpo"]
+			if altro == chi_torna or altro == null or not is_instance_valid(altro):
+				continue
+			if dove.distance_to(altro.global_position) < RAGGIO_LIBERO:
+				quanto -= PENALITA_OCCUPATA
 		if quanto > punteggio:
 			punteggio = quanto
 			migliore = i
@@ -611,8 +1021,17 @@ func _aggiorna_righe() -> void:
 		return
 	var visuale := "prima persona" if _giocatore != null and _giocatore.in_prima_persona() else "terza persona"
 	if _sfida:
-		_comandi.scrivi_alto("TU %d — LUI %d   (a %d)" % [_punti_tu, _punti_lui, TRAGUARDO])
-		_comandi.scrivi_basso("avversario %s · %s · %s · dardo %s · %d fps" % [
+		# La riga alta non ripete la classifica, che sta due dita sotto: dice
+		# **quanto manca**, che è l'unica cosa che la classifica non mostra.
+		var miei := int(punteggi()[0])
+		if _finita:
+			_comandi.scrivi_alto("FINITA · sei %d° su %d" %
+					[posizione_mia(), _concorrenti.size()])
+		else:
+			_comandi.scrivi_alto("%d° · ti mancano %d punti" %
+					[posizione_mia(), maxi(TRAGUARDO - miei, 0)])
+		_comandi.scrivi_basso("%d avversari · %s · %s · %s · dardo %s · %d fps" % [
+			_concorrenti.size() - 1,
 			Avversario.TARATURE[_livello]["nome"],
 			String(_pianta["partenze"][_partenza]["nome"]), visuale,
 			CANDIDATI[_candidato]["nome"], Engine.get_frames_per_second()])

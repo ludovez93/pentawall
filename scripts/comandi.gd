@@ -52,6 +52,8 @@ var _tempo_avviso := 0.0
 var _bottone_sfida: Button
 var _bottone_livello: Button
 var _pulsanti_di_scena := 0
+var _classifica: VBoxContainer
+var _righe_classifica: Array[Dictionary] = []
 
 
 func _ready() -> void:
@@ -177,6 +179,108 @@ func pulsante_di_scena(testo: String, colore: Color, azione: Callable) -> Button
 	return _pulsante(testo, Vector2(COLONNA_SCENA, alto), Vector2(126, 84), colore, azione)
 
 
+## **La classifica.** In un duello bastava una riga — «TU 25 — LUI 0» — perché i
+## nomi erano due e la differenza si leggeva a colpo d'occhio. In sei quella riga
+## non si legge più: serve una colonna, ordinata, dove la propria posizione si
+## trova senza cercarla.
+##
+## Sta in alto a sinistra perché è l'unica fascia dello schermo che non ha né
+## pulsanti né pollici sopra, e le righe si costruiscono una volta sola: in
+## partita cambiano i numeri, non i nodi.
+##
+## Ogni riga è `{"posizione": int, "nome": String, "punti": int, "tu": bool}`, già
+## in ordine. La posizione arriva dal dato e non dall'ordine delle righe, perché
+## in partita se ne mostrano quattro su sei: le prime tre e la tua.
+func classifica(righe: Array) -> void:
+	_classifica.visible = true
+	for i in _righe_classifica.size():
+		var riga: Dictionary = _righe_classifica[i]
+		var pannello: PanelContainer = riga["pannello"]
+		if i >= righe.size():
+			pannello.visible = false
+			continue
+		pannello.visible = true
+		var dato: Dictionary = righe[i]
+		var tuo := bool(dato.get("tu", false))
+		(riga["posizione"] as Label).text = "%d" % int(dato["posizione"])
+		(riga["nome"] as Label).text = String(dato["nome"])
+		(riga["punti"] as Label).text = "%d" % int(dato["punti"])
+		var tinta := Color(1, 1, 1, 0.98) if tuo else Color(1, 1, 1, 0.62)
+		for chiave in ["posizione", "nome", "punti"]:
+			(riga[chiave] as Label).add_theme_color_override("font_color", tinta)
+		pannello.add_theme_stylebox_override("panel",
+				_riga_accesa() if tuo else _vuoto())
+
+
+## Si spegne quando la partita non c'è: fuori dalla sfida l'arena è un posto in
+## cui si gira per guardarla, e una classifica ferma a zero è rumore.
+func spegni_la_classifica() -> void:
+	if _classifica != null:
+		_classifica.visible = false
+
+
+func _costruisci_la_classifica() -> void:
+	_classifica = VBoxContainer.new()
+	_classifica.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_classifica.position = Vector2(28, 112)
+	_classifica.add_theme_constant_override("separation", 2)
+	_classifica.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_classifica)
+
+	for i in 8:
+		var pannello := PanelContainer.new()
+		pannello.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		pannello.add_theme_stylebox_override("panel", _vuoto())
+		var riga := HBoxContainer.new()
+		riga.add_theme_constant_override("separation", 10)
+		riga.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		pannello.add_child(riga)
+
+		# Diciannove e non ventidue: sul telefono in orizzontale lo schermo è alto
+		# trecentonovanta punti, e ogni riga che cresce mangia la fascia dove sta
+		# il pollice sinistro.
+		var posizione := _etichetta(19, Color(1, 1, 1, 0.62))
+		posizione.custom_minimum_size = Vector2(22, 0)
+		posizione.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		var nome := _etichetta(19, Color(1, 1, 1, 0.62))
+		nome.custom_minimum_size = Vector2(118, 0)
+		var punti := _etichetta(19, Color(1, 1, 1, 0.62))
+		punti.custom_minimum_size = Vector2(58, 0)
+		punti.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		for pezzo in [posizione, nome, punti]:
+			riga.add_child(pezzo)
+
+		_classifica.add_child(pannello)
+		_righe_classifica.append({"pannello": pannello, "posizione": posizione,
+				"nome": nome, "punti": punti})
+
+
+## Il fondo di una riga qualunque: niente. Serve un oggetto vero lo stesso,
+## perché togliere lo stile a un pannello lo fa tornare a quello del tema. I
+## margini ci sono anche qui: se li avesse solo la riga accesa, la classifica
+## ballerebbe di quattro pixel ogni volta che si cambia posizione.
+func _vuoto() -> StyleBoxEmpty:
+	var stile := StyleBoxEmpty.new()
+	stile.content_margin_left = 8
+	stile.content_margin_right = 8
+	stile.content_margin_top = 2
+	stile.content_margin_bottom = 2
+	return stile
+
+
+## La riga tua: un fondo chiaro appena accennato. Il raggio è piccolo — quello
+## dei pulsanti sarebbe una pasticca su una riga alta ventotto pixel.
+func _riga_accesa() -> StyleBoxFlat:
+	var stile := StyleBoxFlat.new()
+	stile.bg_color = Color(1, 1, 1, 0.15)
+	stile.set_corner_radius_all(6)
+	stile.content_margin_left = 8
+	stile.content_margin_right = 8
+	stile.content_margin_top = 2
+	stile.content_margin_bottom = 2
+	return stile
+
+
 func _disegna() -> void:
 	var chiaro := Color(1, 1, 1, 0.5)
 	# Il mirino: al centro, sempre, in tutte e due le visuali.
@@ -238,6 +342,12 @@ func _costruisci() -> void:
 			Color(0.2, 0.75, 0.45), func() -> void: sfida_richiesta.emit())
 	_bottone_livello = _pulsante("LIVELLO", Vector2(-160, -618), Vector2(120, 84),
 			Color(0.35, 0.4, 0.55), func() -> void: livello_richiesto.emit())
+	# La classifica si costruisce qui, spenta, insieme a tutto il resto: farla
+	# nascere al primo colpo di una partita vorrebbe dire pagare ventiquattro
+	# etichette e i loro caratteri **nel fotogramma in cui si preme SFIDA**, che è
+	# esattamente il momento in cui non si può (misurato il 27/08/2026).
+	_costruisci_la_classifica()
+	_classifica.visible = false
 
 
 func _pulsante(testo: String, scarto: Vector2, misura: Vector2, colore: Color,

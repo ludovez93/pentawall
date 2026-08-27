@@ -43,9 +43,11 @@ func _lavora() -> void:
 	await process_frame
 	_la_scena_dice_la_stessa_cosa(pianta)
 	_il_disegno_paga_il_rimbalzo(pianta)
+	_la_tribuna_ha_il_pubblico(pianta)
 	await _la_rete_di_cammino(pianta)
 	await _lavversario_ti_raggiunge(pianta)
 	await _la_partita()
+	await _la_partita_a_sei()
 
 	_chiudi()
 
@@ -333,6 +335,26 @@ func _lavversario_ti_raggiunge(pianta: Dictionary) -> void:
 		await process_frame
 
 
+## **Il pubblico** (tappa 6). Le figure nascono dai muri che si chiamano
+## «gradinata»: se un giorno quel nome cambia nella pianta, la tribuna si svuota
+## in silenzio e nessun errore lo dice.
+func _la_tribuna_ha_il_pubblico(pianta: Dictionary) -> void:
+	var gradinate := 0
+	var posti := 0.0
+	for muro in pianta["muri"]:
+		if not String(muro.get("nome", "")).contains("gradinata"):
+			continue
+		gradinate += 1
+		posti += float(muro["misura"][1]) / 0.7 * 4.0
+	_conta("la pianta ha le gradinate", gradinate >= 2, "%d gradinate" % gradinate)
+
+	var quante := int(_arena.call("quanto_pubblico"))
+	# Un posto su otto resta vuoto apposta, quindi il conto non torna al pezzo: si
+	# controlla che la tribuna sia **piena a metà almeno**, non che sia esatta.
+	_conta("il pubblico riempie le gradinate", quante > int(posti * 0.5),
+			"%d figure per %d posti" % [quante, int(posti)])
+
+
 # ------------------------------------------------------------------ la partita
 
 ## Il duello a 500 dentro l'arena: chi entra, dove nasce, e cosa succede a chi
@@ -340,7 +362,7 @@ func _lavversario_ti_raggiunge(pianta: Dictionary) -> void:
 func _la_partita() -> void:
 	var giocatore: Giocatore = _arena.call("giocatore")
 	_arena.call("avvia_sfida")
-	await process_frame
+	await _entrano_tutti(1)
 	var bot: Avversario = _arena.call("avversario")
 	_conta("la sfida fa entrare l'avversario", bot != null)
 	if bot == null:
@@ -350,6 +372,13 @@ func _la_partita() -> void:
 			not _si_vedono(giocatore, bot),
 			"le due partenze si guardano: %.0f m" %
 			giocatore.global_position.distance_to(bot.global_position))
+
+	# Da qui in avanti il campo si ferma. In una partita a sei un colpo può
+	# arrivare da chiunque, e queste prove devono poter dire **da chi**: senza
+	# fermarli, la ricomparsa qui sotto potrebbe misurare il colpo di un altro
+	# (LEARNED.md § 19).
+	for altro in _arena.call("avversari"):
+		(altro as Avversario).bersaglio = null
 
 	# La ricomparsa: chi viene centrato ricompare da un'altra parte, e mai in vista
 	# di chi l'ha appena preso. È la regola del 1999 (§ 2 della ricerca), ed è il
@@ -373,6 +402,9 @@ func _la_partita() -> void:
 
 	# Un colpo a cinque muri vale 800: sopra il traguardo, quindi la partita
 	# finisce. Il segno visibile è che l'avversario smette di giocare.
+	# Gli si ridà un bersaglio: la prova qui sotto è che **la partita finita** lo
+	# spegne, e su un avversario già fermo passerebbe senza dimostrare niente.
+	bot.punta_a(giocatore)
 	bot.incassa(5, giocatore)
 	await process_frame
 	await process_frame
@@ -380,11 +412,109 @@ func _la_partita() -> void:
 	_conta("un colpo a cinque muri vale 800 punti", int(punti[0]) == 800, str(punti))
 	_conta("a 500 la partita finisce", bot.bersaglio == null,
 			"l'avversario gioca ancora")
+	# In partita la classifica ne mostra quattro su sei, per non finire in mezzo
+	# al pollice sul telefono. Alla fine si aprono tutte: l'ordine d'arrivo è la
+	# cosa per cui si è giocato.
+	var arrivo: Array = _arena.call("classifica_da_mostrare")
+	_conta("a partita finita si vede l'ordine d'arrivo di tutti",
+			arrivo.size() == 6, "%d righe su 6" % arrivo.size())
 
 	_arena.call("chiudi_sfida")
 	await process_frame
 	_conta("chiusa la sfida, l'arena torna quella di prima",
 			not bool(_arena.call("in_sfida")) and _arena.call("avversario") == null)
+
+
+## **La partita a sei** (tappa 6): che ci siano tutti, che ognuno abbia qualcuno
+## da attaccare, e soprattutto che i punti finiscano a chi ha sparato.
+##
+## L'ultimo è il controllo che tiene in piedi la modalità: se un colpo fra due
+## avversari finisse nel punteggio del giocatore, la classifica salirebbe da sola
+## e nessuno se ne accorgerebbe guardando lo schermo.
+func _la_partita_a_sei() -> void:
+	var giocatore: Giocatore = _arena.call("giocatore")
+	_arena.call("avvia_sfida")
+	await _entrano_tutti(5)
+
+	var bot: Array = _arena.call("avversari")
+	_conta("entrano cinque avversari", bot.size() == 5, "ne sono entrati %d" % bot.size())
+	if bot.size() < 2:
+		_arena.call("chiudi_sfida")
+		return
+
+	# Uno per partenza: nessuno nasce addosso a un altro, che con sei corpi e sei
+	# partenze è una cosa che va verificata, non data per fatta.
+	var corpi: Array[Node3D] = [giocatore]
+	for uno in bot:
+		corpi.append(uno as Node3D)
+	var troppo_vicini := ""
+	for i in corpi.size():
+		for j in range(i + 1, corpi.size()):
+			var quanto := corpi[i].global_position.distance_to(corpi[j].global_position)
+			if quanto < 5.0:
+				troppo_vicini = "%d e %d a %.1f m" % [i, j, quanto]
+	_conta("nessuno nasce addosso a un altro", troppo_vicini == "", troppo_vicini)
+
+	var senza_bersaglio := 0
+	for uno in bot:
+		var chi := (uno as Avversario).bersaglio
+		if chi == null or not is_instance_valid(chi) or chi == uno:
+			senza_bersaglio += 1
+	_conta("ognuno ha qualcuno da attaccare", senza_bersaglio == 0,
+			"%d senza bersaglio" % senza_bersaglio)
+
+	# Gli altri si fermano: da qui in avanti i colpi devono essere solo quelli
+	# della prova, o non si può dire da chi è arrivato niente (LEARNED.md § 19).
+	for uno in bot:
+		(uno as Avversario).bersaglio = null
+
+	# **Il colpo fra due avversari.** BRACE centra QUARZO: i venticinque punti sono
+	# di BRACE, e il giocatore resta a zero.
+	var primo := bot[0] as Avversario
+	var secondo := bot[1] as Avversario
+	# Dove sta **prima** del colpo: la ricomparsa parte differita e si è già
+	# consumata al primo fotogramma buono, quindi misurarla dopo direbbe sempre
+	# zero (costato un giro il 27/08/2026).
+	var prima := secondo.global_position
+	var attesa := Time.get_ticks_msec()
+	while secondo.call("incassa", 0, primo) == false and Time.get_ticks_msec() - attesa < 2000:
+		await physics_frame
+	await process_frame
+	var punti: Array = _arena.call("punteggi")
+	_conta("un colpo fra avversari non fa punti a te", int(punti[0]) == 0,
+			"il giocatore ha %d punti" % int(punti[0]))
+	_conta("li fa a chi ha sparato", int(punti[1]) == 25, "il migliore ne ha %d" % int(punti[1]))
+
+	var classifica: Array = _arena.call("classifica")
+	_conta("la classifica ha una riga per concorrente", classifica.size() == 6,
+			"%d righe" % classifica.size())
+	_conta("in testa c'è chi ha fatto punti", String(classifica[0]["nome"]) == "BRACE"
+			and int(classifica[0]["punti"]) == 25, str(classifica[0]))
+	var mia := int(_arena.call("posizione_mia"))
+	_conta("la classifica ti trova", mia >= 1 and mia <= 6, "posizione %d" % mia)
+
+	# **La ricomparsa vale anche per loro.** Nel duello si spostava solo il
+	# giocatore, perché l'altro era uno solo e la sua partenza era sempre la stessa.
+	var spostato := secondo.global_position.distance_to(prima)
+	_conta("anche l'avversario colpito ricompare da un'altra parte", spostato > 8.0,
+			"si è spostato di %.1f m" % spostato)
+	_conta("e non in faccia a chi l'ha preso", not _si_vedono(secondo, primo))
+
+	_arena.call("chiudi_sfida")
+	await process_frame
+	_conta("chiusa la partita non resta nessuno in campo",
+			(_arena.call("avversari") as Array).is_empty())
+
+
+## Gli avversari entrano **uno per fotogramma**, per non far inciampare
+## l'apertura della partita. Qui si aspetta l'esito — che ci siano tutti — non un
+## numero di fotogrammi deciso a tavolino (LEARNED.md § 17).
+func _entrano_tutti(quanti: int) -> void:
+	var scadenza := Time.get_ticks_msec() + 4000
+	while Time.get_ticks_msec() < scadenza:
+		await process_frame
+		if (_arena.call("avversari") as Array).size() >= quanti:
+			return
 
 
 ## Si vedono? Lo stesso raggio con cui l'avversario decide se ha la linea libera.

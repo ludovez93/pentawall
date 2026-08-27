@@ -14,6 +14,10 @@ extends CharacterBody3D
 signal sparato(muri_previsti: int)
 ## L'hanno preso: `punti` sono quelli che vanno a chi ha sparato.
 signal incassato(punti: int, muri: int)
+## Lo stesso colpo, ma dicendo **da chi**. Nel duello non serviva — chi sparava
+## era per forza l'altro — ma in una partita a sei chi tiene il punteggio deve
+## sapere a chi accreditarlo, e chi ricompare deve sapere da chi tenersi lontano.
+signal preso_da(chi: Object, punti: int, muri: int)
 
 const VELOCITA := 7.62          ## 400 u/s del 1999
 const ACCELERAZIONE := 39.0     ## 2048 u/s²
@@ -185,7 +189,9 @@ func incassa(muri: int, da: Object = null) -> bool:
 	if _immunita > 0.0:
 		return false
 	_immunita = IMMUNITA
-	incassato.emit(PUNTI_BASE * int(pow(2, muri)), muri)
+	var valgono := PUNTI_BASE * int(pow(2, muri))
+	incassato.emit(valgono, muri)
+	preso_da.emit(da, valgono, muri)
 	if da is Node3D:
 		var indietro := global_position - (da as Node3D).global_position
 		indietro.y = 0.0

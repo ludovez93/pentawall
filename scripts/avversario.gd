@@ -55,6 +55,10 @@ var _contorni: Array[Dictionary] = []
 signal centrato(punti: int, muri: int)
 ## Ha centrato il suo bersaglio: punti a sé.
 signal ha_centrato(punti: int, muri: int)
+## Lo stesso colpo di `centrato`, ma dicendo **da chi** è arrivato. È il segnale
+## su cui si regge la partita a sei: là un colpo può venire da chiunque, e
+## `centrato` da solo non basta più a sapere a chi vanno i punti.
+signal preso_da(chi: Object, punti: int, muri: int)
 
 ## Il corpo si muove con i numeri del giocatore, non con numeri suoi: se corresse
 ## a una velocità diversa, tarare i comandi guardando lui non direbbe niente.
@@ -229,7 +233,9 @@ func incassa(muri: int, da: Object = null) -> bool:
 	if _immunita > 0.0:
 		return false
 	_immunita = IMMUNITA
-	centrato.emit(PUNTI_BASE * int(pow(2, muri)), muri)
+	var valgono := PUNTI_BASE * int(pow(2, muri))
+	centrato.emit(valgono, muri)
+	preso_da.emit(da, valgono, muri)
 	if da is Node3D:
 		var indietro := global_position - (da as Node3D).global_position
 		indietro.y = 0.0
@@ -527,6 +533,24 @@ func _aggiorna_il_percorso(delta: float) -> void:
 	_percorso = NavigationServer3D.map_get_path(mappa, global_position,
 			bersaglio.global_position, true)
 	_passo = 0
+
+
+## Cambia bersaglio, che in una partita a sei succede di continuo.
+##
+## Non basta assegnare il campo: chi guarda si porta dietro **la posizione vista
+## la volta prima**, e passando da un bersaglio all'altro quello scarto diventa
+## una velocità di quaranta metri al secondo — l'anticipo sparerebbe fuori
+## dall'arena per un fotogramma. Si riparte dall'occhiata come se lo vedesse
+## adesso, e si butta la strada, che portava dall'altro.
+func punta_a(nuovo_bersaglio: Node3D) -> void:
+	if nuovo_bersaglio == bersaglio:
+		return
+	bersaglio = nuovo_bersaglio
+	_prima_occhiata = true
+	_velocita_vista = Vector3.ZERO
+	if nuovo_bersaglio != null:
+		_posizione_vista = nuovo_bersaglio.global_position
+	ricomincia_il_cammino()
 
 
 ## Butta la strada che stava seguendo. Serve a chi lo sposta di colpo — la

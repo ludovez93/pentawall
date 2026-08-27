@@ -16,6 +16,10 @@ extends SceneTree
 ##       godot --path . -s tools/misura_scatti.gd -- angolo senza-fuoco
 ##       godot --path . -s tools/misura_scatti.gd
 ##       godot --path . -s tools/misura_scatti.gd -- senza-fuoco
+##       godot --path . -s tools/misura_scatti.gd -- arena partita
+##
+## Con `partita` entrano in campo i cinque avversari della tappa 6: è il caso
+## vero, e va misurato **insieme** a quello senza, o non si sa di chi è il costo.
 
 const SECONDI := 12.0
 const SOGLIA_LISCIO := 0.020   ## 20 ms: sopra, il movimento smette di essere liscio
@@ -35,12 +39,22 @@ func _lavora() -> void:
 		if argomenti.has(nome):
 			quale = nome
 	var col_fuoco := not argomenti.has("senza-fuoco")
+	var con_partita := argomenti.has("partita")
 
 	var scena: Node = load("res://scenes/%s.tscn" % quale).instantiate()
 	root.add_child(scena)
 	for i in 60:
 		await process_frame
 	var giocatore: Giocatore = scena.call("giocatore")
+	var quanti_bot := 0
+	if con_partita and scena.has_method("avvia_sfida"):
+		scena.call("avvia_sfida")
+		# Si aspetta che la partita si sia messa in moto: i primi fotogrammi dopo
+		# l'ingresso di cinque corpi sono i più cari di tutti, e misurarli qui
+		# vorrebbe dire misurare l'apertura invece della partita.
+		for i in 90:
+			await process_frame
+		quanti_bot = (scena.call("avversari") as Array).size()
 
 	var tempi := []
 	var colpi := 0
@@ -95,8 +109,8 @@ func _lavora() -> void:
 			sopra_scatto += 1
 
 	print("scheda: ", RenderingServer.get_video_adapter_name())
-	print("scena: %s   fuoco: %s   colpi sparati: %d" % [
-		quale, "a raffica" if col_fuoco else "spento", colpi])
+	print("scena: %s   fuoco: %s   colpi sparati: %d   avversari in campo: %d" % [
+		quale, "a raffica" if col_fuoco else "spento", colpi, quanti_bot])
 	print("fotogrammi: %d in %.1f s  (media %.1f al secondo)" % [
 		tempi.size(), SECONDI, float(tempi.size()) / SECONDI])
 	print("tempo per fotogramma — mediana %.1f ms, media %.1f ms, 95° %.1f ms, PEGGIORE %.1f ms" % [
