@@ -62,6 +62,7 @@ firma della pubblicazione e l'ora.
 | Cambiare il colore del dardo | **COLORE** | C |
 | Accendere o chiudere la sfida | **SFIDA** | B |
 | Cambiare livello dell'avversario | **LIVELLO** | L |
+| Dardo a 19 o a 24 m/s, nell'arena | **DARDO** | R |
 
 Sul PC il mouse si aggancia al primo clic e si libera con Esc.
 
