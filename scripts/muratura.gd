@@ -326,7 +326,31 @@ static func rampa(genitore: Node, da: Vector2, a: Vector2, larghezza: float,
 	forma.shape = scatola
 	corpo.add_child(forma)
 	_pelle(corpo, misura, opaco(colore, misura))
+
+	# **I cordoli sui due bordi lunghi.** È la stessa riga chiara che i piani alti
+	# hanno sui lati che danno sul vuoto (LEARNED.md § 31), e per lo stesso motivo:
+	# dal telefono, il 12/09/2026, «sono salito su una rampa e sono nel vuoto». Una
+	# rampa è un piano inclinato con il vuoto su tutti e due i fianchi, e senza un
+	# bordo che la stacchi è una fascia di colore che finisce chissà dove.
+	for lato in [-1.0, 1.0]:
+		var cordolo := MeshInstance3D.new()
+		var mesh := BoxMesh.new()
+		mesh.size = Vector3(CORDOLO_LARGHEZZA, CORDOLO_ALTEZZA, lunghezza)
+		cordolo.mesh = mesh
+		cordolo.position = Vector3(lato * (larghezza * 0.5 - CORDOLO_LARGHEZZA * 0.5),
+				spessore * 0.5 + CORDOLO_ALTEZZA * 0.5, 0.0)
+		cordolo.material_override = acceso(CORDOLO, 0.55)
+		cordolo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		corpo.add_child(cordolo)
 	return corpo
+
+
+## Il cordolo: la riga chiara che dice dove finisce un piano. La tinta è quella
+## dell'arena (`Arena._cordoli`), scritta qui una volta perché rampe e piani
+## dicano la stessa cosa con lo stesso segno.
+const CORDOLO := Color(0.78, 0.72, 0.95)
+const CORDOLO_LARGHEZZA := 0.18
+const CORDOLO_ALTEZZA := 0.06
 
 
 ## Il prisma di un contorno: la faccia di sopra, quella di sotto e i fianchi.

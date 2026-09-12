@@ -298,7 +298,7 @@ func _costruisci() -> void:
 ## Il cordolo va **solo dove serve**: sui lati oltre i quali non c'è pavimento alla
 ## stessa quota. Fra due zone che si toccano sarebbe una riga in mezzo al niente.
 func _cordoli() -> void:
-	var tinta := Color(0.78, 0.72, 0.95)
+	var tinta := Muratura.CORDOLO
 	for zona in _pianta["zone"]:
 		var quota := float(zona["quota"])
 		if quota <= 0.0:
@@ -318,9 +318,24 @@ func _cordoli() -> void:
 			# in mezzo al pavimento.
 			if _piano_alla_quota(mezzo + fuori * 0.8, quota):
 				continue
+			# E un lato su cui arriva una rampa non è un bordo: è l'ingresso. Una
+			# riga lì è una riga da scavalcare (visto sugli scatti della rampa
+			# dell'ocra, 12/09/2026).
+			if _rampa_arriva(mezzo, quota):
+				continue
 			Muratura.decoro(self, Vector3(mezzo.x, quota + 0.03, mezzo.y),
 					Vector3(lungo, 0.06, 0.18), tinta, 0.55,
 					Vector3(0, rad_to_deg(atan2(-verso.y, verso.x)), 0))
+
+
+## Una rampa parte o arriva a quella quota, vicino a quel punto?
+func _rampa_arriva(dove: Vector2, quota: float) -> bool:
+	for r in _pianta["rampe"]:
+		var mezza := float(r["larghezza"]) * 0.5 + 0.5
+		for capo in [[r["da"], r["quota_da"]], [r["a"], r["quota_a"]]]:
+			if absf(float(capo[1]) - quota) < 0.2 and _punto(capo[0]).distance_to(dove) < mezza:
+				return true
+	return false
 
 
 ## C'è un pavimento a quella quota, in quel punto della pianta? Si guarda la
