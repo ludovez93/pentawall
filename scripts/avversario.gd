@@ -233,6 +233,7 @@ func incassa(muri: int, da: Object = null) -> bool:
 	if _immunita > 0.0:
 		return false
 	_immunita = IMMUNITA
+	_lampo_colpo = LAMPO_COLPO
 	var valgono := PUNTI_BASE * int(pow(2, muri))
 	centrato.emit(valgono, muri)
 	preso_da.emit(da, valgono, muri)
@@ -256,7 +257,7 @@ func punto_di_mira() -> Vector3:
 	# gravità perché teneva conto della zona (RICERCA-ORIGINALE.md § 8).
 	var mira := centro
 	for giro in 2:
-		var tempo := bocca.distance_to(mira) / Proiettile.VELOCITA
+		var tempo := bocca.distance_to(mira) / Proiettile.velocita
 		mira = centro + _velocita_vista * tempo
 	return mira
 
@@ -269,7 +270,7 @@ func punto_di_mira() -> Vector3:
 func tempo_all_impatto(dardo: Proiettile) -> float:
 	if dardo == null or not is_instance_valid(dardo) or not dardo.in_volo():
 		return -1.0
-	var portata := Proiettile.VELOCITA * ORIZZONTE_ALLARME
+	var portata := Proiettile.velocita * ORIZZONTE_ALLARME
 	var tratti := Balistica.traiettoria(get_world_3d().direct_space_state,
 			dardo.global_position, dardo.verso(), portata,
 			dardo.muri_restanti(), dardo.esclusi())
@@ -282,7 +283,7 @@ func tempo_all_impatto(dardo: Proiettile) -> float:
 	for altezza in [ALTEZZA_PETTO, ALTEZZA_SPALLE]:
 		var esito := Balistica.avvicinamento(tratti, global_position + Vector3(0, altezza, 0))
 		if float(esito[0]) <= soglia:
-			var tempo := float(esito[1]) / Proiettile.VELOCITA
+			var tempo := float(esito[1]) / Proiettile.velocita
 			if migliore < 0.0 or tempo < migliore:
 				migliore = tempo
 	return migliore
@@ -646,6 +647,7 @@ func _mira_e_spara() -> void:
 	var dardo := Proiettile.lancia(get_parent(), partenza, _sbaglia(verso.normalized()),
 			esclusi, self)
 	dardo.colpito.connect(_su_colpo)
+	Suoni.sparo(partenza, false)
 
 
 ## L'errore di mira: un cono attorno alla direzione giusta, largo quanto dice la
@@ -672,14 +674,30 @@ func _su_colpo(corpo: Object, _punto: Vector3, _normale: Vector3, muri: int) -> 
 		ha_centrato.emit(PUNTI_BASE * int(pow(2, muri)), muri)
 
 
-## Appena colpito si accende: senza, si vedrebbe un avversario incassare un colpo
-## e non succedere niente, e sembrerebbe rotto.
+## Il lampo del colpo (blocco B): nel primo decimo di secondo il corpo **sfonda la
+## soglia del bagliore**, e per quel decimo brilla come il dardo che l'ha preso.
+## È l'eccezione dichiarata alla regola «sopra l'uno ci va solo il dardo»: dura
+## quanto l'urto, ed è l'urto.
+const LAMPO_COLPO := 0.1
+const FORZA_LAMPO := 12.0
+var _lampo_colpo := 0.0
+
+
+## Appena colpito si accende: prima il lampo, poi il lampeggio dell'immunità.
+## Senza, si vedrebbe un avversario incassare un colpo e non succedere niente, e
+## sembrerebbe rotto.
 func _lampeggia() -> void:
 	var acceso := _immunita > 0.0 and fmod(_immunita, 0.16) > 0.08
+	var lampo := _lampo_colpo > 0.0
+	if lampo:
+		_lampo_colpo -= get_physics_process_delta_time()
 	for pezzo in _pezzi:
 		var materiale: StandardMaterial3D = pezzo["materiale"]
 		var luce: float = pezzo["luce"]
-		materiale.emission_energy_multiplier = luce * 3.0 if acceso else luce
+		if lampo:
+			materiale.emission_energy_multiplier = FORZA_LAMPO
+		else:
+			materiale.emission_energy_multiplier = luce * 3.0 if acceso else luce
 
 
 func _costruisci() -> void:

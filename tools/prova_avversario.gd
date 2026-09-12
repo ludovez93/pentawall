@@ -66,7 +66,7 @@ func _prova_anticipo() -> void:
 	var mira := bot.punto_di_mira()
 	var scarto := (mira - centro)
 	scarto.y = 0.0
-	var volo := bot.global_position.distance_to(centro) / Proiettile.VELOCITA
+	var volo := bot.global_position.distance_to(centro) / Proiettile.velocita
 	var atteso := 4.0 * volo
 	_conta("mira davanti al bersaglio, non addosso", scarto.length() > 0.6 * atteso,
 			"scarto %.2f m, atteso ~%.2f m" % [scarto.length(), atteso])

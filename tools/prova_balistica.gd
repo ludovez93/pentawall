@@ -129,7 +129,7 @@ func _il_dardo_segue_la_linea(spazio: PhysicsDirectSpaceState3D) -> void:
 	var punto := origine
 	var direzione := verso
 	var muri := 0
-	var passo := Proiettile.VELOCITA / 60.0
+	var passo := Proiettile.velocita / 60.0
 	var percorsa := 0.0
 	var spento := false
 	while percorsa < strada and not spento:

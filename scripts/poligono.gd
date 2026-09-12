@@ -65,6 +65,7 @@ func _ready() -> void:
 	_luci()
 	_insegne()
 	_bersagli_del_poligono()
+	add_child(Suoni.new())
 	_comandi = Comandi.new()
 	add_child(_comandi)
 	_comandi.colore_richiesto.connect(_cambia_colore)

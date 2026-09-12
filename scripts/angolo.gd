@@ -107,6 +107,7 @@ func _ready() -> void:
 	_bersagli_dell_angolo()
 	_prepara_gli_anelli()
 
+	add_child(Suoni.new())
 	_comandi = Comandi.new()
 	add_child(_comandi)
 	_comandi.colore_richiesto.connect(_cambia_colore)

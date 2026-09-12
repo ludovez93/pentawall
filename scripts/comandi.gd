@@ -55,6 +55,22 @@ var _pulsanti_di_scena := 0
 var _classifica: VBoxContainer
 var _righe_classifica: Array[Dictionary] = []
 
+## **Il colpo che si vede** (tappa 7, blocco B). Tre cose, tutte brevi: il
+## marcatore sul mirino quando un colpo va a segno, la vignetta rossa sul bordo da
+## cui arriva un colpo incassato, e i numeri che salgono dal punto d'impatto.
+const DURATA_MARCATORE := 0.16
+const DURATA_VIGNETTA := 0.55
+const VITA_ETICHETTA := 1.0
+const SALITA_ETICHETTA := 70.0   ## punti di schermo percorsi salendo
+const ETICHETTE_IN_RISERVA := 6  ## costruite all'apertura, mai in partita
+
+var _marcatore := 0.0
+var _vignetta := 0.0
+var _verso_vignetta := Vector2(0, 1)
+## `{"etichetta": Label, "punto": Vector3, "vita": float}`
+var _etichette_volanti: Array[Dictionary] = []
+var _prossima_etichetta := 0
+
 
 func _ready() -> void:
 	layer = 10
@@ -69,7 +85,69 @@ func _process(delta: float) -> void:
 		_avviso.modulate.a = clampf(_tempo_avviso, 0.0, 1.0)
 		if _tempo_avviso <= 0.0:
 			_avviso.text = ""
+	_marcatore = maxf(_marcatore - delta, 0.0)
+	_vignetta = maxf(_vignetta - delta, 0.0)
+	_muovi_le_etichette(delta)
 	_disegno.queue_redraw()
+
+
+## Il marcatore sul mirino: un colpo è andato a segno.
+func segna_il_colpo() -> void:
+	_marcatore = DURATA_MARCATORE
+
+
+## Un colpo incassato, e da che parte dello schermo è arrivato (destra positiva,
+## giù positivo: davanti è in alto, dietro in basso).
+func colpo_incassato_da(verso: Vector2) -> void:
+	_vignetta = DURATA_VIGNETTA
+	_verso_vignetta = verso if verso.length_squared() > 0.01 else Vector2(0, 1)
+
+
+## I punti che salgono dal punto d'impatto: «+100 · 2 SPONDE». Le etichette sono
+## sei, in riserva; la settima riusa la più vecchia.
+func punti_dal_mondo(dove: Vector3, punti: int, muri: int) -> void:
+	if _etichette_volanti.is_empty():
+		return
+	var voce: Dictionary = _etichette_volanti[_prossima_etichetta]
+	_prossima_etichetta = (_prossima_etichetta + 1) % _etichette_volanti.size()
+	voce["punto"] = dove
+	voce["vita"] = VITA_ETICHETTA
+	var etichetta: Label = voce["etichetta"]
+	etichetta.text = testo_del_colpo(punti, muri)
+	etichetta.visible = true
+	etichetta.modulate.a = 1.0
+
+
+## Il testo del colpo. Dice **sponde**, non muri: nel gioco si rimbalza su quelle.
+static func testo_del_colpo(punti: int, muri: int) -> String:
+	if muri == 0:
+		return "+%d · DIRETTO" % punti
+	if muri == 1:
+		return "+%d · 1 SPONDA" % punti
+	return "+%d · %d SPONDE" % [punti, muri]
+
+
+## Le etichette seguono il punto del mondo fotogramma per fotogramma, salendo e
+## sfumando. La camera proietta nel rettangolo visibile della finestra, che con la
+## tela stirata è già la misura in cui vivono i controlli (854 × 390 sul telefono
+## diventano 1576 × 720 per tutti e due): nessuna trasformazione in mezzo. Con una
+## in più l'etichetta finiva dieci schermi più in là — visto dal collaudo.
+func _muovi_le_etichette(delta: float) -> void:
+	var camera := get_viewport().get_camera_3d()
+	for voce in _etichette_volanti:
+		if float(voce["vita"]) <= 0.0:
+			continue
+		voce["vita"] = float(voce["vita"]) - delta
+		var etichetta: Label = voce["etichetta"]
+		if float(voce["vita"]) <= 0.0 or camera == null \
+				or camera.is_position_behind(voce["punto"]):
+			etichetta.visible = false
+			continue
+		var quota := 1.0 - float(voce["vita"]) / VITA_ETICHETTA
+		var dove: Vector2 = camera.unproject_position(voce["punto"])
+		etichetta.position = dove - etichetta.size * 0.5 \
+				- Vector2(0.0, 26.0 + SALITA_ETICHETTA * quota)
+		etichetta.modulate.a = clampf((1.0 - quota) * 2.2, 0.0, 1.0)
 
 
 func _unhandled_input(evento: InputEvent) -> void:
@@ -282,12 +360,23 @@ func _riga_accesa() -> StyleBoxFlat:
 
 
 func _disegna() -> void:
+	_disegna_la_vignetta()
 	var chiaro := Color(1, 1, 1, 0.5)
 	# Il mirino: al centro, sempre, in tutte e due le visuali.
 	var centro := _disegno.size * 0.5
 	_disegno.draw_circle(centro, 3.0, Color(1, 1, 1, 0.9))
 	for verso in [Vector2.LEFT, Vector2.RIGHT, Vector2.UP, Vector2.DOWN]:
 		_disegno.draw_line(centro + verso * 11.0, centro + verso * 20.0, chiaro, 2.0)
+	# Il marcatore del colpo a segno: quattro tacche in diagonale, nel colore del
+	# dardo, che si aprono e spariscono in un sesto di secondo.
+	if _marcatore > 0.0:
+		var quota := _marcatore / DURATA_MARCATORE
+		var tinta := Proiettile.colore_riservato
+		tinta.a = quota
+		var apertura := 14.0 + (1.0 - quota) * 10.0
+		for verso in [Vector2(1, 1), Vector2(-1, 1), Vector2(1, -1), Vector2(-1, -1)]:
+			var v: Vector2 = (verso as Vector2).normalized()
+			_disegno.draw_line(centro + v * apertura, centro + v * (apertura + 12.0), tinta, 3.0)
 
 	if _dito_sinistro != -1:
 		_disegno.draw_arc(_centro_leva, RAGGIO_LEVA, 0.0, TAU, 40, Color(1, 1, 1, 0.28), 3.0)
@@ -300,12 +389,54 @@ func _disegna() -> void:
 		_disegno.draw_arc(riposo, RAGGIO_LEVA * 0.8, 0.0, TAU, 40, Color(1, 1, 1, 0.12), 2.0)
 
 
+## La vignetta del colpo incassato: una fascia rossa sul bordo da cui è arrivato,
+## piena sul bordo e trasparente verso il centro. Se arriva di traverso si
+## accendono due bordi, ognuno per quanto gli spetta: non è un radar, è un avviso.
+func _disegna_la_vignetta() -> void:
+	if _vignetta <= 0.0:
+		return
+	var forza := clampf(_vignetta / DURATA_VIGNETTA, 0.0, 1.0)
+	var misura := _disegno.size
+	var verso := _verso_vignetta
+	for lato in [
+		{"peso": maxf(verso.x, 0.0), "da": Vector2(misura.x, 0), "a": Vector2(misura.x, misura.y),
+			"dentro": Vector2(-misura.x * 0.32, 0)},
+		{"peso": maxf(-verso.x, 0.0), "da": Vector2(0, 0), "a": Vector2(0, misura.y),
+			"dentro": Vector2(misura.x * 0.32, 0)},
+		{"peso": maxf(-verso.y, 0.0), "da": Vector2(0, 0), "a": Vector2(misura.x, 0),
+			"dentro": Vector2(0, misura.y * 0.34)},
+		{"peso": maxf(verso.y, 0.0), "da": Vector2(0, misura.y), "a": Vector2(misura.x, misura.y),
+			"dentro": Vector2(0, -misura.y * 0.34)},
+	]:
+		var peso: float = lato["peso"]
+		if peso < 0.3:
+			continue
+		var bordo := Color(0.95, 0.12, 0.16, 0.62 * forza * peso)
+		var niente := Color(0.95, 0.12, 0.16, 0.0)
+		var da: Vector2 = lato["da"]
+		var a: Vector2 = lato["a"]
+		var dentro: Vector2 = lato["dentro"]
+		_disegno.draw_polygon(
+				PackedVector2Array([da, a, a + dentro, da + dentro]),
+				PackedColorArray([bordo, bordo, niente, niente]))
+
+
 func _costruisci() -> void:
 	_disegno = Control.new()
 	_disegno.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_disegno.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_disegno.draw.connect(_disegna)
 	add_child(_disegno)
+
+	# Le etichette dei punti che salgono dal colpo: nascono qui, spente, e in
+	# partita cambiano solo testo e posizione.
+	for i in ETICHETTE_IN_RISERVA:
+		var etichetta := _etichetta(30, Color(1, 1, 1, 1))
+		etichetta.add_theme_font_override("font", carattere_titolo())
+		etichetta.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		etichetta.visible = false
+		add_child(etichetta)
+		_etichette_volanti.append({"etichetta": etichetta, "punto": Vector3.ZERO, "vita": 0.0})
 
 	_riga_alta = _etichetta(30, Color(1, 1, 1, 0.95))
 	_riga_alta.set_anchors_preset(Control.PRESET_TOP_LEFT)

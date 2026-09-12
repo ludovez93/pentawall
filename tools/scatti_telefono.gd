@@ -39,6 +39,26 @@ func _lavora() -> void:
 	await _riposa(20)
 	await _scatta("43-partita-sul-telefono.png")
 
+	# Il colpo che si vede (tappa 7, blocco B): i punti che salgono dal corpo
+	# dell'avversario, il marcatore sul mirino, la vignetta di un colpo arrivato
+	# da sinistra e un po' da dietro. Tutto insieme, per vederne la misura.
+	var comandi: Comandi = _giocatore.comandi
+	var bot: Array = _arena.call("avversari")
+	var dove: Vector3 = _giocatore.global_position - _giocatore.global_transform.basis.z * 9.0 \
+			+ Vector3(0, Avversario.ALTEZZA_PETTO, 0)
+	if not bot.is_empty():
+		var vicino: Node3D = bot[0]
+		vicino.global_position = _giocatore.global_position - _giocatore.global_transform.basis.z * 9.0 \
+				+ _giocatore.global_transform.basis.x * 1.5
+		vicino.velocity = Vector3.ZERO
+		dove = vicino.global_position + Vector3(0, Avversario.ALTEZZA_PETTO, 0)
+	await _riposa(3)
+	comandi.punti_dal_mondo(dove, 100, 2)
+	comandi.segna_il_colpo()
+	comandi.colpo_incassato_da(Vector2(-0.8, 0.6))
+	await _riposa(3)
+	await _scatta("44-colpo-sul-telefono.png")
+
 	print("fatto.")
 	quit()
 

@@ -46,6 +46,15 @@ const PUNTI_BASE := 25
 const IMMUNITA := 0.8           ## secondi di pace dopo un colpo incassato
 const CONTRACCOLPO := 3.4       ## m/s di spinta all'indietro
 
+## **I segnali di velocità e del colpo** (tappa 7, blocco B). La corsa a 7,62 m/s
+## era giusta nel 1999 e lo è ancora: le mancava il contorno. Una capsula che
+## scivola con la camera ferma e nessun passo sembra lenta a qualunque velocità.
+const CAMPO_CORSA := 6.0        ## gradi in più di campo visivo a piena corsa
+const PASSO := 0.38             ## secondi fra un passo e l'altro a piena corsa (~2,9 m)
+const SCOSSA := 0.1             ## secondi di tremito della camera al colpo a segno
+const AMPIEZZA_SCOSSA := 0.05   ## metri di scarto della camera nel tremito
+const ROLLIO_COLPO := 0.06      ## radianti di rollio della camera al colpo incassato
+
 var comandi: Node = null        ## i comandi per il pollice, se ci sono
 
 var _pendenza := 0.0
@@ -54,6 +63,11 @@ var _in_prima := false
 var _ricarica := 0.0
 var _immunita := 0.0
 var _sensibilita_mouse := 0.0022
+var _corsa := 0.0               ## 0 fermo, 1 a piena velocità, lisciato
+var _prossimo_passo := 0.0
+var _scossa := 0.0
+var _rollio := 0.0
+var _rollio_voluto := 0.0
 
 var _testa: Node3D
 var _braccio: SpringArm3D
@@ -166,6 +180,7 @@ func spara() -> bool:
 	var verso: Vector3 = tiro[1]
 	var dardo := Proiettile.lancia(get_parent(), partenza, verso, [get_rid()], self)
 	dardo.colpito.connect(_su_colpo)
+	Suoni.sparo(partenza, true)
 	sparato.emit(0)
 	return true
 
@@ -192,12 +207,34 @@ func incassa(muri: int, da: Object = null) -> bool:
 	var valgono := PUNTI_BASE * int(pow(2, muri))
 	incassato.emit(valgono, muri)
 	preso_da.emit(da, valgono, muri)
+	# Il colpo incassato si **sente** (sordo) e si **vede dal lato da cui arriva**:
+	# la vignetta sul bordo dello schermo è l'avviso periferico di MIGLIORIE.md
+	# § 4, e il contraccolpo — che c'era già — adesso inclina la camera.
+	Suoni.colpo_incassato()
+	var verso_schermo := Vector2(0, 1)
 	if da is Node3D:
 		var indietro := global_position - (da as Node3D).global_position
 		indietro.y = 0.0
 		if indietro.length_squared() > 0.001:
 			velocity += indietro.normalized() * CONTRACCOLPO
+		verso_schermo = _verso_sullo_schermo((da as Node3D).global_position)
+	_rollio_voluto = ROLLIO_COLPO * (-1.0 if verso_schermo.x >= 0.0 else 1.0)
+	if comandi != null and comandi.has_method("colpo_incassato_da"):
+		comandi.call("colpo_incassato_da", verso_schermo)
 	return true
+
+
+## Da che parte dello schermo sta un punto del mondo, visto dalla camera: destra
+## positiva, **giù positivo** — come lo schermo. Davanti è in alto, dietro in basso.
+func _verso_sullo_schermo(punto: Vector3) -> Vector2:
+	var scarto := punto - global_position
+	scarto.y = 0.0
+	if scarto.length_squared() < 0.001:
+		return Vector2(0, 1)
+	var base := _camera.global_transform.basis
+	var destra := Vector3(base.x.x, 0.0, base.x.z).normalized()
+	var avanti := Vector3(-base.z.x, 0.0, -base.z.z).normalized()
+	return Vector2(scarto.dot(destra), -scarto.dot(avanti)).normalized()
 
 
 ## Da quanto è al riparo: serve a chi disegna, per far vedere che il colpo è
@@ -208,10 +245,20 @@ func immune() -> bool:
 
 ## Tutto ciò che si può colpire sa incassare, e risponde se il colpo è valso
 ## punti: chi spara non ha bisogno di sapere cosa ha colpito.
-func _su_colpo(corpo: Object, _punto: Vector3, _normale: Vector3, muri: int) -> void:
+func _su_colpo(corpo: Object, punto: Vector3, _normale: Vector3, muri: int) -> void:
 	if corpo == null or corpo == self or not corpo.has_method("incassa"):
 		return
-	corpo.call("incassa", muri, self)
+	var valido: bool = corpo.call("incassa", muri, self)
+	if not valido:
+		return
+	# **Il colpo a segno si vede dove succede** (blocco B): il numero che sale dal
+	# punto d'impatto, il marcatore sul mirino, un decimo di tremito della camera e
+	# il suono pieno. Il conto dei punti è quello di tutti: 25, raddoppiati a muro.
+	Suoni.colpo_a_segno(muri)
+	_scossa = SCOSSA
+	if comandi != null and comandi.has_method("punti_dal_mondo"):
+		comandi.call("segna_il_colpo")
+		comandi.call("punti_dal_mondo", punto, PUNTI_BASE * int(pow(2, muri)), muri)
 
 
 func _leggi_comandi(delta: float) -> void:
@@ -274,6 +321,23 @@ func _muovi(delta: float) -> void:
 	elif velocity.y < 0.0:
 		velocity.y = -0.1
 	move_and_slide()
+	_segna_la_corsa(delta)
+
+
+## Quanto si sta correndo, e i passi. La quota di corsa allarga il campo visivo;
+## il passo suona a ritmo della velocità vera, e solo coi piedi a terra.
+func _segna_la_corsa(delta: float) -> void:
+	var a_terra := Vector3(velocity.x, 0.0, velocity.z).length()
+	var quota := clampf(a_terra / VELOCITA, 0.0, 1.0)
+	_corsa = move_toward(_corsa, quota, delta * 5.0)
+	if is_on_floor() and a_terra > 2.0:
+		_prossimo_passo -= delta * quota
+		if _prossimo_passo <= 0.0:
+			_prossimo_passo = PASSO
+			Suoni.passo()
+	else:
+		# Il primo passo arriva presto, appena si riparte.
+		_prossimo_passo = minf(_prossimo_passo, PASSO * 0.4)
 
 
 func _aggiorna_camera(delta: float) -> void:
@@ -284,7 +348,23 @@ func _aggiorna_camera(delta: float) -> void:
 	_braccio.spring_length = lerpf(BRACCIO_TERZA, 0.0, quota)
 	_braccio.position.x = lerpf(SPALLA_TERZA, 0.0, quota)
 	_braccio.position.y = lerpf(0.22, 0.0, quota)
-	_camera.fov = lerpf(CAMPO_TERZA, CAMPO_PRIMA, quota)
+	# Il campo si allarga di qualche grado in corsa e torna fermo da fermi: è il
+	# segnale di velocità che costa meno di tutti.
+	_camera.fov = lerpf(CAMPO_TERZA, CAMPO_PRIMA, quota) + CAMPO_CORSA * _corsa
+
+	# Il tremito del colpo a segno: un decimo di secondo, che si smorza.
+	if _scossa > 0.0:
+		_scossa = maxf(_scossa - delta, 0.0)
+		var forza := AMPIEZZA_SCOSSA * (_scossa / SCOSSA)
+		_camera.h_offset = randf_range(-forza, forza)
+		_camera.v_offset = randf_range(-forza, forza)
+	else:
+		_camera.h_offset = 0.0
+		_camera.v_offset = 0.0
+	# Il rollio del colpo incassato: va di colpo da un lato e torna piano.
+	_rollio = move_toward(_rollio, _rollio_voluto, delta * 1.2)
+	_rollio_voluto = move_toward(_rollio_voluto, 0.0, delta * 0.25)
+	_camera.rotation.z = _rollio
 	# In prima persona il proprio corpo si vedrebbe da dentro; l'arma resta,
 	# perché è metà del carattere del gioco. E si nasconde anche in terza persona
 	# quando il braccio della camera si accorcia contro un muro: senza questo,

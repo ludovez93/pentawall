@@ -49,6 +49,7 @@ func _lavora() -> void:
 	await _la_partita()
 	await _la_partita_a_sei()
 	await _la_sonda_parla()
+	await _il_colpo_si_sente()
 
 	_chiudi()
 
@@ -524,6 +525,48 @@ func _la_sonda_parla() -> void:
 		_conta("la riga della sonda dice «%s»" % pezzo, riga.contains(pezzo), riga)
 	var fps := float(riga.get_slice("fps=", 1).get_slice("&", 0))
 	_conta("i fotogrammi al secondo della sonda sono un numero vero", fps > 0.0, riga)
+
+
+## Il colpo che si sente (tappa 7, blocco B): i sei suoni ci sono e si caricano,
+## il testo dei punti dice quello che deve, il dardo cambia velocità per tutti, e
+## l'etichetta dei punti finisce **sullo schermo** nel posto del colpo — è l'unico
+## pezzo che passa da coordinate di finestra a coordinate di tela, e quel passaggio
+## si sbaglia in silenzio.
+func _il_colpo_si_sente() -> void:
+	_conta("la scena ha i suoni", Suoni.attivo != null)
+	if Suoni.attivo != null:
+		for nome in Suoni.NOMI:
+			_conta("il suono «%s» si carica" % nome, Suoni.attivo._flussi.get(nome) != null)
+
+	_conta("il testo del colpo diretto", Comandi.testo_del_colpo(25, 0) == "+25 · DIRETTO",
+			Comandi.testo_del_colpo(25, 0))
+	_conta("il testo del colpo a una sponda", Comandi.testo_del_colpo(50, 1) == "+50 · 1 SPONDA",
+			Comandi.testo_del_colpo(50, 1))
+	_conta("il testo del colpo a due sponde", Comandi.testo_del_colpo(100, 2) == "+100 · 2 SPONDE",
+			Comandi.testo_del_colpo(100, 2))
+
+	_conta("il dardo parte a 19 m/s", is_equal_approx(Proiettile.velocita, 19.0))
+	_arena.call("commuta_dardo")
+	_conta("il pulsante lo porta a 24 m/s", is_equal_approx(Proiettile.velocita, 24.0))
+	_arena.call("commuta_dardo")
+	_conta("e lo riporta a 19", is_equal_approx(Proiettile.velocita, 19.0))
+
+	var giocatore: Giocatore = _arena.call("giocatore")
+	var comandi: Comandi = giocatore.comandi
+	var camera := giocatore.camera()
+	var davanti := camera.global_position - camera.global_transform.basis.z * 6.0
+	comandi.punti_dal_mondo(davanti, 100, 2)
+	await process_frame
+	await process_frame
+	var etichetta: Label = comandi._etichette_volanti[0]["etichetta"]
+	var tela: Vector2 = comandi._disegno.size
+	var centro := etichetta.position + etichetta.size * 0.5
+	_conta("l'etichetta dei punti si vede", etichetta.visible and etichetta.text == "+100 · 2 SPONDE",
+			etichetta.text)
+	_conta("l'etichetta sta dentro lo schermo, vicino al centro",
+			centro.x > tela.x * 0.3 and centro.x < tela.x * 0.7
+			and centro.y > 0.0 and centro.y < tela.y * 0.7,
+			"centro %s su tela %s" % [centro, tela])
 
 
 ## Gli avversari entrano **uno per fotogramma**, per non far inciampare

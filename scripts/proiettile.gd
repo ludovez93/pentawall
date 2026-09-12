@@ -15,10 +15,16 @@ signal rimbalzato(punto: Vector3, normale: Vector3, muri: int)
 signal spento(punto: Vector3, muri: int)
 
 ## 1000 u/s del Sidewinder del 1999 = 19 m/s (RICERCA-ORIGINALE.md § 5).
-const VELOCITA := 19.0
+## Dal blocco B della tappa 7 c'è una seconda velocità, 24 m/s, da provare col
+## pollice — «lento» era uno dei tre verdetti dell'11/09, e il dardo era uno dei
+## tre candidati. Si cambia in gioco con un pulsante, e decide la partita, non il
+## PC. Sopra i 24 il rimbalzo a cinque muri non si vede più.
+const VELOCITA_BASE := 19.0
+const VELOCITA_VELOCE := 24.0
+static var velocita := VELOCITA_BASE
 const VITA_MASSIMA := 6.0      ## secondi, rete di sicurezza se non colpisce mai niente
 const RAGGIO := 0.1            ## metri: un dardo grosso, si deve vedere
-const SCIA_MASSIMA := 2.6      ## metri di scia dietro al dardo
+const SCIA_MASSIMA := 3.4      ## metri di scia dietro al dardo (era 2,6: segnale di velocità)
 const FRAZIONE_MINIMA := 0.009 ## quota minima di altezza schermo occupata (~0,9%)
 const INGRANDIMENTO_MASSIMO := 5.0
 
@@ -106,9 +112,9 @@ func _process(delta: float) -> void:
 
 	if _lampo_acceso > 0.0:
 		_lampo_acceso -= delta
-		var quota := clampf(_lampo_acceso / 0.09, 0.0, 1.0)
+		var quota := clampf(_lampo_acceso / DURATA_LAMPO, 0.0, 1.0)
 		_lampo.visible = true
-		_lampo.scale = Vector3.ONE * (0.5 + (1.0 - quota) * 1.6)
+		_lampo.scale = Vector3.ONE * (0.6 + (1.0 - quota) * 2.0)
 		var materiale: StandardMaterial3D = _lampo.material_override
 		materiale.albedo_color = Color(2.4, 2.4, 2.4, quota)
 	else:
@@ -124,7 +130,7 @@ func _process(delta: float) -> void:
 ## senza perdersi.
 func _avanza(delta: float) -> void:
 	var spazio := get_world_3d().direct_space_state
-	var passo := VELOCITA * delta
+	var passo := velocita * delta
 	var tratti := Balistica.traiettoria(spazio, global_position, _verso, passo,
 			Balistica.MURI_MASSIMI - _muri, _esclusi)
 	if tratti.is_empty():
@@ -148,6 +154,9 @@ func _avanza(delta: float) -> void:
 			_verso = _verso.bounce(tratto.normale).normalized()
 			_coda = tratto.a
 			_accendi_lampo(tratto.a)
+			# Il suono sta qui e non nella scena: così ogni posto in cui si spara
+			# — poligono, angolo, arena — conta i muri allo stesso modo.
+			Suoni.rimbalzo(tratto.a, _muri)
 			rimbalzato.emit(tratto.a, tratto.normale, _muri)
 	# L'ultimo tratto può finire nel vuoto: la posizione è già quella giusta.
 
@@ -163,8 +172,13 @@ func _spegni() -> void:
 		queue_free()
 
 
+## Il lampo al rimbalzo: più lungo e più largo di prima (era 0,09 s e 0,55 m),
+## perché è uno dei segnali di velocità del blocco B — un urto che si vede.
+const DURATA_LAMPO := 0.12
+
+
 func _accendi_lampo(punto: Vector3) -> void:
-	_lampo_acceso = 0.09
+	_lampo_acceso = DURATA_LAMPO
 	_lampo.global_position = punto
 
 
@@ -233,7 +247,7 @@ static func _corredo() -> void:
 		_forma_scia = BoxMesh.new()
 		_forma_scia.size = Vector3(0.05, 0.05, 1.0)
 		_forma_lampo = QuadMesh.new()
-		_forma_lampo.size = Vector2(0.55, 0.55)
+		_forma_lampo.size = Vector2(0.7, 0.7)
 
 		# Filo scuro: la stessa sfera vista da dentro, un filo più grande. Serve a
 		# staccare il dardo dai fondi chiari, come il nucleo lo stacca dagli scuri.

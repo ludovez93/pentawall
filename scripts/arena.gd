@@ -115,7 +115,7 @@ const CANDIDATI := [
 ]
 
 const SCORCIATOIE := {KEY_C: "colore", KEY_S: "sponde", KEY_A: "poligono", KEY_P: "partenza",
-	KEY_B: "sfida", KEY_L: "livello"}
+	KEY_B: "sfida", KEY_L: "livello", KEY_R: "dardo"}
 
 ## Gli anelli del rimbalzo, riciclati: nascerne uno a ogni impatto è quello che
 ## faceva scattare l'immagine sparando a raffica (LEARNED.md § 25).
@@ -133,6 +133,7 @@ var _candidato := 0
 var _tasti := {}
 var _solo_sponde := true
 var _bottone_sponde: Button
+var _bottone_dardo: Button
 var _partenza := 0
 var _anelli: Array[MeshInstance3D] = []
 var _vita_anelli: Array[float] = []
@@ -167,6 +168,7 @@ func _ready() -> void:
 	_sonda = Sonda.new()
 	_sonda.arena = self
 	add_child(_sonda)
+	add_child(Suoni.new())
 
 	_comandi = Comandi.new()
 	add_child(_comandi)
@@ -177,6 +179,10 @@ func _ready() -> void:
 	_bottone_sponde = _comandi.pulsante_di_scena("SPONDE", Color(0.2, 0.75, 0.7), commuta_sponde)
 	_comandi.pulsante_di_scena("PARTENZA", Color(0.85, 0.45, 0.35), passa_alla_partenza_seguente)
 	_comandi.pulsante_di_scena("POLIGONO", Color(0.35, 0.4, 0.55), torna_al_poligono)
+	# La manopola del «lento» che si gira giocando: il dardo a 19 o a 24 m/s
+	# (tappa 7, blocco B). Decide il pollice, non il PC.
+	_bottone_dardo = _comandi.pulsante_di_scena("DARDO 19", Color(0.8, 0.55, 0.25), commuta_dardo)
+	_scrivi_il_dardo()
 
 	_giocatore = Giocatore.new()
 	add_child(_giocatore)
@@ -595,6 +601,26 @@ func torna_al_poligono() -> void:
 	get_tree().change_scene_to_file("res://scenes/poligono.tscn")
 
 
+## Il dardo a 19 o a 24 m/s, per tutti: anche gli avversari sparano e schivano
+## con la velocità del momento, così il confronto è alla pari.
+func commuta_dardo() -> void:
+	if is_equal_approx(Proiettile.velocita, Proiettile.VELOCITA_BASE):
+		Proiettile.velocita = Proiettile.VELOCITA_VELOCE
+	else:
+		Proiettile.velocita = Proiettile.VELOCITA_BASE
+	_scrivi_il_dardo()
+	_comandi.annuncia("DARDO %d m/s" % int(round(Proiettile.velocita)))
+
+
+func velocita_del_dardo() -> float:
+	return Proiettile.velocita
+
+
+func _scrivi_il_dardo() -> void:
+	if _bottone_dardo != null:
+		_bottone_dardo.text = "DARDO %d" % int(round(Proiettile.velocita))
+
+
 func _process(delta: float) -> void:
 	_aggiorna_righe()
 	_respiro_degli_anelli(delta)
@@ -611,6 +637,7 @@ func _process(delta: float) -> void:
 				"partenza": passa_alla_partenza_seguente()
 				"sfida": commuta_sfida()
 				"livello": cambia_livello()
+				"dardo": commuta_dardo()
 		_tasti[tasto] = giu
 
 
@@ -926,6 +953,10 @@ func _su_colpo_valido(chi_spara: Object, punti: int, muri: int, chi_incassa: Nod
 			_annuncia_il_colpo(punti, muri)
 		elif chi_incassa == _giocatore:
 			_comandi.annuncia("COLPITO DA %s" % String(_concorrenti[autore]["nome"]))
+		else:
+			# Un colpo fra due avversari: si sente da dove succede, sordo. È il
+			# rumore di una partita che va avanti anche dove non guardi.
+			Suoni.colpo_nel_mondo(chi_incassa.global_position)
 	elif chi_incassa == _giocatore:
 		_comandi.annuncia("COLPITO")
 	_aggiorna_la_classifica()
@@ -974,6 +1005,7 @@ func _ricompari(chi: Node3D, da: Object) -> void:
 	var dove := _dove_ricomparire(lontano_da, chi)
 	if chi == _giocatore:
 		_mettiti_alla_partenza(dove)
+		Suoni.ricomparsa()
 	elif chi is Avversario:
 		_porta_alla_partenza(chi as CharacterBody3D, dove)
 		(chi as Avversario).ricomincia_il_cammino()
@@ -1051,18 +1083,20 @@ func _aggiorna_righe() -> void:
 		else:
 			_comandi.scrivi_alto("%d° · ti mancano %d punti" %
 					[posizione_mia(), maxi(TRAGUARDO - miei, 0)])
-		_comandi.scrivi_basso("%d avversari · %s · %s · %s · dardo %s · %d fps" % [
+		_comandi.scrivi_basso("%d avversari · %s · %s · %s · dardo %s %d m/s · %d fps" % [
 			_concorrenti.size() - 1,
 			Avversario.TARATURE[_livello]["nome"],
 			String(_pianta["partenze"][_partenza]["nome"]), visuale,
-			CANDIDATI[_candidato]["nome"], Engine.get_frames_per_second()])
+			CANDIDATI[_candidato]["nome"], int(round(Proiettile.velocita)),
+			Engine.get_frames_per_second()])
 		return
 	_comandi.scrivi_alto("%d punti" % _punteggio)
 	var migliore := "—" if _migliore == 0 else "%d con %d muri" % [_migliore, _migliore_muri]
-	_comandi.scrivi_basso("%s · %s · miglior colpo: %s · %s · dardo %s · %d fps" % [
+	_comandi.scrivi_basso("%s · %s · miglior colpo: %s · %s · dardo %s %d m/s · %d fps" % [
 		"rimbalza solo sulle sponde" if _solo_sponde else "rimbalza tutto",
 		String(_pianta["partenze"][_partenza]["nome"]), migliore, visuale,
-		CANDIDATI[_candidato]["nome"], Engine.get_frames_per_second()])
+		CANDIDATI[_candidato]["nome"], int(round(Proiettile.velocita)),
+		Engine.get_frames_per_second()])
 
 
 func _cambia_colore() -> void:
