@@ -147,6 +147,14 @@
     {"nome": "sopra l'ala tribuna", "centro": [-24,0], "misura": [18,30], "quota": 8, "tinta": "soffitto"}
   ],
 
+  "fasce": [
+    {"nome": "gradino del soffitto, cuore verso tribuna", "centro": [-15,0], "misura": [0.6,30], "quota": 8, "alto": 4, "tinta": "soffitto"},
+    {"nome": "gradino del soffitto, cuore verso mattone", "centro": [15,0], "misura": [0.6,30], "quota": 8, "alto": 4, "tinta": "soffitto"},
+    {"nome": "gradino del soffitto, cuore verso nord", "centro": [0,-15], "misura": [30,0.6], "quota": 8, "alto": 4, "tinta": "soffitto"},
+    {"nome": "gradino del soffitto, sud verso tribuna", "centro": [-24,15], "misura": [18,0.6], "quota": 8, "alto": 4, "tinta": "soffitto"},
+    {"nome": "gradino del soffitto, sud verso mattone", "centro": [24,15], "misura": [18,0.6], "quota": 8, "alto": 4, "tinta": "soffitto"}
+  ],
+
   "lucernari": [
     {"dove": [-9,-9], "misura": [6,4], "quota": 11.9},
     {"dove": [9,-9], "misura": [6,4], "quota": 11.9},

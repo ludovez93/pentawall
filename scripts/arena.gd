@@ -87,7 +87,10 @@ const TINTE := {
 	"ocra": Color(0.66, 0.47, 0.15),
 	"mattone": Color(0.58, 0.19, 0.20),
 	"tribuna": Color(0.19, 0.16, 0.38),
-	"soffitto": Color(0.10, 0.10, 0.21),
+	# Era (0.10, 0.10, 0.21): con la luce d'ambiente veniva nero, uguale al fondo
+	# dietro l'arena, e dal telefono «alcuni tetti non si vedono» (12/09/2026).
+	# Misurato con due scatti: schiarita si vede, con più luci restava nera.
+	"soffitto": Color(0.36, 0.34, 0.60),
 }
 
 ## **Il pubblico sulle gradinate.** Tre file per gradinata, una più alta
@@ -252,6 +255,16 @@ func _costruisci() -> void:
 		Muratura.muro(self, Vector3(float(c["centro"][0]),
 				float(c["quota"]) + spessore * 0.5, float(c["centro"][1])),
 				misura, _tinta(c["tinta"]))
+
+	# Le fasce: dove il soffitto sale da 8 a 12 metri — dalle ali al cuore e al
+	# lato sud — fra i due soffitti restava un gradino aperto di quattro metri, e
+	# da un'ala si guardava dentro il vuoto sopra l'altra («alcuni tetti non si
+	# vedono», dal telefono, 12/09/2026). Sono muri come gli altri, solo in alto.
+	for f in _pianta.get("fasce", []):
+		var misura := Vector3(float(f["misura"][0]), float(f["alto"]), float(f["misura"][1]))
+		Muratura.muro(self, Vector3(float(f["centro"][0]),
+				float(f["quota"]) + misura.y * 0.5, float(f["centro"][1])),
+				misura, _tinta(f["tinta"]))
 
 	# I lucernari: nell'originale sono la cosa che dice «palestra» in mezzo
 	# secondo, e costano un rettangolo acceso l'uno.
