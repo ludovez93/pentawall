@@ -838,3 +838,17 @@ func _materiale(colore: Color, luce: float) -> StandardMaterial3D:
 	materiale.roughness = 0.45
 	_pezzi.append({"materiale": materiale, "luce": luce})
 	return materiale
+
+
+
+## Un corpo vero al posto della capsula (tappa 7). `contorni` sono i gusci del
+## contorno costruiti attorno al corpo nuovo: da qui in poi sono quelli che si
+## aggiornano fotogramma per fotogramma, al posto di quelli della capsula.
+func vesti_con(corpo: Node3D, contorni: Array) -> void:
+	for figlio in _aspetto.get_children():
+		if figlio != _canna:
+			figlio.visible = false
+	_aspetto.add_child(corpo)
+	_contorni.clear()
+	for contorno in contorni:
+		_contorni.append(contorno as Dictionary)

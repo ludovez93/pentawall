@@ -424,3 +424,14 @@ func _materiale(colore: Color, luce: float) -> StandardMaterial3D:
 	materiale.emission_energy_multiplier = luce
 	materiale.roughness = 0.45
 	return materiale
+
+
+
+## Un corpo vero al posto della capsula (tappa 7): si nasconde quello che c'era e
+## si appende il nuovo sotto la parte visibile, così in prima persona sparisce
+## come spariva la capsula. L'arma di scatole si spegne: il corpo ha la sua.
+func vesti_con(corpo: Node3D) -> void:
+	for figlio in _corpo_visibile.get_children():
+		figlio.visible = false
+	_arma.visible = false
+	_corpo_visibile.add_child(corpo)

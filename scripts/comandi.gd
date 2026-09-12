@@ -360,6 +360,7 @@ func _pulsante(testo: String, scarto: Vector2, misura: Vector2, colore: Color,
 	pulsante.offset_right = scarto.x + misura.x
 	pulsante.offset_bottom = scarto.y + misura.y
 	pulsante.add_theme_font_size_override("font_size", 22)
+	pulsante.add_theme_font_override("font", carattere_titolo())
 	pulsante.add_theme_color_override("font_color", Color(1, 1, 1, 0.92))
 	for stato in ["normal", "hover", "focus"]:
 		pulsante.add_theme_stylebox_override(stato, _sfondo(colore, 0.34))
@@ -387,5 +388,114 @@ func _etichetta(dimensione: int, colore: Color) -> Label:
 	etichetta.add_theme_color_override("font_color", colore)
 	etichetta.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.75))
 	etichetta.add_theme_constant_override("outline_size", 6)
+	etichetta.add_theme_font_override("font", carattere_testo())
 	etichetta.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return etichetta
+
+
+
+# ------------------------------------------------------------------ la partita
+
+## I due caratteri dell'interfaccia (tappa 7): i titoli in Russo One, i testi in
+## Exo 2 semi-grasso. Caricati una volta; se mancano si torna a quello del motore.
+const CARATTERE_TESTO := "res://assets/font/Exo2.ttf"
+const CARATTERE_TITOLO := "res://assets/font/RussoOne-Regular.ttf"
+static var _testo: Font = null
+static var _titolo: Font = null
+
+var _cronometro: Label
+var _posizione_grande: Label
+var _punti_piccoli: Label
+
+
+static func carattere_testo() -> Font:
+	if _testo == null:
+		var base: Font = load(CARATTERE_TESTO) if ResourceLoader.exists(CARATTERE_TESTO) else null
+		if base == null:
+			_testo = ThemeDB.fallback_font
+		else:
+			var variante := FontVariation.new()
+			variante.base_font = base
+			var server := TextServerManager.get_primary_interface()
+			variante.variation_opentype = {server.name_to_tag("weight"): 640}
+			_testo = variante
+	return _testo
+
+
+static func carattere_titolo() -> Font:
+	if _titolo == null:
+		if ResourceLoader.exists(CARATTERE_TITOLO):
+			_titolo = load(CARATTERE_TITOLO)
+		else:
+			_titolo = ThemeDB.fallback_font
+	return _titolo
+
+
+## L'interfaccia della partita al posto di quella di collaudo: via la riga
+## tecnica e i pulsanti di prova, dentro il cronometro, la posizione e i punti.
+## Restano il mirino, la leva, FUOCO e SALTA: quelli sono il gioco.
+func modalita_partita(tempo: String, posizione: int, punti: int) -> void:
+	_riga_alta.visible = false
+	_riga_bassa.visible = false
+	# I due pulsanti del gioco diventano più coprenti: a un terzo di opacità il
+	# loro colore lo faceva il muro dietro — SALTA usciva grigio davanti all'ocra.
+	var pieni := {"FUOCO": Color(0.95, 0.3, 0.35), "SALTA": Color(0.2, 0.6, 1.0)}
+	for figlio in get_children():
+		if not (figlio is Button):
+			continue
+		var pulsante := figlio as Button
+		if not pieni.has(pulsante.text):
+			pulsante.visible = false
+			continue
+		for stato in ["normal", "hover", "focus"]:
+			pulsante.add_theme_stylebox_override(stato, _sfondo(pieni[pulsante.text], 0.66))
+		pulsante.add_theme_stylebox_override("pressed", _sfondo(pieni[pulsante.text], 0.9))
+	# Due righe sole in partita, quindi possono essere grandi quanto servono.
+	for riga in _righe_classifica:
+		for chiave in ["posizione", "nome", "punti"]:
+			(riga[chiave] as Label).add_theme_font_size_override("font_size", 25)
+		(riga["nome"] as Label).custom_minimum_size = Vector2(150, 0)
+		(riga["punti"] as Label).custom_minimum_size = Vector2(72, 0)
+	if _cronometro == null:
+		_costruisci_la_partita()
+	_cronometro.text = tempo
+	_posizione_grande.text = "%d°" % posizione
+	_punti_piccoli.text = "%d PUNTI" % punti
+
+
+func _costruisci_la_partita() -> void:
+	var pillola := PanelContainer.new()
+	pillola.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	pillola.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	pillola.offset_top = 14
+	pillola.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var fondo := StyleBoxFlat.new()
+	fondo.bg_color = Color(0.03, 0.03, 0.08, 0.55)
+	fondo.set_corner_radius_all(20)
+	fondo.content_margin_left = 26
+	fondo.content_margin_right = 26
+	fondo.content_margin_top = 2
+	fondo.content_margin_bottom = 6
+	pillola.add_theme_stylebox_override("panel", fondo)
+	add_child(pillola)
+	_cronometro = _etichetta(46, Color(1, 1, 1, 0.98))
+	_cronometro.add_theme_font_override("font", carattere_titolo())
+	_cronometro.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	pillola.add_child(_cronometro)
+
+	_posizione_grande = _etichetta(56, Color(1, 1, 1, 0.98))
+	_posizione_grande.add_theme_font_override("font", carattere_titolo())
+	_posizione_grande.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_posizione_grande.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_posizione_grande.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_posizione_grande.offset_right = -30
+	_posizione_grande.offset_top = 8
+	add_child(_posizione_grande)
+
+	_punti_piccoli = _etichetta(22, Color(1, 1, 1, 0.82))
+	_punti_piccoli.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_punti_piccoli.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_punti_piccoli.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_punti_piccoli.offset_right = -32
+	_punti_piccoli.offset_top = 78
+	add_child(_punti_piccoli)
