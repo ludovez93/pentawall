@@ -52,6 +52,7 @@ var _candidato := 0
 var _tasti := {}
 
 var _avversario: Avversario
+var _sonda: Sonda
 var _sfida := false
 var _finita := false
 var _livello := 1
@@ -66,6 +67,13 @@ func _ready() -> void:
 	_insegne()
 	_bersagli_del_poligono()
 	add_child(Suoni.new())
+	# La sonda dei fotogrammi anche qui: il poligono è la scena d'ingresso, e
+	# una partita giocata qui invece che nell'arena deve lasciare traccia lo
+	# stesso (12/09/2026: la prima partita dal telefono non ne ha lasciata).
+	_sonda = Sonda.new()
+	_sonda.arena = self
+	_sonda.scena = "poligono"
+	add_child(_sonda)
 	_comandi = Comandi.new()
 	add_child(_comandi)
 	_comandi.colore_richiesto.connect(_cambia_colore)
@@ -171,6 +179,7 @@ func avvia_sfida() -> void:
 	_finita = false
 	_punti_tu = 0
 	_punti_lui = 0
+	_sonda.parti()
 	for bersaglio in _bersagli:
 		bersaglio.metti_in_pausa(true)
 
@@ -190,6 +199,7 @@ func avvia_sfida() -> void:
 
 
 func chiudi_sfida() -> void:
+	_sonda.fermati("chiusa")
 	_sfida = false
 	_finita = false
 	if _avversario != null and is_instance_valid(_avversario):
@@ -265,6 +275,7 @@ func _controlla_il_traguardo() -> void:
 	if _punti_tu < TRAGUARDO and _punti_lui < TRAGUARDO:
 		return
 	_finita = true
+	_sonda.fermati("traguardo")
 	if _avversario != null and is_instance_valid(_avversario):
 		_avversario.bersaglio = null
 	_comandi.scrivi_sfida("ANCORA")

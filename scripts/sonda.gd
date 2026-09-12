@@ -23,6 +23,12 @@ const MINIMO_FINALE := 2.0    ## sotto, la coda di una partita non vale una riga
 
 ## Chi dice quanti avversari ci sono in campo: la scena che ci ospita.
 var arena: Node = null
+## Come si chiama la scena nella riga: «arena» (la partita a sei) o «poligono».
+var scena := "arena"
+
+## Quanto si aspetta, all'apertura, prima di mandare la riga di saluto: il tempo
+## che la pagina legga `versione.txt`, così il saluto dice quale versione gira.
+const ATTESA_SALUTO := 2.0
 
 var _in_partita := false
 var _dal_via := 0.0
@@ -59,6 +65,13 @@ func _ready() -> void:
 	if _schermo == "":
 		var misura := DisplayServer.window_get_size()
 		_schermo = "schermo=%dx%d&dpr=1&app=0" % [misura.x, misura.y]
+	# Il saluto: «questa scena si è aperta, con questa versione, su questo
+	# schermo». Serve a distinguere «non ha giocato qui» da «la spedizione non
+	# parte»: la prima partita dal telefono (12/09/2026) non ha lasciato traccia
+	# e da qui non si capiva quale delle due fosse.
+	get_tree().create_timer(ATTESA_SALUTO).timeout.connect(func() -> void:
+		if is_inside_tree() and not _in_partita:
+			_spedisci("apertura"))
 
 
 ## La partita è cominciata: da qui si conta.
@@ -102,9 +115,11 @@ func riga(motivo := "") -> String:
 	var avversari := 0
 	if arena != null and arena.has_method("avversari"):
 		avversari = (arena.call("avversari") as Array).size()
+	elif arena != null and arena.has_method("avversario"):
+		avversari = 1 if arena.call("avversario") != null else 0
 	var dardi := get_tree().get_nodes_in_group(Proiettile.GRUPPO).size() if is_inside_tree() else 0
-	var testo := "v=%s&n=%d&t=%d&fps=%.1f&peggiore=%d&lenti=%d&avv=%d&dardi=%d&%s" % [
-		_versione.uri_encode(), _spedite + 1, int(round(_dal_via)), fps,
+	var testo := "v=%s&scena=%s&n=%d&t=%d&fps=%.1f&peggiore=%d&lenti=%d&avv=%d&dardi=%d&%s" % [
+		_versione.uri_encode(), scena, _spedite + 1, int(round(_dal_via)), fps,
 		int(round(_peggiore_ms)), _lenti, avversari, dardi, _schermo]
 	if motivo != "":
 		testo += "&fine=" + motivo.uri_encode()
@@ -121,8 +136,17 @@ func _spedisci(motivo: String) -> void:
 	if OS.has_feature("web"):
 		# `no-cors`: la risposta non ci interessa, conta che la richiesta arrivi.
 		# `keepalive`: parte anche se la pagina sta per chiudersi.
+		# La richiesta più semplice che un browser sappia fare: un'immagine. Niente
+		# CORS, niente `keepalive`, niente operaio di servizio in mezzo (quello
+		# nostro lascia passare gli altri domini, ma la strada corta non dipende
+		# da nessuno). Se anche `Image` mancasse, si ripiega su `fetch`.
 		var indirizzo := JSON.stringify("%s?%s" % [INDIRIZZO, testo])
-		JavaScriptBridge.eval("try { fetch(%s, {mode: 'no-cors', keepalive: true}).catch(function () {}); } catch (e) {}" % indirizzo)
+		JavaScriptBridge.eval("""
+			(function (u) {
+				try { var i = new Image(); i.src = u; return; } catch (e) {}
+				try { fetch(u, {mode: 'no-cors'}).catch(function () {}); } catch (e) {}
+			})(%s);
+		""" % indirizzo)
 	else:
 		print("sonda: ", testo)
 	_azzera()

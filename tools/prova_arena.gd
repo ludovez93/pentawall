@@ -521,7 +521,7 @@ func _la_sonda_parla() -> void:
 	var riga: String = sonda.riga("prova")
 	sonda.fermati("prova")
 	sonda.queue_free()
-	for pezzo in ["fps=", "peggiore=", "lenti=", "avv=", "dardi=", "schermo=", "fine=prova"]:
+	for pezzo in ["scena=arena", "fps=", "peggiore=", "lenti=", "avv=", "dardi=", "schermo=", "fine=prova"]:
 		_conta("la riga della sonda dice «%s»" % pezzo, riga.contains(pezzo), riga)
 	var fps := float(riga.get_slice("fps=", 1).get_slice("&", 0))
 	_conta("i fotogrammi al secondo della sonda sono un numero vero", fps > 0.0, riga)
