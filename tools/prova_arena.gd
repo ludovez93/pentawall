@@ -48,6 +48,7 @@ func _lavora() -> void:
 	await _lavversario_ti_raggiunge(pianta)
 	await _la_partita()
 	await _la_partita_a_sei()
+	await _la_sonda_parla()
 
 	_chiudi()
 
@@ -504,6 +505,25 @@ func _la_partita_a_sei() -> void:
 	await process_frame
 	_conta("chiusa la partita non resta nessuno in campo",
 			(_arena.call("avversari") as Array).is_empty())
+
+
+## La sonda dei fotogrammi (tappa 7, blocco 0): la riga che manda al Server 2 deve
+## avere dentro i numeri che servono a leggere il telefono da qui. Si guarda la
+## riga, non la spedizione: la pagina web non c'è, in questo collaudo.
+func _la_sonda_parla() -> void:
+	var sonda := Sonda.new()
+	sonda.arena = _arena
+	_arena.add_child(sonda)
+	sonda.parti()
+	for i in 12:
+		await process_frame
+	var riga: String = sonda.riga("prova")
+	sonda.fermati("prova")
+	sonda.queue_free()
+	for pezzo in ["fps=", "peggiore=", "lenti=", "avv=", "dardi=", "schermo=", "fine=prova"]:
+		_conta("la riga della sonda dice «%s»" % pezzo, riga.contains(pezzo), riga)
+	var fps := float(riga.get_slice("fps=", 1).get_slice("&", 0))
+	_conta("i fotogrammi al secondo della sonda sono un numero vero", fps > 0.0, riga)
 
 
 ## Gli avversari entrano **uno per fotogramma**, per non far inciampare

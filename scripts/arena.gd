@@ -151,6 +151,8 @@ var _turno_riscelta := 0
 ## classifica ci sono già tutti dal fischio d'inizio — è il **corpo** ad arrivare
 ## un attimo dopo, non il concorrente.
 var _in_arrivo: Array[Dictionary] = []
+## La sonda dei fotogrammi: in partita manda i numeri del telefono al Server 2.
+var _sonda: Sonda
 
 
 func _ready() -> void:
@@ -161,6 +163,10 @@ func _ready() -> void:
 	_rete_di_cammino()
 	_luci()
 	_prepara_gli_anelli()
+
+	_sonda = Sonda.new()
+	_sonda.arena = self
+	add_child(_sonda)
 
 	_comandi = Comandi.new()
 	add_child(_comandi)
@@ -658,6 +664,7 @@ func avvia_sfida() -> void:
 
 	_prossima_riscelta = RISCELTA
 	_turno_riscelta = 0
+	_sonda.parti()
 	_aggiorna_la_classifica()
 	_comandi.scrivi_sfida("CHIUDI")
 	_comandi.annuncia("PARTITA · %s" % String(Avversario.TARATURE[_livello]["nome"]).to_upper())
@@ -678,6 +685,7 @@ func _fai_entrare_il_prossimo() -> void:
 
 
 func chiudi_sfida() -> void:
+	_sonda.fermati("chiusa")
 	_sfida = false
 	_finita = false
 	_in_arrivo.clear()
@@ -889,6 +897,7 @@ func _controlla_il_traguardo() -> void:
 		return
 
 	_finita = true
+	_sonda.fermati("traguardo")
 	for bot in avversari():
 		bot.bersaglio = null
 	_aggiorna_la_classifica()
