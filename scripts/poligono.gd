@@ -67,6 +67,7 @@ func _ready() -> void:
 	_insegne()
 	_bersagli_del_poligono()
 	add_child(Suoni.new())
+	Resa.regola(get_viewport())
 	# La sonda dei fotogrammi anche qui: il poligono è la scena d'ingresso, e
 	# una partita giocata qui invece che nell'arena deve lasciare traccia lo
 	# stesso (12/09/2026: la prima partita dal telefono non ne ha lasciata).

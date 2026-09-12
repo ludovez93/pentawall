@@ -30,12 +30,29 @@ var scena := "arena"
 ## che la pagina legga `versione.txt`, così il saluto dice quale versione gira.
 const ATTESA_SALUTO := 2.0
 
+## Sopra i 40 ms un fotogramma è uno **scatto**: a 30 al secondo ogni fotogramma
+## supera i venti, e la soglia dei venti non distingue più niente.
+const SOGLIA_SCATTO_MS := 40.0
+## Quanto dura la misura a riposo dopo il saluto: la scena appena aperta, senza
+## partita. Serve a dire se il telefono **può** andare sopra i 30, prima di
+## toccare qualsiasi cosa: un tetto e un affanno si curano in modi opposti.
+const RIPOSO := 5.0
+
 var _in_partita := false
+var _riposo := false
 var _dal_via := 0.0
 var _finestra := 0.0
 var _fotogrammi := 0
 var _peggiore_ms := 0.0
 var _lenti := 0
+var _scatti := 0
+var _cpu_somma := 0.0
+var _cpu_max := 0.0
+## Il contesto del fotogramma peggiore della finestra: quanto ci ha messo il
+## calcolo, a che velocità andava il giocatore, quanti dardi c'erano in volo.
+var _peggiore_cpu := 0.0
+var _peggiore_velocita := 0.0
+var _peggiore_dardi := 0
 var _spedite := 0
 var _ultimo_usec := 0
 var _versione := "?"
@@ -70,13 +87,21 @@ func _ready() -> void:
 	# parte»: la prima partita dal telefono (12/09/2026) non ha lasciato traccia
 	# e da qui non si capiva quale delle due fosse.
 	get_tree().create_timer(ATTESA_SALUTO).timeout.connect(func() -> void:
-		if is_inside_tree() and not _in_partita:
-			_spedisci("apertura"))
+		if not is_inside_tree() or _in_partita:
+			return
+		_spedisci("apertura")
+		# Poi cinque secondi a riposo, così com'è la scena appena aperta.
+		parti()
+		_riposo = true
+		get_tree().create_timer(RIPOSO).timeout.connect(func() -> void:
+			if is_inside_tree() and _riposo:
+				fermati("riposo")))
 
 
 ## La partita è cominciata: da qui si conta.
 func parti() -> void:
 	_in_partita = true
+	_riposo = false
 	_dal_via = 0.0
 	_spedite = 0
 	_azzera()
@@ -89,6 +114,7 @@ func fermati(motivo: String) -> void:
 	if not _in_partita:
 		return
 	_in_partita = false
+	_riposo = false
 	if _finestra >= MINIMO_FINALE:
 		_spedisci(motivo)
 
@@ -99,14 +125,37 @@ func _process(_delta: float) -> void:
 	var adesso := Time.get_ticks_usec()
 	var ms := float(adesso - _ultimo_usec) / 1000.0
 	_ultimo_usec = adesso
+	# Il calcolo del fotogramma appena passato: quello che il motore sa di sé.
+	# Il resto — fino al tempo di parete — è disegno, browser e attesa dello
+	# schermo. È la separazione delle voci di LEARNED.md § 20.
+	var cpu := (Performance.get_monitor(Performance.TIME_PROCESS)
+			+ Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS)) * 1000.0
 	_fotogrammi += 1
 	_finestra += ms / 1000.0
 	_dal_via += ms / 1000.0
-	_peggiore_ms = maxf(_peggiore_ms, ms)
+	_cpu_somma += cpu
+	_cpu_max = maxf(_cpu_max, cpu)
+	if ms > _peggiore_ms:
+		_peggiore_ms = ms
+		_peggiore_cpu = cpu
+		_peggiore_velocita = _velocita_del_giocatore()
+		_peggiore_dardi = get_tree().get_nodes_in_group(Proiettile.GRUPPO).size()
 	if ms > SOGLIA_LENTO_MS:
 		_lenti += 1
+	if ms > SOGLIA_SCATTO_MS:
+		_scatti += 1
 	if _finestra >= OGNI:
 		_spedisci("")
+
+
+func _velocita_del_giocatore() -> float:
+	if arena == null or not arena.has_method("giocatore"):
+		return 0.0
+	var chi: Variant = arena.call("giocatore")
+	if chi is CharacterBody3D:
+		var v: Vector3 = (chi as CharacterBody3D).velocity
+		return Vector2(v.x, v.z).length()
+	return 0.0
 
 
 ## La riga, così com'è in questo momento. Pubblica perché il collaudo la legge.
@@ -118,9 +167,16 @@ func riga(motivo := "") -> String:
 	elif arena != null and arena.has_method("avversario"):
 		avversari = 1 if arena.call("avversario") != null else 0
 	var dardi := get_tree().get_nodes_in_group(Proiettile.GRUPPO).size() if is_inside_tree() else 0
-	var testo := "v=%s&scena=%s&n=%d&t=%d&fps=%.1f&peggiore=%d&lenti=%d&avv=%d&dardi=%d&%s" % [
+	var cpu := _cpu_somma / float(_fotogrammi) if _fotogrammi > 0 else 0.0
+	var scala := Resa.scala(get_viewport()) if is_inside_tree() else 1.0
+	var mem := Performance.get_monitor(Performance.MEMORY_STATIC) / 1048576.0
+	var testo := ("v=%s&scena=%s&n=%d&t=%d&fps=%.1f&peggiore=%d&lenti=%d&scatti=%d"
+			+ "&cpu=%.1f&cpumax=%d&pegg_cpu=%d&pegg_vel=%.1f&pegg_dardi=%d"
+			+ "&avv=%d&dardi=%d&scala=%.2f&mem=%d&%s") % [
 		_versione.uri_encode(), scena, _spedite + 1, int(round(_dal_via)), fps,
-		int(round(_peggiore_ms)), _lenti, avversari, dardi, _schermo]
+		int(round(_peggiore_ms)), _lenti, _scatti,
+		cpu, int(round(_cpu_max)), int(round(_peggiore_cpu)), _peggiore_velocita, _peggiore_dardi,
+		avversari, dardi, scala, int(round(mem)), _schermo]
 	if motivo != "":
 		testo += "&fine=" + motivo.uri_encode()
 	return testo
@@ -157,3 +213,9 @@ func _azzera() -> void:
 	_fotogrammi = 0
 	_peggiore_ms = 0.0
 	_lenti = 0
+	_scatti = 0
+	_cpu_somma = 0.0
+	_cpu_max = 0.0
+	_peggiore_cpu = 0.0
+	_peggiore_velocita = 0.0
+	_peggiore_dardi = 0

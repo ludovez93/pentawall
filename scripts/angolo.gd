@@ -107,6 +107,7 @@ func _ready() -> void:
 	_bersagli_dell_angolo()
 	_prepara_gli_anelli()
 
+	Resa.regola(get_viewport())
 	add_child(Suoni.new())
 	_comandi = Comandi.new()
 	add_child(_comandi)

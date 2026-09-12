@@ -165,6 +165,7 @@ func _ready() -> void:
 	_luci()
 	_prepara_gli_anelli()
 
+	Resa.regola(get_viewport())
 	_sonda = Sonda.new()
 	_sonda.arena = self
 	add_child(_sonda)
