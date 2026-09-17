@@ -81,6 +81,13 @@ jobs:
           # mirare insieme torna a far saltare la visuale, non si pubblica.
           "$GODOT" --headless --path . -s tools/prova_comandi.gd
 
+      - name: Collauda la schermata d'ingresso
+        run: |
+          set -euo pipefail
+          # E' la scena principale: se non si apre, dal link non c'e' niente da
+          # giocare e il difetto si scoprirebbe solo col telefono in mano.
+          "$GODOT" --headless --path . -s tools/prova_ingresso.gd
+
       - name: Collauda l'angolo di arena
         run: |
           set -euo pipefail

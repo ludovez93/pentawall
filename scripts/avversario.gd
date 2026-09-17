@@ -110,6 +110,32 @@ const PASSO_PRESO := 1.2
 ## pilastro dell'ocra, con la spinta al massimo e la velocità a zero.
 const PAZIENZA_INCASTRO := 0.45
 
+# ------------------------------------------------------- la caccia (blocco C)
+
+## Il gruppo in cui stanno tutti. Serve a **farsi sentire**: chi spara avvisa il
+## gruppo, e non deve conoscere questa classe — in GDScript due classi che si
+## nominano a vicenda sono un ciclo, e il giocatore è già nominato qui.
+const GRUPPO := &"avversari"
+
+## Quanto vale una notizia. Dopo sei secondi chi si cercava può essere ovunque:
+## a 7,62 m/s in sei secondi si attraversano quarantacinque metri.
+const MEMORIA := 6.0
+
+## Quanto lontano si sente uno sparo. L'arena è larga sessantasei metri: a
+## ventotto se ne sente mezza, non tutta.
+const ORECCHIO := 28.0
+
+## Quanto vicino si arriva a un punto di ronda perché valga «ci sono stato», e
+## quanto si insiste prima di cambiarlo comunque (un punto dietro una porta
+## chiusa terrebbe fermi per sempre).
+const RONDA_ARRIVATO := 4.0
+const RONDA_PAZIENZA := 14.0
+
+## I posti dove si va a cercare quando non si hanno notizie: **le sei partenze**,
+## che sono i posti dove la gente c'è. Le riempie l'arena quando comincia la
+## partita; dove l'elenco è vuoto, chi non ha notizie resta dov'è.
+static var punti_di_ronda: Array[Vector3] = []
+
 ## Le tre tarature. Cambiano **solo** come esegue, mai cosa sa fare.
 const TARATURE := [
 	{
@@ -141,6 +167,24 @@ const TARATURE := [
 ## Chi insegue e a chi spara. Senza, resta dov'è — ma continua a schivare: è così
 ## che i collaudi possono sparargli addosso senza rincorrerlo.
 var bersaglio: Node3D = null
+
+## **L'interruttore della caccia** (tappa 7, blocco C). Spento — poligono,
+## angolo, i collaudi delle tappe 1-3 — l'avversario sa sempre dove sei, che è
+## quello che serve a uno sparring partner e che quelle tappe hanno provato.
+## Acceso — la partita nell'arena — ti vede, ti ricorda, o ti cerca: misurato il
+## 12/09/2026, ti inseguiva senza vederti l'84% del tempo.
+var caccia := false
+
+## Se lo vede **in questo fotogramma**: lo stesso raggio serve a guardare, a
+## muoversi e a sparare, e si paga una volta sola.
+var _vede := false
+var _vedeva := false
+## L'ultima notizia: dove l'ha visto, o sentito sparare, o da dove l'ha colpito.
+## L'età negativa vuol dire «nessuna notizia».
+var _notizia := Vector3.ZERO
+var _eta_notizia := -1.0
+var _ronda := Vector3.ZERO
+var _ronda_da := 0.0
 
 var _livello := 1
 var _ricarica := 0.0
@@ -180,6 +224,7 @@ static func crea(genitore: Node, dove: Vector3, livello: int = 1) -> Avversario:
 
 
 func _ready() -> void:
+	add_to_group(GRUPPO)
 	collision_layer = Strati.COMBATTENTI
 	collision_mask = Strati.SOLIDO
 	_costruisci()
@@ -195,7 +240,11 @@ func _physics_process(delta: float) -> void:
 	_ricarica = maxf(_ricarica - delta, 0.0)
 	_immunita = maxf(_immunita - delta, 0.0)
 	_lampeggia()
+	# Una volta per fotogramma, non due: guardare, muoversi e sparare fanno la
+	# stessa domanda allo stesso spazio.
+	_vede = _guarda_se_lo_vede()
 	_guarda_il_bersaglio(delta)
+	_gira_per_l_arena(delta)
 
 	_prossimo_esame -= delta
 	if _prossimo_esame <= 0.0:
@@ -237,6 +286,10 @@ func incassa(muri: int, da: Object = null) -> bool:
 	var valgono := PUNTI_BASE * int(pow(2, muri))
 	centrato.emit(valgono, muri)
 	preso_da.emit(da, valgono, muri)
+	if caccia and da is Node3D and da == bersaglio:
+		# Chi ti prende, sai da dove: è la notizia più cara che ci sia.
+		_notizia = (da as Node3D).global_position
+		_eta_notizia = 0.0
 	if da is Node3D:
 		var indietro := global_position - (da as Node3D).global_position
 		indietro.y = 0.0
@@ -250,6 +303,11 @@ func incassa(muri: int, da: Object = null) -> bool:
 func punto_di_mira() -> Vector3:
 	if bersaglio == null or not is_instance_valid(bersaglio):
 		return global_position - global_transform.basis.z * 10.0
+	# In caccia, se non lo vede, guarda dove sta andando — l'ultima notizia o il
+	# giro di ronda. Un avversario che punta l'arma verso un corpo dietro un muro
+	# è esattamente quello che dal telefono sembrava telepatia.
+	if caccia and not _vede:
+		return _meta() + Vector3(0, ALTEZZA_PETTO, 0)
 	var centro := _centro_del_bersaglio()
 	var bocca := _bocca()
 	# Due giri: il tempo di volo dipende dalla distanza, e la distanza dipende dal
@@ -322,6 +380,23 @@ func _bocca() -> Vector3:
 func _guarda_il_bersaglio(delta: float) -> void:
 	if bersaglio == null or not is_instance_valid(bersaglio):
 		return
+	if caccia and not _vede:
+		# Coperto: la posizione resta quella dell'ultima volta e l'anticipo si
+		# spegne — non si anticipa un fantasma. La notizia intanto invecchia.
+		_vedeva = false
+		_velocita_vista = _velocita_vista.lerp(Vector3.ZERO, minf(delta * 4.0, 1.0))
+		if _eta_notizia >= 0.0:
+			_eta_notizia += delta
+		return
+	if caccia:
+		# Lo vede: notizia fresca. E se l'ha appena ritrovato si riparte
+		# dall'occhiata, o lo scarto fra dove l'aveva lasciato e dove sta adesso
+		# diventerebbe una velocità da trenta metri al secondo.
+		_notizia = bersaglio.global_position
+		_eta_notizia = 0.0
+		if not _vedeva:
+			_prima_occhiata = true
+		_vedeva = true
 	var adesso := bersaglio.global_position
 	if _prima_occhiata:
 		_prima_occhiata = false
@@ -461,8 +536,85 @@ func _muovi(delta: float) -> void:
 		rotation.y = atan2(-verso_mira.x, -verso_mira.z)
 
 
+## **Dove si sta andando.** È l'unica cosa che la caccia cambia nei piedi: chi lo
+## vede gli va addosso come sempre, chi non lo vede va dove l'ha lasciato, e chi
+## non ha notizie gira per l'arena. Con la caccia spenta è sempre il bersaglio, e
+## tutto quello che c'è sotto si comporta come prima.
+func _meta() -> Vector3:
+	if bersaglio == null or not is_instance_valid(bersaglio):
+		return global_position
+	if not caccia or _vede:
+		return bersaglio.global_position
+	if ha_notizia():
+		return _notizia
+	if _ronda == Vector3.ZERO:
+		return global_position
+	return _ronda
+
+
+## Se sa ancora dove cercare. Pubblica: è la cosa che il collaudo deve poter
+## guardare da fuori senza aprire il codice.
+func ha_notizia() -> bool:
+	return _eta_notizia >= 0.0 and _eta_notizia < MEMORIA
+
+
+## Dove sta cercando adesso. Vale la notizia, e in mancanza il punto di ronda.
+func dove_cerca() -> Vector3:
+	return _meta()
+
+
+## Uno sparo, da qualche parte. Se è del proprio bersaglio ed è abbastanza
+## vicino, è una notizia: si va a vedere. Gli spari degli altri non dicono niente
+## su chi si sta cercando — e chi attacca chi lo decide l'arena, ogni sei decimi.
+func senti_sparo(dove: Vector3, chi: Object) -> void:
+	if not caccia or chi == self or chi != bersaglio:
+		return
+	if global_position.distance_to(dove) > ORECCHIO:
+		return
+	_notizia = dove
+	_eta_notizia = 0.0
+
+
+## Chi spara avvisa il gruppo. Statica perché la chiama anche chi non è un
+## avversario, e passa dai nodi del gruppo per non legare nessuno a questa classe.
+static func si_e_sparato(albero: SceneTree, dove: Vector3, chi: Object) -> void:
+	if albero == null:
+		return
+	for nodo in albero.get_nodes_in_group(GRUPPO):
+		(nodo as Avversario).senti_sparo(dove, chi)
+
+
+## **La ronda**: nessuna notizia, e allora si gira. Si punta a una delle partenze
+## — i posti dove la gente c'è — e se ne cambia quando ci si arriva, o quando è
+## chiaro che non ci si arriva.
+func _gira_per_l_arena(delta: float) -> void:
+	if not caccia or bersaglio == null or not is_instance_valid(bersaglio):
+		return
+	if _vede or ha_notizia():
+		_ronda = Vector3.ZERO
+		return
+	_ronda_da += delta
+	if _ronda == Vector3.ZERO or _ronda_da > RONDA_PAZIENZA 			or global_position.distance_to(_ronda) < RONDA_ARRIVATO:
+		_scegli_la_ronda()
+
+
+func _scegli_la_ronda() -> void:
+	if punti_di_ronda.is_empty():
+		_ronda = Vector3.ZERO
+		return
+	var candidati: Array[Vector3] = []
+	for punto in punti_di_ronda:
+		if punto != _ronda and global_position.distance_to(punto) > RONDA_ARRIVATO * 2.0:
+			candidati.append(punto)
+	if candidati.is_empty():
+		candidati = punti_di_ronda.duplicate()
+	_ronda = candidati[randi() % candidati.size()]
+	_ronda_da = 0.0
+	ricomincia_il_cammino()
+
+
 func _direzione_tattica(delta: float) -> Vector3:
-	var verso_lui := bersaglio.global_position - global_position
+	var verso_lui := _meta() - global_position
 	verso_lui.y = 0.0
 	var distanza := verso_lui.length()
 	if distanza < 0.01:
@@ -531,8 +683,7 @@ func _aggiorna_il_percorso(delta: float) -> void:
 	if NavigationServer3D.map_get_regions(mappa).is_empty():
 		_percorso = PackedVector3Array()
 		return
-	_percorso = NavigationServer3D.map_get_path(mappa, global_position,
-			bersaglio.global_position, true)
+	_percorso = NavigationServer3D.map_get_path(mappa, global_position, _meta(), true)
 	_passo = 0
 
 
@@ -549,6 +700,11 @@ func punta_a(nuovo_bersaglio: Node3D) -> void:
 	bersaglio = nuovo_bersaglio
 	_prima_occhiata = true
 	_velocita_vista = Vector3.ZERO
+	# Bersaglio nuovo, notizie da rifare: di dove sia non si sa ancora niente, e
+	# lo si scopre al primo fotogramma in cui lo si vede.
+	_eta_notizia = -1.0
+	_vedeva = false
+	_ronda = Vector3.ZERO
 	if nuovo_bersaglio != null:
 		_posizione_vista = nuovo_bersaglio.global_position
 	ricomincia_il_cammino()
@@ -618,7 +774,12 @@ func _prossimo_passo() -> Vector3:
 	return Vector3.ZERO
 
 
+## Se lo vede: la risposta di questo fotogramma, calcolata una volta sola.
 func _lo_vede() -> bool:
+	return _vede
+
+
+func _guarda_se_lo_vede() -> bool:
 	if bersaglio == null or not is_instance_valid(bersaglio):
 		return false
 	var esclusi: Array[RID] = [get_rid()]
@@ -648,6 +809,7 @@ func _mira_e_spara() -> void:
 			esclusi, self)
 	dardo.colpito.connect(_su_colpo)
 	Suoni.sparo(partenza, false)
+	si_e_sparato(get_tree(), partenza, self)
 
 
 ## L'errore di mira: un cono attorno alla direzione giusta, largo quanto dice la

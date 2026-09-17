@@ -9,7 +9,19 @@ sta nella cartella superiore e non è pubblicata qui.
 
 ## Stato
 
-**Tappa 2 — lo sparring partner.** C'è una stanza sola, con due mestieri.
+**Tappa 7 — da laboratorio a gioco.** Si apre su una schermata con il nome e **GIOCA**: da lì si
+entra in una **partita a sei da tre minuti** nell'arena intera, con il fischio d'inizio
+(3 · 2 · 1 · VIA), la classifica viva, gli annunci, e alla fine il **podio con RIGIOCA**.
+
+Gli avversari **cercano, non sanno**: ti attaccano quando ti vedono, vanno dove ti hanno visto
+l'ultima volta o dove ti hanno sentito sparare, e se non hanno notizie girano per l'arena.
+
+I banchi di prova — poligono, angolo, arena senza partita — sono ancora tutti lì, dietro **cinque
+tocchi sulla riga della versione** in basso a destra nella schermata d'ingresso.
+
+### I banchi di prova
+
+C'è una stanza sola, con due mestieri.
 
 Da **poligono**: un dardo che rimbalza fino a cinque muri, la linea che mostra dove batterà il
 colpo, cinque bersagli — due dei quali si prendono **solo** di sponda, perché stanno dietro un
@@ -62,7 +74,10 @@ firma della pubblicazione e l'ora.
 | Cambiare il colore del dardo | **COLORE** | C |
 | Accendere o chiudere la sfida | **SFIDA** | B |
 | Cambiare livello dell'avversario | **LIVELLO** | L |
-| Dardo a 19 o a 24 m/s, nell'arena | **DARDO** | R |
+| Dardo a 19 o a 24 m/s | **DARDO** (anche nell'ingresso) | R |
+| Uscire dalla partita | **ESCI**, in alto a sinistra | — |
+
+In partita i pulsanti di prova non ci sono: restano il mirino, la leva, FUOCO, SALTA e l'uscita.
 
 Sul PC il mouse si aggancia al primo clic e si libera con Esc.
 
@@ -84,6 +99,9 @@ gravità 18,1 m/s², dardo a 19 m/s.
 
 ```
 Godot --path . -s tools/prova_balistica.gd       # 20 controlli sulla riflessione, senza schermo
+Godot --path . -s tools/prova_ingresso.gd        # 11 controlli sulla schermata d'ingresso
+Godot --path . -s tools/prova_arena.gd           # 93 controlli: pianta, cammino, partita, caccia
+Godot --path . -s tools/prova_ritmo.gd           # una partita intera: si arriva nei primi tre?
 Godot --path . -s tools/prova_poligono.gd        # il giro completo: sponda, colpo, punteggio
 Godot --path . -s tools/prova_avversario.gd      # 18 controlli: anticipo, schivata, livelli, partita
 Godot --path . -s tools/prova_comandi.gd         # 15 controlli: muovere e mirare con due pollici

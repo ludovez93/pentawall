@@ -1,6 +1,6 @@
 """Genera gli effetti sonori del gioco, sintetizzati: nessun file preso in giro.
 
-Tappa 7, blocco B («il colpo che si sente»). Sei suoni corti, in `assets/audio/`,
+Tappa 7, blocchi B («il colpo che si sente») e C (il fischio d'inizio). Otto suoni corti, in `assets/audio/`,
 WAV mono 16 bit a 44,1 kHz — il formato che Godot carica come `AudioStreamWAV` e che
 la pagina web suona anche senza thread.
 
@@ -157,6 +157,27 @@ def passo():
     return sfuma_coda(normalizza(satura(suono, 1.4), 0.7))
 
 
+def conto():
+    """Il bip del conto alla rovescia: un tono pulito e corto, senza colore —
+    tre uguali, e il quarto (il via) sta un'ottava sopra."""
+    t = tempo(0.16)
+    tono = (np.sin(2 * np.pi * 660 * t) + 0.25 * np.sin(2 * np.pi * 1320 * t))
+    tono *= decadimento(t, 0.05, 0.002)
+    return sfuma_coda(normalizza(tono, 0.8))
+
+
+def via():
+    """Il via: lo stesso bip un'ottava sopra, piu' lungo, con una quinta sotto che
+    lo apre. E' il fischio d'inizio, non un allarme."""
+    t = tempo(0.42)
+    tono = (np.sin(2 * np.pi * 1320 * t)
+            + 0.45 * np.sin(2 * np.pi * 880 * t)
+            + 0.2 * np.sin(2 * np.pi * 1980 * t))
+    tono *= decadimento(t, 0.13, 0.003)
+    soffio = passa_banda(rumore(len(t)), 1500, 6000) * decadimento(t, 0.01, 0.001) * 0.4
+    return sfuma_coda(normalizza(satura(tono + soffio, 1.2), 0.9))
+
+
 if __name__ == "__main__":
     print("genero in", CARTELLA)
     salva("sparo.wav", sparo())
@@ -165,4 +186,6 @@ if __name__ == "__main__":
     salva("incassato.wav", incassato())
     salva("ricomparsa.wav", ricomparsa())
     salva("passo.wav", passo())
+    salva("conto.wav", conto())
+    salva("via.wav", via())
     print("fatto.")

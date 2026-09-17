@@ -19,7 +19,8 @@ extends Node
 ## (LEARNED.md § 25).
 
 const CARTELLA := "res://assets/audio/"
-const NOMI := ["sparo", "rimbalzo", "colpo", "incassato", "ricomparsa", "passo"]
+const NOMI := ["sparo", "rimbalzo", "colpo", "incassato", "ricomparsa", "passo",
+		"conto", "via"]
 
 ## Quante voci nel mondo possono suonare insieme: sei in campo che sparano e
 ## rimbalzano, otto bastano e la nona ruba la più vecchia.
@@ -58,7 +59,7 @@ func _ready() -> void:
 
 	# I suoni «tuoi» — il tuo sparo, il colpo a segno, quello incassato, la
 	# ricomparsa, il passo — non stanno nel mondo: stanno addosso a chi gioca.
-	for nome in ["sparo", "colpo", "incassato", "ricomparsa", "passo"]:
+	for nome in ["sparo", "colpo", "incassato", "ricomparsa", "passo", "conto", "via"]:
 		var mia := AudioStreamPlayer.new()
 		mia.stream = _flussi[nome]
 		add_child(mia)
@@ -122,6 +123,20 @@ static func passo() -> void:
 		return
 	attivo._passo_destro = not attivo._passo_destro
 	attivo._mia("passo", -10.0, 1.06 if attivo._passo_destro else 0.94)
+
+
+## Il conto alla rovescia del fischio d'inizio (blocco C): tre bip uguali, e il
+## via un'ottava sopra. Non stanno nel mondo — il via lo sentono tutti uguale.
+static func conto() -> void:
+	if attivo == null:
+		return
+	attivo._mia("conto", -3.0, 1.0)
+
+
+static func via() -> void:
+	if attivo == null:
+		return
+	attivo._mia("via", 0.0, 1.0)
 
 
 func _mia(nome: String, volume_db: float, tono: float) -> void:

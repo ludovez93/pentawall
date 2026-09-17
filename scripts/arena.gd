@@ -27,10 +27,29 @@ const RETE := "res://arene/palestra_cammino.res"
 const SPESSORE_PIANO := 0.6
 const SPESSORE_RAMPA := 0.45
 
-## Si vince a 500, come al poligono. Tu fai 25 con un colpo diretto e raddoppi a
-## ogni muro; loro sparano solo dritto, quindi valgono sempre 25: giocando dritto
-## siete pari, e si vince di sponda.
-const TRAGUARDO := 500
+## **Si gioca a tempo, tre minuti** (decisione 19, dal blocco C). Il duello del
+## poligono resta a 500 punti; qui no, e per due motivi misurati: a 500 la partita
+## finiva in cinquanta secondi, e sapere quanto manca vale più di sapere quanto
+## serve — è `MIGLIORIE.md` § 3, che lo diceva dal 25/08/2026.
+const DURATA_PARTITA := 180.0
+
+## Il fischio d'inizio: 3 · 2 · 1 · VIA. Prima del via nessuno ha un bersaglio e
+## nessun colpo fa punti — la partita comincia per tutti nello stesso istante.
+const CONTO_INIZIALE := 3.0
+
+## Gli annunci dell'ultimo pezzo di partita, in secondi che mancano.
+const AVVISI_TEMPO := [{"quando": 60.0, "cosa": "ULTIMO MINUTO"},
+	{"quando": 30.0, "cosa": "30 SECONDI"}]
+
+## Quanto si aspetta fra due annunci di posizione: senza, in mischia sarebbe una
+## mitragliata di «TI HANNO SUPERATO».
+const ATTESA_ANNUNCIO := 3.0
+
+## **Come si è entrati.** Dal pulsante GIOCA dell'ingresso si arriva con questa
+## accesa: partita che parte da sola, interfaccia di gioco, niente pulsanti di
+## prova. Dal banco di prova («ARENA LIBERA») si arriva con questa spenta, e
+## l'arena è quella di sempre.
+static var modo_partita := false
 
 ## **I cinque avversari.** Il numero non è nostro: la partita di carriera del 1999
 ## girava con cinque bot più il giocatore (`RICERCA-ORIGINALE.md` § 2), ed è anche
@@ -148,7 +167,15 @@ var _prossimo_anello := 0
 var _concorrenti: Array[Dictionary] = []
 var _sfida := false
 var _finita := false
-var _livello := 1
+## Il livello di partenza è **il facile**: la prima partita si deve poter vincere.
+var _livello := 0
+var _modo_partita := false
+var _durata := DURATA_PARTITA
+var _tempo := 0.0
+var _conto := 0.0
+var _posizione_annunciata := 0
+var _attesa_annuncio := 0.0
+var _avvisi_dati := 0
 var _prossima_riscelta := 0.0
 var _turno_riscelta := 0
 ## Chi deve ancora nascere: `{"riga", "partenza"}`, un corpo per fotogramma. In
@@ -200,9 +227,17 @@ func _ready() -> void:
 	# shader del bagliore appena la scena si apre (LEARNED.md § 26 e 27).
 	Proiettile.scalda(self, _giocatore.camera())
 
+	_comandi.rigioca_richiesta.connect(rigioca)
+	_comandi.uscita_richiesta.connect(torna_all_ingresso)
+
 	get_tree().node_added.connect(_su_nodo_nuovo)
 	_applica_regola()
 	_aggiorna_righe()
+
+	# Da GIOCA si entra in partita, non in un'arena da guardare.
+	_modo_partita = modo_partita
+	if _modo_partita:
+		avvia_sfida()
 
 
 ## La pianta si legge da un file di testo, non da un file del motore: si apre con
@@ -654,8 +689,18 @@ func _process(delta: float) -> void:
 	_aggiorna_righe()
 	_respiro_degli_anelli(delta)
 	if _sfida and not _finita:
-		_scegli_i_bersagli(delta)
-		_controlla_il_traguardo()
+		# I corpi entrano anche durante il conto alla rovescia: i tre secondi del
+		# fischio d'inizio servono anche a questo.
+		if not _in_arrivo.is_empty():
+			_fai_entrare_il_prossimo()
+		elif _conto > 0.0:
+			_scorre_il_conto(delta)
+		else:
+			_scegli_i_bersagli(delta)
+			_scorre_il_tempo(delta)
+			_guarda_la_classifica(delta)
+	if _modo_partita and _sfida:
+		_comandi.modalita_partita(tempo_scritto(), maxi(posizione_mia(), 1), punteggi()[0])
 	for tasto in SCORCIATOIE:
 		var giu := Input.is_physical_key_pressed(tasto)
 		if giu and not bool(_tasti.get(tasto, false)):
@@ -668,6 +713,80 @@ func _process(delta: float) -> void:
 				"livello": cambia_livello()
 				"dardo": commuta_dardo()
 		_tasti[tasto] = giu
+
+
+# ------------------------------------------------------------- il cronometro
+
+## **Il fischio d'inizio.** Tre numeri e un via, uno al secondo, con il bip. Chi
+## gioca può girarsi e guardare dov'è finito, ma nessuno spara sul serio: prima
+## del via i colpi non fanno punti e gli avversari non hanno un bersaglio.
+func _scorre_il_conto(delta: float) -> void:
+	var prima := int(ceil(_conto))
+	_conto -= delta
+	var adesso := int(ceil(_conto))
+	if adesso != prima and adesso > 0:
+		_comandi.fischio("%d" % adesso)
+		Suoni.conto()
+	if _conto <= 0.0:
+		_conto = 0.0
+		_via()
+
+
+func _via() -> void:
+	_comandi.fischio("VIA")
+	Suoni.via()
+	_prossima_riscelta = RISCELTA
+	_turno_riscelta = 0
+	for bot in avversari():
+		bot.punta_a(_chi_attaccare(bot))
+
+
+## Il tempo che scende. Finito, finisce la partita: è l'unico modo in cui una
+## partita dell'arena può finire, dalla decisione 19.
+func _scorre_il_tempo(delta: float) -> void:
+	_tempo = maxf(_tempo - delta, 0.0)
+	if _avvisi_dati < AVVISI_TEMPO.size() 			and _tempo <= float(AVVISI_TEMPO[_avvisi_dati]["quando"]):
+		_comandi.annuncia(String(AVVISI_TEMPO[_avvisi_dati]["cosa"]))
+		_avvisi_dati += 1
+	if _tempo <= 0.0:
+		_finisci_la_partita()
+
+
+## Il cronometro come si legge: minuti e secondi. Durante il conto alla rovescia
+## segna la durata piena — la partita non è ancora cominciata.
+func tempo_scritto() -> String:
+	var quanto := int(ceil(_durata if _conto > 0.0 else _tempo))
+	return "%d:%02d" % [quanto / 60, quanto % 60]
+
+
+func tempo_rimasto() -> float:
+	return _tempo
+
+
+func conto_alla_rovescia() -> float:
+	return _conto
+
+
+## Quanto dura una partita. I collaudi la abbassano: aspettare tre minuti veri
+## per sapere se il cronometro chiude non dimostra niente di più.
+func imposta_durata(secondi: float) -> void:
+	_durata = maxf(secondi, 1.0)
+
+
+## «SEI PRIMO» e «TI HANNO SUPERATO»: gli annunci che tengono dentro. Uno ogni
+## tre secondi al massimo, o in mischia diventano una mitragliata.
+func _guarda_la_classifica(delta: float) -> void:
+	_attesa_annuncio = maxf(_attesa_annuncio - delta, 0.0)
+	var adesso := posizione_mia()
+	if adesso <= 0 or adesso == _posizione_annunciata or _attesa_annuncio > 0.0:
+		return
+	if _posizione_annunciata > 0:
+		if adesso == 1:
+			_comandi.annuncia("SEI PRIMO")
+		elif adesso > _posizione_annunciata:
+			_comandi.annuncia("TI HANNO SUPERATO")
+	_posizione_annunciata = adesso
+	_attesa_annuncio = ATTESA_ANNUNCIO
 
 
 # ------------------------------------------------------------------ la partita
@@ -693,6 +812,17 @@ func commuta_sfida() -> void:
 func avvia_sfida() -> void:
 	_sfida = true
 	_finita = false
+	_tempo = _durata
+	_conto = CONTO_INIZIALE
+	_avvisi_dati = 0
+	_posizione_annunciata = 0
+	_attesa_annuncio = 0.0
+	_comandi.spegni_il_podio()
+	# I posti dove si va a cercare chi non si trova: le sei partenze.
+	var ronda: Array[Vector3] = []
+	for i in int(_pianta["partenze"].size()):
+		ronda.append(_dove_partenza(i))
+	Avversario.punti_di_ronda = ronda
 	for bersaglio in _bersagli:
 		bersaglio.metti_in_pausa(true)
 
@@ -720,10 +850,14 @@ func avvia_sfida() -> void:
 
 	_prossima_riscelta = RISCELTA
 	_turno_riscelta = 0
+	_comandi.fischio("%d" % int(ceil(_conto)))
+	Suoni.conto()
 	_sonda.parti()
 	_aggiorna_la_classifica()
 	_comandi.scrivi_sfida("CHIUDI")
-	_comandi.annuncia("PARTITA · %s" % String(Avversario.TARATURE[_livello]["nome"]).to_upper())
+	if not _modo_partita:
+		_comandi.annuncia("PARTITA · %s"
+				% String(Avversario.TARATURE[_livello]["nome"]).to_upper())
 
 
 ## Uno solo per fotogramma, finché la coda non è vuota. Il bersaglio se lo
@@ -734,9 +868,15 @@ func _fai_entrare_il_prossimo() -> void:
 		return
 	var chi: Dictionary = _in_arrivo.pop_front()
 	var bot := Avversario.crea(self, _dove_partenza(int(chi["partenza"])), _livello)
+	# **Cerca, non sa** (blocco C): nella partita a sei l'avversario ti vede, ti
+	# ricorda o ti cerca. Nel poligono e nell'angolo resta lo sparring partner
+	# che ti sta addosso, che è quello che serve là.
+	bot.caccia = true
 	bot.preso_da.connect(_su_colpo_valido.bind(bot))
 	_concorrenti[int(chi["riga"])]["corpo"] = bot
-	bot.punta_a(_chi_attaccare(bot))
+	# Prima del via non attacca nessuno: entra, si guarda intorno e aspetta.
+	if _conto <= 0.0:
+		bot.punta_a(_chi_attaccare(bot))
 	_aggiorna_la_classifica()
 
 
@@ -749,6 +889,7 @@ func chiudi_sfida() -> void:
 	for bersaglio in _bersagli:
 		bersaglio.metti_in_pausa(false)
 	_comandi.spegni_la_classifica()
+	_comandi.spegni_il_podio()
 	_comandi.scrivi_sfida("SFIDA")
 	_comandi.annuncia("ARENA")
 
@@ -940,29 +1081,39 @@ func _si_vedono(uno: Node3D, altro: Node3D) -> bool:
 
 # ------------------------------------------------------------------------ i punti
 
-## Chi arriva per primo a 500. Finita la partita nessuno gioca più, e il pulsante
-## ne comincia un'altra da zero.
-func _controlla_il_traguardo() -> void:
-	var vincitore := -1
-	for i in _concorrenti.size():
-		if int(_concorrenti[i]["punti"]) < TRAGUARDO:
-			continue
-		if vincitore < 0 or int(_concorrenti[i]["punti"]) > int(_concorrenti[vincitore]["punti"]):
-			vincitore = i
-	if vincitore < 0:
+## **Scaduto il tempo.** Il campo si ferma, la classifica si apre tutta e sopra
+## arriva il podio con RIGIOCA: è il momento per cui esiste la tappa 7, perché è
+## lì che si vede se una partita ne chiama un'altra.
+func _finisci_la_partita() -> void:
+	if _finita:
 		return
-
 	_finita = true
+	_tempo = 0.0
 	_sonda.fermati("traguardo")
 	for bot in avversari():
 		bot.bersaglio = null
 	_aggiorna_la_classifica()
 	_comandi.scrivi_sfida("ANCORA")
-	if _concorrenti[vincitore]["corpo"] == _giocatore:
+	var righe := classifica()
+	var mia := posizione_mia()
+	if mia == 1:
 		_comandi.annuncia("HAI VINTO")
 	else:
-		_comandi.annuncia("VINCE %s · SEI %d°" %
-				[String(_concorrenti[vincitore]["nome"]), posizione_mia()])
+		_comandi.annuncia("VINCE %s" % String(righe[0]["nome"]))
+	_comandi.podio(righe, maxi(mia, 1))
+
+
+## Un'altra partita, a un tocco: stesso posto, punti e tempo da zero. È la
+## domanda della tappa fatta col pollice invece che a parole.
+func rigioca() -> void:
+	_comandi.spegni_il_podio()
+	avvia_sfida()
+
+
+## Si esce dalla partita e si torna all'ingresso, da dove si può rientrare.
+func torna_all_ingresso() -> void:
+	modo_partita = false
+	get_tree().change_scene_to_file("res://scenes/ingresso.tscn")
 
 
 ## **L'unico posto da cui passano i punti.** Ogni corpo che si può colpire dice
@@ -973,13 +1124,18 @@ func _controlla_il_traguardo() -> void:
 ## era per forza l'altro. In sei no: senza il nome di chi ha sparato, un colpo fra
 ## avversari finirebbe nel tuo punteggio.
 func _su_colpo_valido(chi_spara: Object, punti: int, muri: int, chi_incassa: Node3D) -> void:
-	if not _sfida or _finita:
+	# Prima del via i colpi non contano: si entra in campo tutti insieme.
+	if not _sfida or _finita or _conto > 0.0:
 		return
 	var autore := _riga_di(chi_spara)
 	if autore >= 0:
 		_concorrenti[autore]["punti"] = int(_concorrenti[autore]["punti"]) + punti
 		if chi_spara == _giocatore:
-			_annuncia_il_colpo(punti, muri)
+			# In partita il colpo si vede già dove succede — l'etichetta che sale
+			# dal punto d'impatto, blocco B — e l'annuncio grande al centro serve
+			# alla gara: «SEI PRIMO», l'ultimo minuto.
+			if not _modo_partita:
+				_annuncia_il_colpo(punti, muri)
 		elif chi_incassa == _giocatore:
 			_comandi.annuncia("COLPITO DA %s" % String(_concorrenti[autore]["nome"]))
 		else:
@@ -1104,14 +1260,12 @@ func _aggiorna_righe() -> void:
 	var visuale := "prima persona" if _giocatore != null and _giocatore.in_prima_persona() else "terza persona"
 	if _sfida:
 		# La riga alta non ripete la classifica, che sta due dita sotto: dice
-		# **quanto manca**, che è l'unica cosa che la classifica non mostra.
-		var miei := int(punteggi()[0])
+		# **quanto manca**, che dalla decisione 19 è un tempo e non dei punti.
 		if _finita:
 			_comandi.scrivi_alto("FINITA · sei %d° su %d" %
 					[posizione_mia(), _concorrenti.size()])
 		else:
-			_comandi.scrivi_alto("%d° · ti mancano %d punti" %
-					[posizione_mia(), maxi(TRAGUARDO - miei, 0)])
+			_comandi.scrivi_alto("%d° · %s" % [posizione_mia(), tempo_scritto()])
 		_comandi.scrivi_basso("%d avversari · %s · %s · %s · dardo %s %d m/s · %d fps" % [
 			_concorrenti.size() - 1,
 			Avversario.TARATURE[_livello]["nome"],

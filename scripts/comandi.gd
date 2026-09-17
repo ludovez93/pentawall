@@ -15,6 +15,10 @@ signal colore_richiesto
 signal camera_richiesta
 signal sfida_richiesta
 signal livello_richiesto
+## I due della partita (blocco C): il podio li accende, e la scena decide cosa
+## vuol dire ricominciare o uscire.
+signal rigioca_richiesta
+signal uscita_richiesta
 
 const RAGGIO_LEVA := 96.0
 const ZONA_MORTA := 12.0
@@ -85,6 +89,11 @@ func _process(delta: float) -> void:
 		_avviso.modulate.a = clampf(_tempo_avviso, 0.0, 1.0)
 		if _tempo_avviso <= 0.0:
 			_avviso.text = ""
+	if _tempo_fischio > 0.0:
+		_tempo_fischio -= delta
+		_fischio.modulate.a = clampf(_tempo_fischio / 0.5, 0.0, 1.0)
+		if _tempo_fischio <= 0.0:
+			_fischio.text = ""
 	_marcatore = maxf(_marcatore - delta, 0.0)
 	_vignetta = maxf(_vignetta - delta, 0.0)
 	_muovi_le_etichette(delta)
@@ -221,6 +230,28 @@ func scrivi_alto(testo: String) -> void:
 
 func scrivi_basso(testo: String) -> void:
 	_riga_bassa.text = testo
+
+
+## **Il fischio d'inizio**: 3 · 2 · 1 · VIA, al centro dello schermo e grande
+## quanto serve. L'annuncio normale sta in alto ed è alto cinquantadue punti: per
+## un conto alla rovescia è un sottotitolo, non un via.
+func fischio(testo: String) -> void:
+	if _fischio == null:
+		_fischio = _etichetta(130, Color(1, 1, 1, 1))
+		_fischio.add_theme_font_override("font", carattere_titolo())
+		_fischio.add_theme_constant_override("outline_size", 12)
+		_fischio.set_anchors_preset(Control.PRESET_CENTER)
+		_fischio.grow_horizontal = Control.GROW_DIRECTION_BOTH
+		_fischio.grow_vertical = Control.GROW_DIRECTION_BOTH
+		_fischio.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_fischio.offset_left = -300
+		_fischio.offset_right = 300
+		_fischio.offset_top = -110
+		_fischio.offset_bottom = 60
+		add_child(_fischio)
+	_fischio.text = testo
+	_fischio.modulate.a = 1.0
+	_tempo_fischio = 0.9
 
 
 ## L'annuncio grosso al centro: quanti muri ha fatto il colpo e quanto vale.
@@ -537,6 +568,13 @@ static var _titolo: Font = null
 var _cronometro: Label
 var _posizione_grande: Label
 var _punti_piccoli: Label
+var _in_partita := false
+var _bottone_esci: Button
+var _podio: PanelContainer
+var _podio_posizione: Label
+var _righe_podio: Array[Dictionary] = []
+var _fischio: Label
+var _tempo_fischio := 0.0
 
 
 static func carattere_testo() -> Font:
@@ -566,6 +604,18 @@ static func carattere_titolo() -> Font:
 ## tecnica e i pulsanti di prova, dentro il cronometro, la posizione e i punti.
 ## Restano il mirino, la leva, FUOCO e SALTA: quelli sono il gioco.
 func modalita_partita(tempo: String, posizione: int, punti: int) -> void:
+	if not _in_partita:
+		_accendi_la_partita()
+		_in_partita = true
+	_cronometro.text = tempo
+	_posizione_grande.text = "%d°" % posizione
+	_punti_piccoli.text = "%d PUNTI" % punti
+
+
+## Il giro che si fa una volta sola, quando la partita comincia: costa
+## l'attraversamento di tutti i pulsanti, e in partita si chiama sessanta volte
+## al secondo.
+func _accendi_la_partita() -> void:
 	_riga_alta.visible = false
 	_riga_bassa.visible = false
 	# I due pulsanti del gioco diventano più coprenti: a un terzo di opacità il
@@ -589,9 +639,21 @@ func modalita_partita(tempo: String, posizione: int, punti: int) -> void:
 		(riga["punti"] as Label).custom_minimum_size = Vector2(72, 0)
 	if _cronometro == null:
 		_costruisci_la_partita()
-	_cronometro.text = tempo
-	_posizione_grande.text = "%d°" % posizione
-	_punti_piccoli.text = "%d PUNTI" % punti
+	# La porta della stanza. Sul telefono il gioco sta a schermo intero e non ha
+	# un tasto indietro: senza questo, una partita da tre minuti è una stanza
+	# senza uscita. Piccolo e spento, in alto a sinistra, dove non passa nessun
+	# pollice.
+	if _bottone_esci == null:
+		_bottone_esci = _pulsante("ESCI", Vector2.ZERO, Vector2(84, 52),
+				Color(0.35, 0.4, 0.55), func() -> void: uscita_richiesta.emit())
+		_bottone_esci.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		_bottone_esci.offset_left = 28
+		_bottone_esci.offset_top = 22
+		_bottone_esci.offset_right = 28 + 84
+		_bottone_esci.offset_bottom = 22 + 52
+		_bottone_esci.add_theme_font_size_override("font_size", 17)
+		_bottone_esci.modulate.a = 0.55
+	_bottone_esci.visible = true
 
 
 func _costruisci_la_partita() -> void:
@@ -630,3 +692,119 @@ func _costruisci_la_partita() -> void:
 	_punti_piccoli.offset_right = -32
 	_punti_piccoli.offset_top = 78
 	add_child(_punti_piccoli)
+
+
+# ------------------------------------------------------------------- il podio
+
+## **Il podio.** Scaduto il tempo, la partita si guarda da fuori: i sei in ordine
+## d'arrivo, la tua posizione grande, e **RIGIOCA a un tocco** — che è il momento
+## in cui il gioco chiede «un'altra?», la domanda di tutta la tappa 7.
+##
+## Le righe arrivano già ordinate da chi tiene il punteggio: qui si scrivono e
+## basta. Si costruisce la prima volta che serve e poi si riaccende: a fine
+## partita un fotogramma lento non si vede, ma il podio si riapre a ogni RIGIOCA.
+func podio(righe: Array, posizione: int) -> void:
+	if _podio == null:
+		_costruisci_il_podio()
+	_podio_posizione.text = "SEI %d°" % posizione
+	for i in _righe_podio.size():
+		var riga: Dictionary = _righe_podio[i]
+		var scatola: HBoxContainer = riga["riga"]
+		if i >= righe.size():
+			scatola.visible = false
+			continue
+		scatola.visible = true
+		var dato: Dictionary = righe[i]
+		var tuo := bool(dato.get("tu", false))
+		(riga["posizione"] as Label).text = "%d°" % int(dato["posizione"])
+		(riga["nome"] as Label).text = String(dato["nome"])
+		(riga["punti"] as Label).text = "%d" % int(dato["punti"])
+		var tinta := Color(1, 0.86, 0.35, 1.0) if tuo else Color(1, 1, 1, 0.72)
+		for chiave in ["posizione", "nome", "punti"]:
+			(riga[chiave] as Label).add_theme_color_override("font_color", tinta)
+	_podio.visible = true
+	# La colonna di sinistra dice le stesse cose del podio, in piccolo: si spegne.
+	spegni_la_classifica()
+	if _bottone_esci != null:
+		_bottone_esci.visible = false
+
+
+func spegni_il_podio() -> void:
+	if _podio != null:
+		_podio.visible = false
+	if _bottone_esci != null and _in_partita:
+		_bottone_esci.visible = true
+
+
+func _costruisci_il_podio() -> void:
+	_podio = PanelContainer.new()
+	_podio.set_anchors_preset(Control.PRESET_CENTER)
+	_podio.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_podio.grow_vertical = Control.GROW_DIRECTION_BOTH
+	_podio.custom_minimum_size = Vector2(520, 0)
+	var fondo := StyleBoxFlat.new()
+	fondo.bg_color = Color(0.03, 0.03, 0.09, 0.92)
+	fondo.set_corner_radius_all(26)
+	fondo.border_width_bottom = 2
+	fondo.border_width_top = 2
+	fondo.border_width_left = 2
+	fondo.border_width_right = 2
+	fondo.border_color = Color(1, 1, 1, 0.16)
+	fondo.content_margin_left = 34
+	fondo.content_margin_right = 34
+	fondo.content_margin_top = 18
+	fondo.content_margin_bottom = 20
+	_podio.add_theme_stylebox_override("panel", fondo)
+	add_child(_podio)
+
+	var colonna := VBoxContainer.new()
+	colonna.add_theme_constant_override("separation", 4)
+	_podio.add_child(colonna)
+
+	_podio_posizione = _etichetta(44, Color(1, 1, 1, 0.98))
+	_podio_posizione.add_theme_font_override("font", carattere_titolo())
+	_podio_posizione.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	colonna.add_child(_podio_posizione)
+
+	for i in 6:
+		var riga := HBoxContainer.new()
+		riga.add_theme_constant_override("separation", 14)
+		riga.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var posizione := _etichetta(24, Color(1, 1, 1, 0.72))
+		posizione.custom_minimum_size = Vector2(46, 0)
+		posizione.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		var nome := _etichetta(24, Color(1, 1, 1, 0.72))
+		nome.custom_minimum_size = Vector2(230, 0)
+		var punti := _etichetta(24, Color(1, 1, 1, 0.72))
+		punti.custom_minimum_size = Vector2(100, 0)
+		punti.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		for pezzo in [posizione, nome, punti]:
+			riga.add_child(pezzo)
+		colonna.add_child(riga)
+		_righe_podio.append({"riga": riga, "posizione": posizione, "nome": nome,
+				"punti": punti})
+
+	var tasti := HBoxContainer.new()
+	tasti.add_theme_constant_override("separation", 16)
+	tasti.alignment = BoxContainer.ALIGNMENT_CENTER
+	colonna.add_child(tasti)
+	tasti.add_child(_tasto_del_podio("RIGIOCA", Color(0.2, 0.75, 0.45),
+			func() -> void: rigioca_richiesta.emit()))
+	tasti.add_child(_tasto_del_podio("ESCI", Color(0.35, 0.4, 0.55),
+			func() -> void: uscita_richiesta.emit()))
+
+
+## I pulsanti del podio stanno **dentro** il pannello, quindi non si posizionano
+## come gli altri: li mette in fila il contenitore.
+func _tasto_del_podio(testo: String, colore: Color, azione: Callable) -> Button:
+	var pulsante := Button.new()
+	pulsante.text = testo
+	pulsante.custom_minimum_size = Vector2(190, 76)
+	pulsante.add_theme_font_size_override("font_size", 26)
+	pulsante.add_theme_font_override("font", carattere_titolo())
+	pulsante.add_theme_color_override("font_color", Color(1, 1, 1, 0.95))
+	for stato in ["normal", "hover", "focus"]:
+		pulsante.add_theme_stylebox_override(stato, _sfondo(colore, 0.62))
+	pulsante.add_theme_stylebox_override("pressed", _sfondo(colore, 0.9))
+	pulsante.pressed.connect(azione)
+	return pulsante

@@ -181,6 +181,12 @@ func spara() -> bool:
 	var dardo := Proiettile.lancia(get_parent(), partenza, verso, [get_rid()], self)
 	dardo.colpito.connect(_su_colpo)
 	Suoni.sparo(partenza, true)
+	# Chi spara si fa sentire: gli avversari che stanno cercando hanno una
+	# notizia (tappa 7, blocco C). Si passa dal gruppo e non dalla classe, così
+	# il giocatore non nomina l'avversario — che nomina già lui, e in GDScript
+	# due classi che si nominano a vicenda sono un ciclo.
+	for chi in get_tree().get_nodes_in_group(&"avversari"):
+		chi.call("senti_sparo", partenza, self)
 	sparato.emit(0)
 	return true
 

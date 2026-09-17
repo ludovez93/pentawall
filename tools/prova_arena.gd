@@ -48,6 +48,8 @@ func _lavora() -> void:
 	await _lavversario_ti_raggiunge(pianta)
 	await _la_partita()
 	await _la_partita_a_sei()
+	await _il_cronometro_chiude()
+	await _la_caccia()
 	await _la_sonda_parla()
 	await _il_colpo_si_sente()
 
@@ -370,6 +372,20 @@ func _la_partita() -> void:
 	if bot == null:
 		return
 
+	# **Il fischio d'inizio** (blocco C): prima del via nessuno ha un bersaglio e
+	# nessun colpo fa punti. È la cosa che fa cominciare la partita per tutti nello
+	# stesso istante, e senza questa prova si potrebbe fare punti sul tre.
+	_conta("prima del via l'avversario non attacca nessuno", bot.bersaglio == null,
+			"ha gia' un bersaglio")
+	giocatore.incassa(0, bot)
+	await process_frame
+	var anticipo: Array = _arena.call("punteggi")
+	_conta("prima del via un colpo non fa punti", int(anticipo[1]) == 0,
+			"gli hanno gia' dato %d punti" % int(anticipo[1]))
+	await _il_via()
+	_conta("dopo il via tutti hanno qualcuno da attaccare",
+			bot.bersaglio != null, "l'avversario non attacca nessuno")
+
 	_conta("chi comincia non nasce in faccia all'altro",
 			not _si_vedono(giocatore, bot),
 			"le due partenze si guardano: %.0f m" %
@@ -412,14 +428,8 @@ func _la_partita() -> void:
 	await process_frame
 	var punti: Array = _arena.call("punteggi")
 	_conta("un colpo a cinque muri vale 800 punti", int(punti[0]) == 800, str(punti))
-	_conta("a 500 la partita finisce", bot.bersaglio == null,
-			"l'avversario gioca ancora")
-	# In partita la classifica ne mostra quattro su sei, per non finire in mezzo
-	# al pollice sul telefono. Alla fine si aprono tutte: l'ordine d'arrivo è la
-	# cosa per cui si è giocato.
-	var arrivo: Array = _arena.call("classifica_da_mostrare")
-	_conta("a partita finita si vede l'ordine d'arrivo di tutti",
-			arrivo.size() == 6, "%d righe su 6" % arrivo.size())
+	_conta("ma non finisce la partita: si gioca a tempo (decisione 19)",
+			bot.bersaglio != null, "l'avversario ha gia' smesso")
 
 	_arena.call("chiudi_sfida")
 	await process_frame
@@ -437,6 +447,8 @@ func _la_partita_a_sei() -> void:
 	var giocatore: Giocatore = _arena.call("giocatore")
 	_arena.call("avvia_sfida")
 	await _entrano_tutti(5)
+
+	await _il_via()
 
 	var bot: Array = _arena.call("avversari")
 	_conta("entrano cinque avversari", bot.size() == 5, "ne sono entrati %d" % bot.size())
@@ -572,6 +584,136 @@ func _il_colpo_si_sente() -> void:
 ## Gli avversari entrano **uno per fotogramma**, per non far inciampare
 ## l'apertura della partita. Qui si aspetta l'esito — che ci siano tutti — non un
 ## numero di fotogrammi deciso a tavolino (LEARNED.md § 17).
+## **Il cronometro chiude la partita** (blocco C, decisione 19). Non si aspettano
+## tre minuti veri: la durata è una manopola, e quello che si deve dimostrare è
+## che a zero il campo si ferma, la classifica si apre tutta e RIGIOCA riazzera.
+func _il_cronometro_chiude() -> void:
+	_arena.call("imposta_durata", 3.0)
+	_arena.call("avvia_sfida")
+	await _entrano_tutti(5)
+	await _il_via()
+	var acceso: float = _arena.call("tempo_rimasto")
+	_conta("il cronometro parte dalla durata della partita", acceso > 2.0 and acceso <= 3.0,
+			"%.1f s" % acceso)
+	var scritto: String = _arena.call("tempo_scritto")
+	_conta("il cronometro si legge in minuti e secondi", ":" in scritto, scritto)
+
+	# Un colpo, per avere una classifica che non sia tutta a zero.
+	var bot: Array = _arena.call("avversari")
+	(bot[0] as Avversario).call("incassa", 0, _arena.call("giocatore"))
+
+	var scadenza := Time.get_ticks_msec() + 8000
+	while Time.get_ticks_msec() < scadenza and float(_arena.call("tempo_rimasto")) > 0.0:
+		await process_frame
+	_conta("scaduto il tempo la partita finisce",
+			float(_arena.call("tempo_rimasto")) <= 0.0, "il cronometro non e' arrivato a zero")
+	var fermi := 0
+	for uno in _arena.call("avversari"):
+		if (uno as Avversario).bersaglio == null:
+			fermi += 1
+	_conta("e nessuno gioca più", fermi == (_arena.call("avversari") as Array).size(),
+			"%d ancora in gioco" % ((_arena.call("avversari") as Array).size() - fermi))
+
+	# In partita la classifica ne mostra quattro su sei, per non finire in mezzo al
+	# pollice sul telefono. Alla fine si aprono tutte: l'ordine d'arrivo è la cosa
+	# per cui si è giocato.
+	var arrivo: Array = _arena.call("classifica_da_mostrare")
+	_conta("a partita finita si vede l'ordine d'arrivo di tutti",
+			arrivo.size() == 6, "%d righe su 6" % arrivo.size())
+	var in_ordine := true
+	for i in range(1, arrivo.size()):
+		if int(arrivo[i - 1]["punti"]) < int(arrivo[i]["punti"]):
+			in_ordine = false
+	_conta("il podio è in ordine di punti", in_ordine, str(arrivo))
+
+	# **RIGIOCA a un tocco**: la domanda della tappa 7 si fa qui, e se ricominciare
+	# lasciasse i punti di prima non si potrebbe nemmeno fare.
+	_arena.call("rigioca")
+	await process_frame
+	var dopo: Array = _arena.call("punteggi")
+	_conta("RIGIOCA riparte da zero punti", int(dopo[0]) == 0 and int(dopo[1]) == 0, str(dopo))
+	_conta("e col cronometro pieno", float(_arena.call("tempo_rimasto")) > 2.0,
+			"%.1f s" % float(_arena.call("tempo_rimasto")))
+	_conta("il livello di partenza è il facile",
+			String(Avversario.TARATURE[(_arena.call("avversario") as Avversario).livello()]["nome"])
+			== "facile" if _arena.call("avversario") != null else false)
+	_arena.call("chiudi_sfida")
+	_arena.call("imposta_durata", Arena.DURATA_PARTITA)
+	await process_frame
+
+
+## **Cerca, non sa** (blocco C). Il difetto misurato il 12/09/2026: gli avversari
+## inseguivano il giocatore senza vederlo l'84% del tempo. Qui si verifica che la
+## caccia cambi davvero quello che sanno, e che spenta non cambi niente — perché
+## il poligono e l'angolo continuano a volere lo sparring partner di prima.
+func _la_caccia() -> void:
+	var giocatore: Giocatore = _arena.call("giocatore")
+	var partenze: Array = (Arena.carica_pianta(PIANTA))["partenze"]
+	giocatore.global_position = _dove(partenze[0]["dove"], float(partenze[0]["quota"]) + 0.4)
+	var bot := Avversario.crea(_arena, _dove(partenze[3]["dove"],
+			float(partenze[3]["quota"]) + 0.4), 0)
+	await process_frame
+	await physics_frame
+
+	bot.caccia = false
+	bot.bersaglio = giocatore
+	await physics_frame
+	_conta("con la caccia spenta va dritto dove sei (sparring partner)",
+			bot.dove_cerca().distance_to(giocatore.global_position) < 1.0,
+			"cerca a %.0f m da te" % bot.dove_cerca().distance_to(giocatore.global_position))
+
+	bot.caccia = true
+	bot.punta_a(null)
+	bot.punta_a(giocatore)
+	await physics_frame
+	await physics_frame
+	_conta("accesa, e senza averti visto, non sa dove sei", not bot.ha_notizia(),
+			"ha gia' una notizia")
+	_conta("e non ti spara addosso attraverso mezza arena",
+			bot.global_position.distance_to(giocatore.global_position) > 20.0)
+	_conta("ma non resta fermo: fa la ronda",
+			bot.dove_cerca().distance_to(bot.global_position) > Avversario.RONDA_ARRIVATO,
+			"cerca a %.1f m da se'" % bot.dove_cerca().distance_to(bot.global_position))
+
+	# **L'orecchio**: uno sparo del proprio bersaglio, entro ventotto metri, è una
+	# notizia. Da sessanta non lo è: mezza palestra, non tutta.
+	var lontano := bot.global_position + Vector3(0, 0, Avversario.ORECCHIO + 20.0)
+	bot.senti_sparo(lontano, giocatore)
+	_conta("uno sparo troppo lontano non dice niente", not bot.ha_notizia())
+	var vicino := bot.global_position + Vector3(4.0, 0, 0)
+	bot.senti_sparo(vicino, giocatore)
+	_conta("uno sparo vicino è una notizia", bot.ha_notizia())
+	_conta("e si va a vedere lì", bot.dove_cerca().distance_to(vicino) < 0.1,
+			"cerca a %.1f m dallo sparo" % bot.dove_cerca().distance_to(vicino))
+	bot.senti_sparo(vicino, bot)
+	_conta("lo sparo di un altro non sposta la ricerca",
+			bot.dove_cerca().distance_to(vicino) < 0.1)
+
+	# **La memoria scade.** Sei secondi dopo, chi si cercava può essere ovunque: si
+	# smette di cercare lì e si ricomincia il giro.
+	var scadenza := Time.get_ticks_msec() + int((Avversario.MEMORIA + 1.5) * 1000.0)
+	while Time.get_ticks_msec() < scadenza and bot.ha_notizia():
+		await physics_frame
+	_conta("dopo sei secondi la notizia scade", not bot.ha_notizia())
+
+	# **Il colpo incassato è la notizia più cara**: chi ti prende, sai da dove.
+	bot.call("incassa", 0, giocatore)
+	_conta("chi ti colpisce ti dice dov'è", bot.ha_notizia())
+	bot.bersaglio = null
+	bot.queue_free()
+	await process_frame
+
+
+## Aspetta il fischio d'inizio: 3 · 2 · 1 · VIA sono tre secondi veri, e la
+## partita comincia solo dopo.
+func _il_via() -> void:
+	var scadenza := Time.get_ticks_msec() + 6000
+	while Time.get_ticks_msec() < scadenza:
+		await process_frame
+		if float(_arena.call("conto_alla_rovescia")) <= 0.0:
+			return
+
+
 func _entrano_tutti(quanti: int) -> void:
 	var scadenza := Time.get_ticks_msec() + 4000
 	while Time.get_ticks_msec() < scadenza:
