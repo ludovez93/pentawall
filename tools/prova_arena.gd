@@ -557,11 +557,11 @@ func _il_colpo_si_sente() -> void:
 	_conta("il testo del colpo a due sponde", Comandi.testo_del_colpo(100, 2) == "+100 · 2 SPONDE",
 			Comandi.testo_del_colpo(100, 2))
 
-	_conta("il dardo parte a 19 m/s", is_equal_approx(Proiettile.velocita, 19.0))
+	_conta("il dardo parte a 24 m/s", is_equal_approx(Proiettile.velocita, 24.0))
 	_arena.call("commuta_dardo")
-	_conta("il pulsante lo porta a 24 m/s", is_equal_approx(Proiettile.velocita, 24.0))
+	_conta("il pulsante lo porta a 19 m/s", is_equal_approx(Proiettile.velocita, 19.0))
 	_arena.call("commuta_dardo")
-	_conta("e lo riporta a 19", is_equal_approx(Proiettile.velocita, 19.0))
+	_conta("e lo riporta a 24", is_equal_approx(Proiettile.velocita, 24.0))
 
 	var giocatore: Giocatore = _arena.call("giocatore")
 	var comandi: Comandi = giocatore.comandi

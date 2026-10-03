@@ -86,6 +86,13 @@ static func traiettoria(spazio: PhysicsDirectSpaceState3D, origine: Vector3, dir
 			return tratti
 
 		tratto.muro = true
+		# Un urto senza normale: il raggio è partito da dentro una superficie (un
+		# colpo nato a filo di un muro). Specchiare su una normale nulla dà un verso
+		# nullo, e Godot lo segnala come errore a ogni rimbalzo; il dardo muore qui.
+		if tratto.normale.length_squared() < 0.0001:
+			tratto.esaurito = true
+			tratti.append(tratto)
+			return tratti
 		if muri >= muri_massimi:
 			# Sesto muro: il proiettile muore qui, non rimbalza.
 			tratto.esaurito = true

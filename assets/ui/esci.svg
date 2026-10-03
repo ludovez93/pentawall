@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- La porta: una freccia che esce da una cornice. -->
+  <g fill="none" stroke="#ffffff" stroke-width="11" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M70 26 H34 V102 H70"/>
+    <path d="M58 64 H106 M88 44 L108 64 L88 84"/>
+  </g>
+</svg>

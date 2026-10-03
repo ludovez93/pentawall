@@ -532,6 +532,23 @@ func _pulsante(testo: String, scarto: Vector2, misura: Vector2, colore: Color,
 	return pulsante
 
 
+const ICONA_FUOCO := "res://assets/ui/fuoco.svg"
+const ICONA_SALTA := "res://assets/ui/salta.svg"
+const ICONA_ESCI := "res://assets/ui/esci.svg"
+
+
+## Un pulsante tondo: pieno, senza bordo a caramella, con un'ombra morbida.
+func _tondo(colore: Color, opacita: float, lato: float) -> StyleBoxFlat:
+	var stile := StyleBoxFlat.new()
+	stile.bg_color = Color(colore.r, colore.g, colore.b, opacita)
+	stile.set_corner_radius_all(int(lato * 0.5))
+	stile.anti_aliasing = true
+	stile.shadow_color = Color(0, 0, 0, 0.25)
+	stile.shadow_size = 8
+	stile.shadow_offset = Vector2(0, 3)
+	return stile
+
+
 func _sfondo(colore: Color, opacita: float) -> StyleBoxFlat:
 	var stile := StyleBoxFlat.new()
 	stile.bg_color = Color(colore.r, colore.g, colore.b, opacita)
@@ -575,6 +592,8 @@ var _podio_posizione: Label
 var _righe_podio: Array[Dictionary] = []
 var _fischio: Label
 var _tempo_fischio := 0.0
+var _pillola_potenziamento: PanelContainer
+var _testo_potenziamento: Label
 
 
 static func carattere_testo() -> Font:
@@ -618,9 +637,11 @@ func modalita_partita(tempo: String, posizione: int, punti: int) -> void:
 func _accendi_la_partita() -> void:
 	_riga_alta.visible = false
 	_riga_bassa.visible = false
-	# I due pulsanti del gioco diventano più coprenti: a un terzo di opacità il
-	# loro colore lo faceva il muro dietro — SALTA usciva grigio davanti all'ocra.
+	# I due pulsanti del gioco: **tondi e a icona** (tappa 8, blocco G), come in ogni
+	# sparatutto per telefono di oggi — il dardo che parte, le due frecce in su. E
+	# coprenti: a un terzo di opacità il loro colore lo faceva il muro dietro.
 	var pieni := {"FUOCO": Color(0.95, 0.3, 0.35), "SALTA": Color(0.2, 0.6, 1.0)}
+	var icone := {"FUOCO": ICONA_FUOCO, "SALTA": ICONA_SALTA}
 	for figlio in get_children():
 		if not (figlio is Button):
 			continue
@@ -628,9 +649,16 @@ func _accendi_la_partita() -> void:
 		if not pieni.has(pulsante.text):
 			pulsante.visible = false
 			continue
+		var lato := pulsante.offset_right - pulsante.offset_left
 		for stato in ["normal", "hover", "focus"]:
-			pulsante.add_theme_stylebox_override(stato, _sfondo(pieni[pulsante.text], 0.66))
-		pulsante.add_theme_stylebox_override("pressed", _sfondo(pieni[pulsante.text], 0.9))
+			pulsante.add_theme_stylebox_override(stato, _tondo(pieni[pulsante.text], 0.62, lato))
+		pulsante.add_theme_stylebox_override("pressed", _tondo(pieni[pulsante.text], 0.92, lato))
+		pulsante.set_meta("nome", pulsante.text)
+		pulsante.icon = load(icone[pulsante.text])
+		pulsante.expand_icon = true
+		pulsante.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		pulsante.add_theme_constant_override("icon_max_width", int(lato * 0.52))
+		pulsante.text = ""
 	# Due righe sole in partita, quindi possono essere grandi quanto servono.
 	for riga in _righe_classifica:
 		for chiave in ["posizione", "nome", "punti"]:
@@ -644,15 +672,22 @@ func _accendi_la_partita() -> void:
 	# senza uscita. Piccolo e spento, in alto a sinistra, dove non passa nessun
 	# pollice.
 	if _bottone_esci == null:
-		_bottone_esci = _pulsante("ESCI", Vector2.ZERO, Vector2(84, 52),
+		_bottone_esci = _pulsante("", Vector2.ZERO, Vector2(60, 60),
 				Color(0.35, 0.4, 0.55), func() -> void: uscita_richiesta.emit())
 		_bottone_esci.set_anchors_preset(Control.PRESET_TOP_LEFT)
-		_bottone_esci.offset_left = 28
-		_bottone_esci.offset_top = 22
-		_bottone_esci.offset_right = 28 + 84
-		_bottone_esci.offset_bottom = 22 + 52
-		_bottone_esci.add_theme_font_size_override("font_size", 17)
-		_bottone_esci.modulate.a = 0.55
+		_bottone_esci.offset_left = 26
+		_bottone_esci.offset_top = 18
+		_bottone_esci.offset_right = 26 + 60
+		_bottone_esci.offset_bottom = 18 + 60
+		for stato in ["normal", "hover", "focus"]:
+			_bottone_esci.add_theme_stylebox_override(stato, _tondo(Color(0.10, 0.10, 0.18), 0.55, 60))
+		_bottone_esci.add_theme_stylebox_override("pressed", _tondo(Color(0.10, 0.10, 0.18), 0.85, 60))
+		_bottone_esci.set_meta("nome", "ESCI")
+		_bottone_esci.icon = load(ICONA_ESCI)
+		_bottone_esci.expand_icon = true
+		_bottone_esci.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_bottone_esci.add_theme_constant_override("icon_max_width", 30)
+		_bottone_esci.modulate.a = 0.7
 	_bottone_esci.visible = true
 
 
@@ -727,6 +762,37 @@ func podio(righe: Array, posizione: int) -> void:
 	spegni_la_classifica()
 	if _bottone_esci != null:
 		_bottone_esci.visible = false
+
+
+## **La pillola del potenziamento** (tappa 8, blocco H): sotto il cronometro, nel
+## colore della palla presa, con i secondi che restano. Testo vuoto = spenta.
+func potenziamento(testo: String, colore: Color) -> void:
+	if testo == "":
+		if _pillola_potenziamento != null:
+			_pillola_potenziamento.visible = false
+		return
+	if _pillola_potenziamento == null:
+		_pillola_potenziamento = PanelContainer.new()
+		_pillola_potenziamento.set_anchors_preset(Control.PRESET_CENTER_TOP)
+		_pillola_potenziamento.grow_horizontal = Control.GROW_DIRECTION_BOTH
+		_pillola_potenziamento.offset_top = 86
+		_pillola_potenziamento.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var fondo := StyleBoxFlat.new()
+		fondo.set_corner_radius_all(16)
+		fondo.content_margin_left = 18
+		fondo.content_margin_right = 18
+		fondo.content_margin_top = 2
+		fondo.content_margin_bottom = 4
+		_pillola_potenziamento.add_theme_stylebox_override("panel", fondo)
+		_testo_potenziamento = _etichetta(24, Color(0.06, 0.04, 0.10, 1.0))
+		_testo_potenziamento.add_theme_font_override("font", carattere_titolo())
+		_testo_potenziamento.add_theme_constant_override("outline_size", 0)
+		_pillola_potenziamento.add_child(_testo_potenziamento)
+		add_child(_pillola_potenziamento)
+	var fondo_attuale := _pillola_potenziamento.get_theme_stylebox("panel") as StyleBoxFlat
+	fondo_attuale.bg_color = Color(colore.r, colore.g, colore.b, 0.92)
+	_testo_potenziamento.text = testo
+	_pillola_potenziamento.visible = true
 
 
 func spegni_il_podio() -> void:

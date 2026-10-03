@@ -38,8 +38,16 @@ func _lavora() -> void:
 	var partenza := Vector3(-9.0, 0.6, 6.5)
 	giocatore.global_position = partenza
 	giocatore.punta(20.0, -3.0)
-	for i in 6:
-		await process_frame
+	# Si aspetta che sia **a terra e fermo**, non un numero di fotogrammi: senza
+	# schermo, e con il PC sotto carico, sei fotogrammi possono passare senza un
+	# solo passo di fisica — il giocatore stava ancora cadendo dai sessanta
+	# centimetri della partenza, la mira veniva cercata da un punto e il colpo
+	# partiva da un altro (LEARNED.md § 17).
+	var attese := 0
+	while attese < 600 and not (giocatore.is_on_floor()
+			and Vector2(giocatore.velocity.x, giocatore.velocity.z).length() < 0.05):
+		attese += 1
+		await physics_frame
 
 	# 1. Da lì, il bersaglio dietro il divisorio non si vede. Se si vedesse,
 	#    l'angolo cieco non sarebbe cieco e la stanza non servirebbe a niente.

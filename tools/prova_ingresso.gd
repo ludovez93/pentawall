@@ -5,7 +5,7 @@ extends SceneTree
 ## È **la scena principale**: se si rompe, il gioco non si apre e non lo dice
 ## nessuno finché non si tocca il link dal telefono. I controlli sono pochi e
 ## grossi: che si apra, che ci sia GIOCA, che il gesto nascosto apra il banco di
-## prova, e che il pulsante del dardo commuti davvero.
+## prova, che sul palco ci sia il personaggio e che suoni la musica.
 ##
 ## Uso:  godot --headless --path . -s tools/prova_ingresso.gd
 
@@ -46,15 +46,11 @@ func _lavora() -> void:
 	for dove in ["ARENA LIBERA", "POLIGONO", "ANGOLO"]:
 		_conta("e porta a «%s»" % dove, tasti.has(dove))
 
-	# Il dardo: 19 o 24, la manopola che aspetta il pollice di Ludovico.
-	Proiettile.velocita = Proiettile.VELOCITA_BASE
-	ingresso.call("_commuta_dardo")
-	_conta("il pulsante del dardo lo porta a 24 m/s",
-			is_equal_approx(Proiettile.velocita, Proiettile.VELOCITA_VELOCE),
-			"%.0f m/s" % Proiettile.velocita)
-	ingresso.call("_commuta_dardo")
-	_conta("e lo riporta a 19",
-			is_equal_approx(Proiettile.velocita, Proiettile.VELOCITA_BASE),
+	# Il personaggio sul palco (tappa 8, blocco I): il tuo corpo vero, col blaster.
+	var corpo: Variant = ingresso.call("personaggio")
+	_conta("sul palco c'è il tuo personaggio", corpo is Corpo and (corpo as Corpo).chi == "TU")
+	_conta("e c'è la musica d'ingresso", Suoni.brano() == "musica_ingresso", Suoni.brano())
+	_conta("il dardo parte a 24 m/s", is_equal_approx(Proiettile.velocita, Proiettile.VELOCITA_VELOCE),
 			"%.0f m/s" % Proiettile.velocita)
 
 	print("\nINGRESSO: %d prove, %s" %

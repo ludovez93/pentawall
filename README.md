@@ -9,12 +9,21 @@ sta nella cartella superiore e non è pubblicata qui.
 
 ## Stato
 
-**Tappa 7 — da laboratorio a gioco.** Si apre su una schermata con il nome e **GIOCA**: da lì si
-entra in una **partita a sei da tre minuti** nell'arena intera, con il fischio d'inizio
-(3 · 2 · 1 · VIA), la classifica viva, gli annunci, e alla fine il **podio con RIGIOCA**.
+**Tappa 8 — da prototipo a gioco.** Si apre sul tuo personaggio in piedi su una pedana al neon, con
+la musica; da **GIOCA** si entra in una **partita a sei da tre minuti** nell'arena intera: fischio
+d'inizio con l'annunciatore (3 · 2 · 1 · GO), classifica viva, palle colorate, ultimo minuto con la
+musica che cambia, e alla fine il **podio con RIGIOCA**.
+
+I sei concorrenti hanno **corpi veri**: divisa con inserti, guanti e scarpe, capelli, il blaster in
+mano, e animazioni vere — corrono avanti, di lato e all'indietro con il busto sulla mira, saltano,
+sparano e accusano i colpi. L'arena ha superfici vere (parquet, moquette, intonaco, mattoni,
+lamiera), spigoli smussati e piloni tondi, insegne al neon, le linee del campo nel catino, il
+tabellone sospeso, e **il pubblico sulle tribune**. Suoni registrati e musica, tutti liberi
+(`assets/LICENZE.md`).
 
 Gli avversari **cercano, non sanno**: ti attaccano quando ti vedono, vanno dove ti hanno visto
-l'ultima volta o dove ti hanno sentito sparare, e se non hanno notizie girano per l'arena.
+l'ultima volta o dove ti hanno sentito sparare, se non hanno notizie girano per l'arena — e se
+passano vicino a una palla colorata la vanno a prendere.
 
 I banchi di prova — poligono, angolo, arena senza partita — sono ancora tutti lì, dietro **cinque
 tocchi sulla riga della versione** in basso a destra nella schermata d'ingresso.
@@ -68,16 +77,16 @@ firma della pubblicazione e l'ora.
 |---|---|---|
 | Muoversi | pollice sulla metà sinistra | W A S D |
 | Mirare | pollice sulla metà destra | mouse |
-| Sparare | tocco secco a destra, o **FUOCO** | clic sinistro |
-| Saltare | **SALTA** | barra spaziatrice |
+| Sparare | tocco secco a destra, o il pulsante rosso col dardo | clic sinistro |
+| Saltare | il pulsante blu con le due frecce | barra spaziatrice |
 | Cambiare visuale | **VISUALE** | V |
 | Cambiare il colore del dardo | **COLORE** | C |
 | Accendere o chiudere la sfida | **SFIDA** | B |
 | Cambiare livello dell'avversario | **LIVELLO** | L |
-| Dardo a 19 o a 24 m/s | **DARDO** (anche nell'ingresso) | R |
-| Uscire dalla partita | **ESCI**, in alto a sinistra | — |
+| Dardo a 19 o a 24 m/s (si parte a 24) | **DARDO**, nei banchi di prova | R |
+| Uscire dalla partita | il pulsante con la porta, in alto a sinistra | — |
 
-In partita i pulsanti di prova non ci sono: restano il mirino, la leva, FUOCO, SALTA e l'uscita.
+In partita i pulsanti di prova non ci sono: restano il mirino, la leva, fuoco, salto e l'uscita.
 
 Sul PC il mouse si aggancia al primo clic e si libera con Esc.
 
@@ -100,7 +109,8 @@ gravità 18,1 m/s², dardo a 19 m/s.
 ```
 Godot --path . -s tools/prova_balistica.gd       # 20 controlli sulla riflessione, senza schermo
 Godot --path . -s tools/prova_ingresso.gd        # 11 controlli sulla schermata d'ingresso
-Godot --path . -s tools/prova_arena.gd           # 93 controlli: pianta, cammino, partita, caccia
+Godot --path . -s tools/prova_arena.gd           # 117 controlli: pianta, cammino, partita, caccia
+Godot --path . -s tools/prova_vivo.gd            # 42 controlli: corpi, forme, suoni, particelle, palle colorate
 Godot --path . -s tools/prova_ritmo.gd           # una partita intera: si arriva nei primi tre?
 Godot --path . -s tools/prova_poligono.gd        # il giro completo: sponda, colpo, punteggio
 Godot --path . -s tools/prova_avversario.gd      # 18 controlli: anticipo, schivata, livelli, partita
@@ -108,6 +118,10 @@ Godot --path . -s tools/prova_comandi.gd         # 15 controlli: muovere e mirar
 Godot --path . -s tools/scatti_poligono.gd       # scatti del poligono, in scatti/ (non versionata)
 Godot --path . -s tools/scatti_avversario.gd     # scatti della sfida
 Godot --path . -s tools/misura_prestazioni.gd    # prestazioni; con `-- senza-sfida` per il paragone
+Godot --path . --resolution 854x390 -s tools/scatti_corpi.gd   # i sei corpi in arena
+Godot --path . --resolution 1280x560 -s tools/scatti_pose.gd   # le pose da vicino: corsa, lato, indietro
+python tools/prepara_suoni.py                    # i suoni, dal materiale libero ad assets/audio
+python tools/genera_maschere_divisa.py           # le maschere di scarpe, guanti e inserti
 ```
 
 Il collaudo della balistica gira anche a ogni `push`, prima della compilazione: se la riflessione

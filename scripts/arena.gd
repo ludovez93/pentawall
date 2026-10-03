@@ -112,21 +112,6 @@ const TINTE := {
 	"soffitto": Color(0.36, 0.34, 0.60),
 }
 
-## **Il pubblico sulle gradinate.** Tre file per gradinata, una più alta
-## dell'altra: le gradinate sono blocchi lisci, e sono i posti sfalsati a
-## raccontare il gradino. Le tinte sono quelle sature del gioco, che da
-## venticinque metri sono l'unica cosa che si legge di una figura alta un metro.
-const FILE_PUBBLICO := 4
-const PASSO_FILA := 1.15     ## quanto dista una fila dall'altra, verso il campo
-const GRADINO := 0.4         ## quanto sale ogni fila
-const PASSO_POSTO := 0.7     ## quanto è largo un posto
-const ALTEZZA_SEDUTO := 0.5  ## mezzo busto sopra il piano: seduti, non in piedi
-const POSTI_VUOTI := 0.12    ## una tribuna piena al centesimo non è una tribuna
-const TINTE_PUBBLICO := [
-	Color(0.98, 0.78, 0.22), Color(0.30, 0.85, 0.95), Color(0.95, 0.35, 0.62),
-	Color(0.55, 0.90, 0.40), Color(0.92, 0.92, 0.88), Color(0.99, 0.55, 0.25),
-]
-
 const SPONDA := Color(0.09, 0.60, 0.64)
 const NEON_SPONDA := Color(0.30, 0.99, 0.95)
 
@@ -184,12 +169,23 @@ var _turno_riscelta := 0
 var _in_arrivo: Array[Dictionary] = []
 ## La sonda dei fotogrammi: in partita manda i numeri del telefono al Server 2.
 var _sonda: Sonda
+## Il tabellone sopra il catino, e ogni quanto si riscrive (quattro volte al secondo
+## basta per un cronometro che cambia una volta al secondo).
+var _tabellone: Node3D
+var _prossimo_tabellone := 0.0
+## Le palle colorate (tappa 8, blocco H).
+var _potenziamenti: Potenziamenti
 
 
 func _ready() -> void:
 	_pianta = carica_pianta()
 	_ambiente()
 	_costruisci()
+	# Le superfici vere al posto delle tinte piatte (tappa 8, blocco E): moquette,
+	# intonaco, mattoni e lamiera PBR, ognuna con il colore della sua tinta. Fino al
+	# 03/10/2026 vestivano solo l'angolo dell'attrezzo degli scatti.
+	Vestizione.vesti(self)
+	_tabellone = Vestizione.arreda_arena(self, _pianta)
 	_pubblico()
 	_rete_di_cammino()
 	_luci()
@@ -200,6 +196,14 @@ func _ready() -> void:
 	_sonda.arena = self
 	add_child(_sonda)
 	add_child(Suoni.new())
+	add_child(Scintille.new())
+	_potenziamenti = Potenziamenti.new()
+	_potenziamenti.name = "potenziamenti"
+	add_child(_potenziamenti)
+	_potenziamenti.concorrenti = _corpi_in_campo
+	_potenziamenti.prepara(POTENZIAMENTI)
+	_potenziamenti.preso.connect(_su_potenziamento_preso)
+	_potenziamenti.finito.connect(_su_potenziamento_finito)
 
 	_comandi = Comandi.new()
 	add_child(_comandi)
@@ -226,6 +230,10 @@ func _ready() -> void:
 	# Il primo colpo di una partita costava un fotogramma intero: si scalda lo
 	# shader del bagliore appena la scena si apre (LEARNED.md § 26 e 27).
 	Proiettile.scalda(self, _giocatore.camera())
+	# E le cose nuove della tappa 8: particelle e lampo dello sparo.
+	if Scintille.attivo != null:
+		Scintille.attivo.scalda(_giocatore.camera())
+	_giocatore.corpo().scalda(_giocatore.camera())
 
 	_comandi.rigioca_richiesta.connect(rigioca)
 	_comandi.uscita_richiesta.connect(torna_all_ingresso)
@@ -268,8 +276,16 @@ func _costruisci() -> void:
 		var misura := Vector3(float(m["misura"][0]), float(m["alto"]), float(m["misura"][1]))
 		var centro := Vector3(float(m["centro"][0]),
 				float(m["quota"]) + misura.y * 0.5, float(m["centro"][1]))
-		Muratura.muro(self, centro, misura, _tinta(m["tinta"]),
-				Vector3(0, float(m.get("giro", 0)), 0))
+		var nome := String(m.get("nome", ""))
+		# **La regola delle forme** (12/09/2026, tappa 8 blocco E): nessuno spigolo
+		# vivo. Colonne, piloni e pilastri diventano tondi; tutto il resto si smussa,
+		# di più le cose basse che si guardano da vicino (cassoni, casse, blocchi),
+		# di meno i muri alti. Lo decide il nome nella pianta, non la misura.
+		if _e_tondo(nome) and absf(misura.x - misura.z) < 0.01:
+			Muratura.pilone(self, centro, misura.x * 0.5, misura.y, _tinta(m["tinta"]))
+		else:
+			Muratura.muro(self, centro, misura, _tinta(m["tinta"]),
+					Vector3(0, float(m.get("giro", 0)), 0), _smusso_di(nome, misura))
 
 	for s in _pianta["sponde"]:
 		var faccia := Vector2(float(s["faccia"][0]), float(s["faccia"][1]))
@@ -309,11 +325,24 @@ func _costruisci() -> void:
 				Vector3(float(l["misura"][0]), 0.12, float(l["misura"][1])),
 				Color(0.72, 0.52, 0.98), 0.72)
 
-	for i in _pianta["insegne"]:
-		Muratura.insegna(self, String(i["testo"]),
-				Vector3(float(i["dove"][0]), float(i["quota"]), float(i["dove"][1])),
-				Vector3(0, float(i["giro"]), 0), float(i["misura"]),
-				Color(0.60, 0.82, 1.0))
+	# Le insegne della pianta le costruisce l'arredo (`Vestizione.arreda_arena`):
+	# dal 03/10/2026 sono oggetti — pannello, cornice al neon, scritta — e non più
+	# scritte sospese davanti al muro.
+
+
+## Tondi: colonne, piloni, pilastri. Tutto il resto è una scatola, smussata.
+static func _e_tondo(nome: String) -> bool:
+	return nome.contains("colonna") or nome.contains("pilone") or nome.contains("pilastro")
+
+
+## Di quanto si smussano gli spigoli di un muro, in metri.
+static func _smusso_di(nome: String, misura: Vector3) -> float:
+	var sottile := minf(misura.x, misura.z)
+	if nome.contains("cassone") or nome.contains("cassa") or nome.contains("blocco") 			or nome.contains("box"):
+		return 0.3
+	if nome.contains("perimetro") or nome.contains("faccia"):
+		return 0.18
+	return clampf(sottile * 0.3, 0.06, 0.16)
 
 
 ## Il cordolo: una riga chiara sul **bordo che dà sul vuoto** di ogni piano alto.
@@ -449,101 +478,28 @@ func _aggiungi_bersaglio(dove: Vector3, colore: Color) -> Bersaglio:
 ## chiamano «gradinata» e ci si siede sopra. Sposta la gradinata nel `.json` e il
 ## pubblico la segue.
 func _pubblico() -> void:
-	var posti: Array[Transform3D] = []
-	var tinte: Array[Color] = []
-	# Seme fisso: la tribuna dev'essere la stessa a ogni apertura, o due scatti
-	# dello stesso posto non si possono confrontare.
-	var caso := RandomNumberGenerator.new()
-	caso.seed = 20260827
-
+	# Il cordolo sul bordo che dà sul campo. Senza, la folla sembra sospesa sul
+	# niente: la gradinata è un blocco scuro e il suo piano non si legge — è la
+	# lezione della passerella nord (`LEARNED.md` § 31), applicata a un piano su cui
+	# non si cammina ma si guarda.
 	for muro in _pianta["muri"]:
-		var nome := String(muro.get("nome", ""))
-		if not nome.contains("gradinata"):
+		if not String(muro.get("nome", "")).contains("gradinata"):
 			continue
 		var centro := _punto(muro["centro"])
 		var misura := _punto(muro["misura"])
 		var piano := float(muro["quota"]) + float(muro["alto"])
-		# Il cordolo sul bordo che dà sul campo. Senza, la folla sembra sospesa
-		# sul niente: la gradinata è un blocco scuro e il suo piano non si legge
-		# — è la lezione della passerella nord (`LEARNED.md` § 31), applicata a
-		# un piano su cui non si cammina ma si guarda.
 		Muratura.decoro(self, Vector3(centro.x + misura.x * 0.5, piano + 0.03, centro.y),
 				Vector3(misura.y, 0.06, 0.18), Color(0.78, 0.72, 0.95), 0.55,
 				Vector3(0, 90, 0))
-		# Le file guardano l'arena, che sta a est: corrono lungo la profondità
-		# della gradinata e si susseguono verso ovest, ognuna un gradino più su.
-		for fila in FILE_PUBBLICO:
-			var x := centro.x - misura.x * 0.5 + PASSO_FILA * (float(fila) + 0.6)
-			var alto := piano + GRADINO * float(fila)
-			var quanti := int(misura.y / PASSO_POSTO)
-			for posto in quanti:
-				if caso.randf() < POSTI_VUOTI:
-					continue
-				var z := centro.y - misura.y * 0.5 + PASSO_POSTO * (float(posto) + 0.5)
-				var dove := Vector3(x + caso.randf_range(-0.1, 0.1), alto + ALTEZZA_SEDUTO,
-						z + caso.randf_range(-0.08, 0.08))
-				var giro := Transform3D(Basis(Vector3.UP, caso.randf_range(-0.4, 0.4)), dove)
-				posti.append(giro)
-				tinte.append(TINTE_PUBBLICO[caso.randi() % TINTE_PUBBLICO.size()])
-
-	if posti.is_empty():
-		return
-
-	# **Busti e teste, due passate in tutto.** Una capsula da sola, a venticinque
-	# metri, non è una persona: è un birillo — guardato in uno scatto il
-	# 27/08/2026, ed è la testa a fare la differenza. Fonderle in una mesh sola
-	# avrebbe risparmiato una passata su centoquaranta figure: non vale il codice
-	# che costa.
-	var busto := CapsuleMesh.new()
-	busto.radius = 0.26
-	busto.height = 1.0
-	busto.radial_segments = 6
-	busto.rings = 2
-	_folla("pubblico", busto, posti, tinte, Vector3.ZERO, 1.0)
-
-	var testa := SphereMesh.new()
-	testa.radius = 0.2
-	testa.height = 0.4
-	testa.radial_segments = 6
-	testa.rings = 4
-	# La testa è la stessa tinta, ma scura: senza, una fila di teste chiare
-	# sembra una fila di lampadine.
-	_folla("pubblico_teste", testa, posti, tinte, Vector3(0, 0.66, 0), 0.42)
-
-
-## Una folla: la stessa figura ripetuta, una passata sola per la scheda video.
-## `scuro` moltiplica la tinta, `alzata` sposta la figura rispetto al posto.
-func _folla(nome: String, figura: Mesh, posti: Array[Transform3D], tinte: Array[Color],
-		alzata: Vector3, scuro: float) -> void:
-	var pelle := StandardMaterial3D.new()
-	pelle.vertex_color_use_as_albedo = true
-	pelle.roughness = 0.85
-	pelle.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
-
-	var folla := MultiMesh.new()
-	folla.transform_format = MultiMesh.TRANSFORM_3D
-	folla.use_colors = true
-	folla.mesh = figura
-	folla.instance_count = posti.size()
-	for i in posti.size():
-		folla.set_instance_transform(i, posti[i].translated(alzata))
-		folla.set_instance_color(i, tinte[i] * scuro)
-
-	var nodo := MultiMeshInstance3D.new()
-	nodo.name = nome
-	nodo.multimesh = folla
-	nodo.material_override = pelle
-	nodo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(nodo)
+	# Le persone (tappa 8, blocco E): dal 03/10/2026 non più capsule ma gente vera,
+	# sedute o che esultano, sui loro gradini (`Pubblico`).
+	Pubblico.costruisci(self, _pianta)
 
 
 ## Quante figure ci sono. Serve al collaudo: una tribuna vuota si vede solo
 ## guardandola, e un errore nella pianta la svuoterebbe in silenzio.
 func quanto_pubblico() -> int:
-	var nodo := get_node_or_null("pubblico") as MultiMeshInstance3D
-	if nodo == null or nodo.multimesh == null:
-		return 0
-	return nodo.multimesh.instance_count
+	return Pubblico.quante(get_node_or_null("pubblico"))
 
 
 func _ambiente() -> void:
@@ -592,9 +548,10 @@ func _luci() -> void:
 	# cosi' che un'ala si riconosce da lontano prima di leggerne l'insegna.
 	_lampada(Vector3(0, 5.0, -22), Color(0.98, 0.78, 0.42), 3.4, 26.0)
 	_lampada(Vector3(26, 4.2, 0), Color(1.0, 0.52, 0.46), 3.2, 24.0)
-	# Verde lime, non ambra: una lampada arancione tingerebbe le pareti del
-	# colore del dardo, e quel colore e' riservato a lui solo.
-	_lampada(Vector3(-24, 4.0, -24), Color(0.62, 1.0, 0.45), 2.8, 22.0)
+	# Viola, il colore del neon: non ambra (una lampada arancione tingerebbe le
+	# pareti del colore del dardo) e non piu' lime, che dalla tappa 4 e' il colore
+	# riservato al contorno degli avversari (decisione 15).
+	_lampada(Vector3(-24, 4.0, -24), Vestizione.NEON, 2.6, 22.0)
 
 
 func _lampada(dove: Vector3, colore: Color, forza: float, portata: float) -> void:
@@ -688,6 +645,10 @@ func _scrivi_il_dardo() -> void:
 func _process(delta: float) -> void:
 	_aggiorna_righe()
 	_respiro_degli_anelli(delta)
+	_prossimo_tabellone -= delta
+	if _prossimo_tabellone <= 0.0:
+		_prossimo_tabellone = 0.25
+		_scrivi_il_tabellone()
 	if _sfida and not _finita:
 		# I corpi entrano anche durante il conto alla rovescia: i tre secondi del
 		# fischio d'inizio servono anche a questo.
@@ -701,6 +662,7 @@ func _process(delta: float) -> void:
 			_guarda_la_classifica(delta)
 	if _modo_partita and _sfida:
 		_comandi.modalita_partita(tempo_scritto(), maxi(posizione_mia(), 1), punteggi()[0])
+	_scrivi_il_potenziamento()
 	for tasto in SCORCIATOIE:
 		var giu := Input.is_physical_key_pressed(tasto)
 		if giu and not bool(_tasti.get(tasto, false)):
@@ -715,6 +677,83 @@ func _process(delta: float) -> void:
 		_tasti[tasto] = giu
 
 
+## **Dove stanno le palle colorate** (tappa 8, blocco H): una nel catino, al centro
+## di tutto e conteso; una sul ballatoio, che domina l'arena; una sulla terrazza
+## nord-est, in cima alla scala. Posti dove si incrociano le strade, mai su una
+## partenza. *Scelta di lavorazione del 03/10/2026.*
+const POTENZIAMENTI := [
+	{"tipo": "turbo", "dove": Vector3(0.0, -2.0, 7.2)},
+	{"tipo": "doppio", "dove": Vector3(6.0, 7.0, 21.5)},
+	{"tipo": "turbo", "dove": Vector3(27.0, 3.5, -27.0)},
+]
+
+
+## Chi può raccogliere una palla colorata: tutti i corpi in campo durante la partita.
+func _corpi_in_campo() -> Array:
+	var fuori := []
+	if not _sfida or _finita or _conto > 0.0:
+		return fuori
+	for riga in _concorrenti:
+		var corpo: Node3D = riga["corpo"]
+		if corpo != null and is_instance_valid(corpo):
+			fuori.append(corpo)
+	return fuori
+
+
+func _su_potenziamento_preso(chi: Node3D, tipo: String) -> void:
+	var dati: Dictionary = Potenziamenti.TIPI[tipo]
+	if chi == _giocatore:
+		_comandi.annuncia(String(dati["nome"]) + "!")
+		Suoni.potenziamento(true)
+		if tipo == "doppio":
+			_giocatore.moltiplicatore_punti = 2
+	else:
+		Suoni.potenziamento(false)
+		# I punti doppi di un avversario sono una minaccia: si dice chi li ha.
+		if tipo == "doppio":
+			var riga := _riga_di(chi)
+			if riga >= 0:
+				_comandi.annuncia("%s HA I PUNTI DOPPI" % String(_concorrenti[riga]["nome"]))
+
+
+func _su_potenziamento_finito(chi: Node3D, tipo: String) -> void:
+	if chi == _giocatore:
+		Suoni.potenziamento_finito()
+		if tipo == "doppio":
+			_giocatore.moltiplicatore_punti = 1
+
+
+## La pillola del potenziamento sotto il cronometro: cosa hai e quanto ti resta.
+func _scrivi_il_potenziamento() -> void:
+	if _potenziamenti == null or _giocatore == null:
+		return
+	for tipo in ["doppio", "turbo"]:
+		var resto := _potenziamenti.resto(_giocatore, tipo)
+		if resto > 0.0:
+			var dati: Dictionary = Potenziamenti.TIPI[tipo]
+			_comandi.potenziamento("%s · %d" % [String(dati["nome"]), int(ceil(resto))], dati["colore"])
+			return
+	_comandi.potenziamento("", Color.WHITE)
+
+
+## Il tabellone sopra il catino: durante la partita il tempo e chi comanda, a
+## partita finita chi ha vinto, fuori dalla partita il nome del gioco.
+func _scrivi_il_tabellone() -> void:
+	if _tabellone == null:
+		return
+	if not _sfida:
+		Vestizione.aggiorna_tabellone(_tabellone, "PENTAWALL", "5 MURI")
+		return
+	var righe := classifica()
+	var capo := "" if righe.is_empty() else "1° %s · %d" % [String(righe[0]["nome"]),
+			int(righe[0]["punti"])]
+	if _finita:
+		Vestizione.aggiorna_tabellone(_tabellone, "FINE",
+				"" if righe.is_empty() else "VINCE %s" % String(righe[0]["nome"]))
+	else:
+		Vestizione.aggiorna_tabellone(_tabellone, tempo_scritto(), capo)
+
+
 # ------------------------------------------------------------- il cronometro
 
 ## **Il fischio d'inizio.** Tre numeri e un via, uno al secondo, con il bip. Chi
@@ -726,7 +765,7 @@ func _scorre_il_conto(delta: float) -> void:
 	var adesso := int(ceil(_conto))
 	if adesso != prima and adesso > 0:
 		_comandi.fischio("%d" % adesso)
-		Suoni.conto()
+		Suoni.conto(adesso)
 	if _conto <= 0.0:
 		_conto = 0.0
 		_via()
@@ -747,6 +786,9 @@ func _scorre_il_tempo(delta: float) -> void:
 	_tempo = maxf(_tempo - delta, 0.0)
 	if _avvisi_dati < AVVISI_TEMPO.size() 			and _tempo <= float(AVVISI_TEMPO[_avvisi_dati]["quando"]):
 		_comandi.annuncia(String(AVVISI_TEMPO[_avvisi_dati]["cosa"]))
+		# L'ultimo minuto si sente: l'annunciatore, e la musica che cambia passo.
+		if _avvisi_dati == 0:
+			Suoni.ultimo_minuto()
 		_avvisi_dati += 1
 	if _tempo <= 0.0:
 		_finisci_la_partita()
@@ -828,6 +870,7 @@ func avvia_sfida() -> void:
 
 	_svuota_il_campo()
 	_mettiti_alla_partenza(_partenza)
+	_potenziamenti.riparti()
 	_concorrenti.append({"nome": "TU", "corpo": _giocatore, "punti": 0})
 
 	# **Entrano uno per fotogramma.** Costruire un corpo — mesh, materiali, i due
@@ -851,7 +894,10 @@ func avvia_sfida() -> void:
 	_prossima_riscelta = RISCELTA
 	_turno_riscelta = 0
 	_comandi.fischio("%d" % int(ceil(_conto)))
-	Suoni.conto()
+	Suoni.conto(int(ceil(_conto)))
+	# La partita ha la sua musica e il suo pubblico: si accendono col fischio.
+	Suoni.musica("musica_partita")
+	Suoni.folla(true)
 	_sonda.parti()
 	_aggiorna_la_classifica()
 	_comandi.scrivi_sfida("CHIUDI")
@@ -867,7 +913,9 @@ func _fai_entrare_il_prossimo() -> void:
 	if _in_arrivo.is_empty():
 		return
 	var chi: Dictionary = _in_arrivo.pop_front()
-	var bot := Avversario.crea(self, _dove_partenza(int(chi["partenza"])), _livello)
+	# Il nome è anche la faccia: ogni concorrente ha il suo corpo (`Corpo.PERSONAGGI`).
+	var bot := Avversario.crea(self, _dove_partenza(int(chi["partenza"])), _livello,
+			String(_concorrenti[int(chi["riga"])]["nome"]))
 	# **Cerca, non sa** (blocco C): nella partita a sei l'avversario ti vede, ti
 	# ricorda o ti cerca. Nel poligono e nell'angolo resta lo sparring partner
 	# che ti sta addosso, che è quello che serve là.
@@ -882,6 +930,8 @@ func _fai_entrare_il_prossimo() -> void:
 
 func chiudi_sfida() -> void:
 	_sonda.fermati("chiusa")
+	Suoni.ferma_la_musica()
+	Suoni.folla(false)
 	_sfida = false
 	_finita = false
 	_in_arrivo.clear()
@@ -1090,6 +1140,8 @@ func _finisci_la_partita() -> void:
 	_finita = true
 	_tempo = 0.0
 	_sonda.fermati("traguardo")
+	_potenziamenti.riparti()
+	_giocatore.moltiplicatore_punti = 1
 	for bot in avversari():
 		bot.bersaglio = null
 	_aggiorna_la_classifica()
@@ -1101,6 +1153,8 @@ func _finisci_la_partita() -> void:
 	else:
 		_comandi.annuncia("VINCE %s" % String(righe[0]["nome"]))
 	_comandi.podio(righe, maxi(mia, 1))
+	Suoni.fine_partita(mia == 1)
+	Suoni.folla(false)
 
 
 ## Un'altra partita, a un tocco: stesso posto, punti e tempo da zero. È la
@@ -1128,6 +1182,9 @@ func _su_colpo_valido(chi_spara: Object, punti: int, muri: int, chi_incassa: Nod
 	if not _sfida or _finita or _conto > 0.0:
 		return
 	var autore := _riga_di(chi_spara)
+	# I punti doppi di chi spara (tappa 8, blocco H).
+	if _potenziamenti != null and _potenziamenti.ha(chi_spara, "doppio"):
+		punti *= 2
 	if autore >= 0:
 		_concorrenti[autore]["punti"] = int(_concorrenti[autore]["punti"]) + punti
 		if chi_spara == _giocatore:
@@ -1188,12 +1245,19 @@ func _ricompari(chi: Node3D, da: Object) -> void:
 	if da is Node3D and is_instance_valid(da as Node3D):
 		lontano_da = da as Node3D
 	var dove := _dove_ricomparire(lontano_da, chi)
+	# Chi sparisce lascia uno sbuffo, e dove riappare sale una colonna di luce nel
+	# suo colore (tappa 8, blocco G): senza, chi ricompare dall'altra parte
+	# dell'arena compare e basta, e non si capisce che cosa è successo.
+	Scintille.spento(chi.global_position + Vector3(0, 1.0, 0), Vector3.UP)
+	var riga := _riga_di(chi)
+	var colore := Corpo.colore_di(String(_concorrenti[riga]["nome"]) if riga >= 0 else "TU")
 	if chi == _giocatore:
 		_mettiti_alla_partenza(dove)
 		Suoni.ricomparsa()
 	elif chi is Avversario:
 		_porta_alla_partenza(chi as CharacterBody3D, dove)
 		(chi as Avversario).ricomincia_il_cammino()
+	Scintille.ricomparsa(_dove_partenza(dove) - Vector3(0, 0.4, 0), colore)
 
 
 func _porta_alla_partenza(chi: CharacterBody3D, quale: int) -> void:

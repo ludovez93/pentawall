@@ -15,13 +15,14 @@ signal rimbalzato(punto: Vector3, normale: Vector3, muri: int)
 signal spento(punto: Vector3, muri: int)
 
 ## 1000 u/s del Sidewinder del 1999 = 19 m/s (RICERCA-ORIGINALE.md § 5).
-## Dal blocco B della tappa 7 c'è una seconda velocità, 24 m/s, da provare col
-## pollice — «lento» era uno dei tre verdetti dell'11/09, e il dardo era uno dei
-## tre candidati. Si cambia in gioco con un pulsante, e decide la partita, non il
-## PC. Sopra i 24 il rimbalzo a cinque muri non si vede più.
+## Dal blocco B della tappa 7 c'è una seconda velocità, 24 m/s: «lento» era uno dei
+## tre verdetti dell'11/09, e il dardo era uno dei tre candidati. La domanda «19 o
+## 24?» è rimasta aperta un mese; **dal 03/10/2026 si parte a 24** (tappa 8, scelta
+## di lavorazione dentro la delega «hai libera scelta»). Il pulsante resta nei banchi
+## di prova. Sopra i 24 il rimbalzo a cinque muri non si vede più.
 const VELOCITA_BASE := 19.0
 const VELOCITA_VELOCE := 24.0
-static var velocita := VELOCITA_BASE
+static var velocita := VELOCITA_VELOCE
 const VITA_MASSIMA := 6.0      ## secondi, rete di sicurezza se non colpisce mai niente
 const RAGGIO := 0.1            ## metri: un dardo grosso, si deve vedere
 const SCIA_MASSIMA := 3.4      ## metri di scia dietro al dardo (era 2,6: segnale di velocità)
@@ -142,12 +143,19 @@ func _avanza(delta: float) -> void:
 		if tratto.bersaglio:
 			colpito.emit(tratto.corpo, tratto.a, tratto.normale, _muri)
 			_accendi_lampo(tratto.a)
+			# Contro chi si può colpire schizza la gommapiuma; contro un muro che
+			# ferma, il dardo si spegne in uno sbuffo (tappa 8, blocco G).
+			if tratto.corpo != null and tratto.corpo.has_method("incassa"):
+				Scintille.colpo(tratto.a, tratto.normale, colore_riservato)
+			else:
+				Scintille.spento(tratto.a, tratto.normale)
 			_spegni()
 			return
 		if tratto.muro:
 			if tratto.esaurito:
 				# Sesto muro: il dardo muore qui. È il limite che dà il nome al gioco.
 				_accendi_lampo(tratto.a)
+				Scintille.spento(tratto.a, tratto.normale)
 				_spegni()
 				return
 			_muri += 1
@@ -157,6 +165,7 @@ func _avanza(delta: float) -> void:
 			# Il suono sta qui e non nella scena: così ogni posto in cui si spara
 			# — poligono, angolo, arena — conta i muri allo stesso modo.
 			Suoni.rimbalzo(tratto.a, _muri)
+			Scintille.rimbalzo(tratto.a, tratto.normale)
 			rimbalzato.emit(tratto.a, tratto.normale, _muri)
 	# L'ultimo tratto può finire nel vuoto: la posizione è già quella giusta.
 

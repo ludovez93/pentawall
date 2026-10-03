@@ -45,11 +45,6 @@ const SPESSORE_FILO := 0.4  ## il filo scuro è una frazione del contorno
 static var ALONE_ACCESO := true
 static var alone_scelto := 0
 
-## Il colore della squadra: cremisi, quella di casa. Non è riservato a niente ed
-## è giusto così — cambia da squadra a squadra, ed è l'alone a rendere leggibile
-## chiunque lo indossi.
-static var colore_squadra := Color(0.86, 0.14, 0.22)
-
 var _contorni: Array[Dictionary] = []
 
 signal centrato(punti: int, muri: int)
@@ -142,7 +137,7 @@ const TARATURE := [
 		"nome": "facile",
 		"reazione": 0.45,      ## secondi prima di accorgersi di un dardo in arrivo
 		"errore_gradi": 4.5,   ## quanto può sbagliare la mira
-		"ricarica": 1.8,       ## moltiplicatore della cadenza del giocatore
+		"ricarica": 2.2,       ## moltiplicatore della cadenza del giocatore (era 1,8 col dardo a 19: a 24 i colpi fra avversari arrivano di più, e la prima partita tornava persa — misurato con prova_ritmo il 03/10/2026)
 		"lato_giusto": 0.5,    ## quante volte schiva dalla parte con più spazio
 		"salto": 0.10,         ## quanto spesso salta cambiando direzione
 	},
@@ -212,12 +207,18 @@ var _fermo_da := 0.0
 
 var _aspetto: Node3D
 var _canna: Node3D
-var _pezzi: Array = []  ## {materiale, luce}: la luce di riposo, per il lampeggio
+## Il corpo vero (tappa 8): chi è, e il nodo che corre, spara e accusa i colpi.
+var personaggio := "BRACE"
+## Il turbo dei potenziamenti (tappa 8, blocco H): lo accende `Potenziamenti`.
+var spinta := 1.0
+var _corpo: Corpo
+var _targhetta: Label3D
 
 
-static func crea(genitore: Node, dove: Vector3, livello: int = 1) -> Avversario:
+static func crea(genitore: Node, dove: Vector3, livello: int = 1, chi := "BRACE") -> Avversario:
 	var bot := Avversario.new()
 	bot._livello = clampi(livello, 0, TARATURE.size() - 1)
+	bot.personaggio = chi
 	genitore.add_child(bot)
 	bot.global_position = dove
 	return bot
@@ -256,6 +257,19 @@ func _physics_process(delta: float) -> void:
 	_muovi(delta)
 	_controlla_se_sono_incastrato(delta)
 	_mira_e_spara()
+	_aggiorna_il_corpo(delta)
+
+
+## Il corpo segue i piedi e la mira: la velocità vera, se tocca terra, e quanto
+## alza o abbassa il blaster per puntare dove mira. L'origine è l'altezza degli
+## occhi e non la bocca dell'arma: la bocca costa un raggio, e qui basta l'angolo.
+func _aggiorna_il_corpo(delta: float) -> void:
+	if _corpo == null:
+		return
+	var verso := punto_di_mira() - (global_position + Vector3(0, ALTEZZA_OCCHI, 0))
+	var orizzontale := Vector2(verso.x, verso.z).length()
+	var pendenza := atan2(verso.y, maxf(orizzontale, 0.01))
+	_corpo.aggiorna(velocity, is_on_floor(), pendenza, delta)
 
 
 func livello() -> int:
@@ -282,7 +296,8 @@ func incassa(muri: int, da: Object = null) -> bool:
 	if _immunita > 0.0:
 		return false
 	_immunita = IMMUNITA
-	_lampo_colpo = LAMPO_COLPO
+	if _corpo != null:
+		_corpo.colpito()
 	var valgono := PUNTI_BASE * int(pow(2, muri))
 	centrato.emit(valgono, muri)
 	preso_da.emit(da, valgono, muri)
@@ -511,7 +526,13 @@ func _muovi(delta: float) -> void:
 		_schivata -= delta
 		voluta = _verso_schivata * VELOCITA_SCHIVATA
 	elif bersaglio != null and is_instance_valid(bersaglio):
-		voluta = _direzione_tattica(delta) * Giocatore.VELOCITA
+		voluta = _direzione_tattica(delta) * Giocatore.VELOCITA * spinta
+	else:
+		# Senza bersaglio non si cammina: senza questa riga restava acceso il «stavo
+		# camminando» dell'ultimo percorso, e da fermo l'avversario si credeva
+		# incastrato e saltava ogni mezzo secondo — a fine partita, sul podio, tutti
+		# e cinque (visto il 03/10/2026, appena i corpi hanno avuto le gambe).
+		_stava_camminando = false
 
 	var presa := 1.0 if is_on_floor() else Giocatore.CONTROLLO_ARIA
 	var piano := Vector3(velocity.x, 0.0, velocity.z)
@@ -543,6 +564,11 @@ func _muovi(delta: float) -> void:
 func _meta() -> Vector3:
 	if bersaglio == null or not is_instance_valid(bersaglio):
 		return global_position
+	# Una palla colorata a due passi vale la deviazione: la si va a prendere, a meno
+	# di avere il bersaglio davanti e vicino — lì prima si combatte (tappa 8, H).
+	var sfera := _sfera_vicina()
+	if sfera != Vector3.INF:
+		return sfera
 	if not caccia or _vede:
 		return bersaglio.global_position
 	if ha_notizia():
@@ -550,6 +576,27 @@ func _meta() -> Vector3:
 	if _ronda == Vector3.ZERO:
 		return global_position
 	return _ronda
+
+
+## Quanto lontano si va a prendere una palla colorata.
+const RAGGIO_SFERE := 11.0
+
+
+func _sfera_vicina() -> Vector3:
+	if not caccia or Potenziamenti.disponibili.is_empty():
+		return Vector3.INF
+	if _vede and bersaglio != null and is_instance_valid(bersaglio) 			and bersaglio.global_position.distance_to(global_position) < 9.0:
+		return Vector3.INF
+	var migliore := Vector3.INF
+	var vicina := RAGGIO_SFERE
+	for punto in Potenziamenti.disponibili:
+		if absf(punto.y - global_position.y) > 2.5:
+			continue
+		var d := Vector2(punto.x - global_position.x, punto.z - global_position.z).length()
+		if d < vicina:
+			vicina = d
+			migliore = punto
+	return migliore
 
 
 ## Se sa ancora dove cercare. Pubblica: è la cosa che il collaudo deve poter
@@ -809,6 +856,8 @@ func _mira_e_spara() -> void:
 			esclusi, self)
 	dardo.colpito.connect(_su_colpo)
 	Suoni.sparo(partenza, false)
+	if _corpo != null:
+		_corpo.spara()
 	si_e_sparato(get_tree(), partenza, self)
 
 
@@ -836,30 +885,14 @@ func _su_colpo(corpo: Object, _punto: Vector3, _normale: Vector3, muri: int) -> 
 		ha_centrato.emit(PUNTI_BASE * int(pow(2, muri)), muri)
 
 
-## Il lampo del colpo (blocco B): nel primo decimo di secondo il corpo **sfonda la
-## soglia del bagliore**, e per quel decimo brilla come il dardo che l'ha preso.
-## È l'eccezione dichiarata alla regola «sopra l'uno ci va solo il dardo»: dura
-## quanto l'urto, ed è l'urto.
-const LAMPO_COLPO := 0.1
-const FORZA_LAMPO := 12.0
-var _lampo_colpo := 0.0
-
-
-## Appena colpito si accende: prima il lampo, poi il lampeggio dell'immunità.
-## Senza, si vedrebbe un avversario incassare un colpo e non succedere niente, e
-## sembrerebbe rotto.
+## Il lampo del colpo (blocco B) e il lampeggio dell'immunità: li fa la divisa
+## del corpo (`tuta.gdshader`), che per un decimo di secondo **sfonda la soglia del
+## bagliore** e poi lampeggia finché dura la pace. È l'eccezione dichiarata alla
+## regola «sopra l'uno ci va solo il dardo»: dura quanto l'urto, ed è l'urto.
+## Senza, si vedrebbe un avversario incassare un colpo e non succedere niente.
 func _lampeggia() -> void:
-	var acceso := _immunita > 0.0 and fmod(_immunita, 0.16) > 0.08
-	var lampo := _lampo_colpo > 0.0
-	if lampo:
-		_lampo_colpo -= get_physics_process_delta_time()
-	for pezzo in _pezzi:
-		var materiale: StandardMaterial3D = pezzo["materiale"]
-		var luce: float = pezzo["luce"]
-		if lampo:
-			materiale.emission_energy_multiplier = FORZA_LAMPO
-		else:
-			materiale.emission_energy_multiplier = luce * 3.0 if acceso else luce
+	if _corpo != null:
+		_corpo.lampeggia(_immunita > 0.0 and fmod(_immunita, 0.16) > 0.08)
 
 
 func _costruisci() -> void:
@@ -874,100 +907,40 @@ func _costruisci() -> void:
 	_aspetto = Node3D.new()
 	add_child(_aspetto)
 
-	# Cremisi e bianco: la squadra avversaria. Non arancio, non ciano, non
-	# magenta — quei tre sono i candidati del dardo, e il colore del dardo non lo
-	# indossa nessuno (DECISIONI.md § B).
-	var mesh_busto := CapsuleMesh.new()
-	mesh_busto.radius = RAGGIO_CORPO
-	mesh_busto.height = ALTEZZA_CORPO
+	# **Il corpo vero** (tappa 8): fino al 03/10/2026 qui c'erano una capsula, una
+	# sfera per casco e una scatola per arma. Per il motore resta una capsula — la
+	# forma di sopra — e cambia solo cosa si vede.
+	_corpo = Corpo.crea(personaggio)
+	_aspetto.add_child(_corpo)
 
-	# **L'alone.** È la risposta alla domanda della tappa 4, ed è lo stesso
-	# meccanismo del filo scuro del dardo, rovesciato: la stessa capsula un filo
-	# più grande, vista da dentro, così del corpo resta solo il contorno.
-	#
-	# Serve perché il colore del corpo **non può** essere riservato — è quello
-	# della squadra, e le squadre sono il contenuto del gioco (DECISIONI.md 8).
-	# Un cremisi davanti a una parete di mattoni sparisce, e sparirebbe qualunque
-	# tinta davanti alla parete giusta: in un'arena satura non esiste un colore
-	# che vada bene dappertutto. Il contorno invece non dipende dal fondo — è la
-	# stessa strada del dardo, che si separa **per luminanza e per disegno, non
-	# per tinta** (DECISIONI.md § B).
+	# **L'alone.** È la risposta alla domanda della tappa 4: due gusci attorno al
+	# corpo, filo scuro attaccato e contorno acceso fuori, così il contorno non
+	# tocca mai il colore della squadra, **qualunque** colore sia. Serve perché il
+	# colore del corpo non può essere riservato — è quello della squadra — e in
+	# un'arena satura nessuna tinta va bene dappertutto (DECISIONI.md § B e 15).
 	if ALONE_ACCESO:
-		var mesh_alone_casco := SphereMesh.new()
-		mesh_alone_casco.radius = 0.3
-		mesh_alone_casco.height = 0.52
-		# **Due gusci, non uno**, ed è di nuovo il dardo: filo scuro attaccato al
-		# corpo, contorno acceso fuori. Con il solo contorno acceso, una squadra
-		# della sua stessa famiglia di colore se lo mangerebbe — il magenta sul
-		# cremisi si fondeva, verificato guardandolo. Il filo scuro in mezzo fa sì
-		# che il contorno non tocchi mai il colore della squadra, **qualunque**
-		# colore sia: è il punto di tutta la tappa.
-		for guscio in [
-			{"grande": false, "colore": Color(0.03, 0.03, 0.06)},
-			{"grande": true, "colore": Color(ALONI[alone_scelto]["colore"])},
-		]:
-			var quota: float = 1.0 if guscio["grande"] else SPESSORE_FILO
-			for pezzo in [
-				{"mesh": mesh_busto, "dove": Vector3(0, ALTEZZA_CORPO * 0.5, 0)},
-				{"mesh": mesh_alone_casco, "dove": Vector3(0, ALTEZZA_CORPO - 0.06, 0)},
-			]:
-				var strato := MeshInstance3D.new()
-				strato.mesh = pezzo["mesh"]
-				strato.position = pezzo["dove"]
-				var pelle := _pelle_alone(guscio["colore"])
-				strato.material_override = pelle
-				strato.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-				_aspetto.add_child(strato)
-				_contorni.append({"materiale": pelle, "quota": quota})
+		for contorno in _corpo.contorni(Color(0.03, 0.03, 0.06),
+				Color(ALONI[alone_scelto]["colore"]), SPESSORE_FILO):
+			_contorni.append(contorno as Dictionary)
 
-	var busto := MeshInstance3D.new()
-	busto.mesh = mesh_busto
-	busto.position = Vector3(0, ALTEZZA_CORPO * 0.5, 0)
-	busto.material_override = _materiale(colore_squadra, 0.3)
-	_aspetto.add_child(busto)
+	# Il nome sopra la testa, piccolo: risponde a «chi mi ha preso?». Vive con il
+	# contorno — entro i quindici metri — e per lo stesso motivo.
+	_targhetta = Label3D.new()
+	_targhetta.text = personaggio
+	_targhetta.font = Comandi.carattere_titolo()
+	_targhetta.font_size = 72
+	_targhetta.pixel_size = 0.0036
+	_targhetta.position = Vector3(0, ALTEZZA_CORPO + 0.32, 0)
+	_targhetta.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_targhetta.modulate = Color(1, 1, 1, 0.95)
+	_targhetta.outline_size = 16
+	_targhetta.outline_modulate = Color(0.02, 0.02, 0.06, 0.85)
+	_targhetta.shaded = false
+	_targhetta.alpha_cut = Label3D.ALPHA_CUT_DISCARD
+	_aspetto.add_child(_targhetta)
 
-	var casco := MeshInstance3D.new()
-	var mesh_casco := SphereMesh.new()
-	mesh_casco.radius = 0.3
-	mesh_casco.height = 0.52
-	casco.mesh = mesh_casco
-	casco.position = Vector3(0, ALTEZZA_CORPO - 0.06, 0)
-	casco.material_override = _materiale(Color(0.93, 0.93, 0.96), 0.25)
-	_aspetto.add_child(casco)
-
-	# La visiera guarda avanti: si deve capire in un colpo d'occhio da che parte
-	# sta guardando, perché è da lì che arriva il colpo.
-	var visiera := MeshInstance3D.new()
-	var mesh_visiera := BoxMesh.new()
-	mesh_visiera.size = Vector3(0.34, 0.12, 0.1)
-	visiera.mesh = mesh_visiera
-	visiera.position = Vector3(0, ALTEZZA_CORPO - 0.06, -0.26)
-	visiera.material_override = _materiale(Color(0.08, 0.1, 0.18), 0.1)
-	_aspetto.add_child(visiera)
-
-	# L'arma sporge **fuori** dal busto: a mezzo raggio di distanza dall'asse
-	# restava sepolta dentro la capsula, e da fuori si vedeva solo uno spigolo
-	# giallo. Il corpo ha raggio 0,42: qui si sta a 0,52.
-	var arma := Node3D.new()
-	arma.position = Vector3(0.52, ALTEZZA_OCCHI - 0.2, -0.45)
-	_aspetto.add_child(arma)
-	var canna_mesh := MeshInstance3D.new()
-	var mesh_canna := BoxMesh.new()
-	mesh_canna.size = Vector3(0.16, 0.18, 0.7)
-	canna_mesh.mesh = mesh_canna
-	canna_mesh.material_override = _materiale(Color(0.95, 0.82, 0.1), 0.3)
-	arma.add_child(canna_mesh)
-	var serbatoio := MeshInstance3D.new()
-	var mesh_serbatoio := CylinderMesh.new()
-	mesh_serbatoio.top_radius = 0.13
-	mesh_serbatoio.bottom_radius = 0.13
-	mesh_serbatoio.height = 0.3
-	serbatoio.mesh = mesh_serbatoio
-	serbatoio.rotation_degrees = Vector3(90, 0, 0)
-	serbatoio.position = Vector3(0, 0.14, 0.12)
-	serbatoio.material_override = _materiale(Color(0.85, 0.2, 0.3), 0.35)
-	arma.add_child(serbatoio)
-
+	# La canna del gioco: da qui parte il dardo, come sempre. Il lampo alla bocca lo
+	# fa il blaster del corpo, che sta nella mano e si muove con lei.
 	_canna = Node3D.new()
 	_canna.position = Vector3(0.52, ALTEZZA_OCCHI - 0.14, -0.9)
 	_aspetto.add_child(_canna)
@@ -979,22 +952,14 @@ func _costruisci() -> void:
 ## sopra l'uno ci va solo il dardo, e un avversario non deve mai brillare più del
 ## colpo che gli stai tirando.
 static func _pelle_alone(colore: Color) -> StandardMaterial3D:
-	var materiale := StandardMaterial3D.new()
-	materiale.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	materiale.albedo_color = colore
-	materiale.cull_mode = BaseMaterial3D.CULL_FRONT
-	materiale.grow = true
-	materiale.grow_amount = 0.055
-	materiale.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	materiale.disable_receive_shadows = true
-	return materiale
+	return Corpo.pelle_contorno(colore)
 
 
 ## Il contorno, fotogramma per fotogramma: spessore fermo sullo schermo e
 ## dissolvenza oltre la portata. Sono le due cose che lo tengono un **segnale**
 ## invece che una decorazione che cresce e cala da sola.
 func _aggiorna_i_contorni() -> void:
-	if _contorni.is_empty():
+	if _contorni.is_empty() and _targhetta == null:
 		return
 	var camera := get_viewport().get_camera_3d()
 	if camera == null:
@@ -1007,18 +972,16 @@ func _aggiorna_i_contorni() -> void:
 		var materiale: StandardMaterial3D = contorno["materiale"]
 		materiale.grow_amount = spessore * float(contorno["quota"])
 		materiale.albedo_color.a = quanto
-
-
-func _materiale(colore: Color, luce: float) -> StandardMaterial3D:
-	var materiale := StandardMaterial3D.new()
-	materiale.albedo_color = colore
-	materiale.emission_enabled = true
-	materiale.emission = colore
-	materiale.emission_energy_multiplier = luce
-	materiale.roughness = 0.45
-	_pezzi.append({"materiale": materiale, "luce": luce})
-	return materiale
-
+		# Oltre la portata il guscio **si spegne**, non resta trasparente: un guscio
+		# trasparente la scheda video lo disegna lo stesso, e sono due copie del corpo
+		# intero per ogni avversario lontano.
+		var nodo: Variant = contorno.get("nodo")
+		if nodo is Node3D:
+			(nodo as Node3D).visible = quanto > 0.0
+	if _targhetta != null:
+		_targhetta.visible = quanto > 0.0
+		_targhetta.modulate.a = 0.95 * quanto
+		_targhetta.outline_modulate.a = 0.85 * quanto
 
 
 ## Un corpo vero al posto della capsula (tappa 7). `contorni` sono i gusci del

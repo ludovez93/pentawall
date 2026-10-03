@@ -19,6 +19,10 @@ const GRUPPO_MURI := &"muri_opachi"
 ## Il gruppo delle sponde: le superfici su cui si rimbalza.
 const GRUPPO_SPONDE := &"sponde"
 
+## Il gruppo dei pavimenti: la vestizione ci mette sopra il parquet, non la
+## superficie dei muri della stessa tinta (tappa 8, blocco E).
+const GRUPPO_PAVIMENTI := &"pavimenti"
+
 ## Quanto sporge un pannello-sponda dalla parete. Sottile apposta: un pannello
 ## grosso offre al dardo un bordo di taglio, e un rimbalzo su un bordo è
 ## esattamente il rimbalzo che nessuno può prevedere.
@@ -37,12 +41,131 @@ static var _carattere: Font = null
 
 
 ## Un muro: si vede, ci si cammina contro, e **ferma il dardo**.
+##
+## `smusso` arrotonda gli spigoli di quel raggio, in metri (tappa 8, blocco E: la
+## regola delle forme del 12/09/2026, *«le forme sono tutte quadrate e linee
+## perfette, troppo no?»*). **La collisione resta la scatola**: si cambia l'aspetto,
+## non il gioco — un dardo che si ferma su un muro si ferma dove si fermava.
 static func muro(genitore: Node, centro: Vector3, misura: Vector3, colore: Color,
-		giro := Vector3.ZERO) -> StaticBody3D:
+		giro := Vector3.ZERO, smusso := 0.0) -> StaticBody3D:
 	var corpo := _corpo(genitore, centro, misura, giro, Strati.OSTACOLO)
 	corpo.add_to_group(GRUPPO_MURI)
-	_pelle(corpo, misura, opaco(colore, misura))
+	if smusso > 0.0:
+		var pezzo := MeshInstance3D.new()
+		pezzo.mesh = scatola_smussata(misura, smusso)
+		pezzo.material_override = opaco(colore, misura)
+		corpo.add_child(pezzo)
+	else:
+		_pelle(corpo, misura, opaco(colore, misura))
 	return corpo
+
+
+## Un pilone tondo: lo stesso muro, ma cilindrico, e questa volta **anche la
+## collisione è tonda**. Un pilone non è una sponda — ferma il dardo, non lo rimbalza
+## — quindi la sua forma non cambia nessuna traiettoria prevista; una scatola dentro
+## un cilindro invece fermerebbe i colpi nell'aria accanto agli spigoli che non si
+## vedono.
+static func pilone(genitore: Node, centro: Vector3, raggio: float, alto: float,
+		colore: Color) -> StaticBody3D:
+	var corpo := StaticBody3D.new()
+	corpo.collision_layer = Strati.OSTACOLO
+	corpo.collision_mask = 0
+	corpo.position = centro
+	corpo.add_to_group(GRUPPO_MURI)
+	genitore.add_child(corpo)
+	var forma := CollisionShape3D.new()
+	var cilindro := CylinderShape3D.new()
+	cilindro.radius = raggio
+	cilindro.height = alto
+	forma.shape = cilindro
+	corpo.add_child(forma)
+	var pezzo := MeshInstance3D.new()
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = raggio
+	mesh.bottom_radius = raggio
+	mesh.height = alto
+	mesh.radial_segments = 28
+	mesh.rings = 1
+	pezzo.mesh = mesh
+	pezzo.material_override = opaco(colore, Vector3(raggio * 2.0, alto, raggio * 2.0))
+	corpo.add_child(pezzo)
+	return corpo
+
+
+## Le scatole smussate già costruite, per misura: cinque colonne uguali sono una
+## forma sola.
+static var _smussate := {}
+
+
+## Una scatola con gli spigoli arrotondati: ogni faccia è una griglia fitta solo
+## vicino ai bordi, e ogni vertice si proietta sulla superficie di una scatola più
+## piccola gonfiata del raggio. Le facce piane restano piane (due triangoli per
+## campo), gli spigoli e gli angoli diventano quarti di cilindro e ottavi di sfera.
+static func scatola_smussata(misura: Vector3, raggio: float, segmenti := 3) -> ArrayMesh:
+	var chiave := "%.3f|%.3f|%.3f|%.3f|%d" % [misura.x, misura.y, misura.z, raggio, segmenti]
+	if _smussate.has(chiave):
+		return _smussate[chiave]
+	var meta := misura * 0.5
+	var r := minf(raggio, minf(meta.x, minf(meta.y, meta.z)) * 0.98)
+	var interno := meta - Vector3.ONE * r
+	var campioni := [_campioni(meta.x, r, segmenti), _campioni(meta.y, r, segmenti),
+			_campioni(meta.z, r, segmenti)]
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for asse in 3:
+		for segno in [-1.0, 1.0]:
+			var asse_u := (asse + 1) % 3
+			var asse_v := (asse + 2) % 3
+			var us: PackedFloat32Array = campioni[asse_u]
+			var vs: PackedFloat32Array = campioni[asse_v]
+			var fuori := Vector3.ZERO
+			fuori[asse] = segno
+			var punti: Array[Vector3] = []
+			var normali: Array[Vector3] = []
+			for i in us.size():
+				for j in vs.size():
+					var p := Vector3.ZERO
+					p[asse] = meta[asse] * segno
+					p[asse_u] = us[i]
+					p[asse_v] = vs[j]
+					var dentro := p.clamp(-interno, interno)
+					var d := p - dentro
+					var n := d.normalized() if d.length_squared() > 0.0000001 else fuori
+					punti.append(dentro + n * r)
+					normali.append(n)
+			var righe := vs.size()
+			for i in us.size() - 1:
+				for j in righe - 1:
+					var a := i * righe + j
+					var b := (i + 1) * righe + j
+					var c := (i + 1) * righe + j + 1
+					var e := i * righe + j + 1
+					for triangolo in [[a, b, c], [a, c, e]]:
+						var t: Array = triangolo
+						# Godot vuole il senso orario visto da fuori: se il triangolo
+						# guarda dentro, si legge al contrario.
+						var croce := (punti[t[1]] - punti[t[0]]).cross(punti[t[2]] - punti[t[0]])
+						if croce.dot(fuori) > 0.0:
+							t = [t[0], t[2], t[1]]
+						for k in t:
+							st.set_normal(normali[k])
+							st.set_uv(Vector2(punti[k][asse_u], punti[k][asse_v]) * 0.25)
+							st.add_vertex(punti[k])
+	st.generate_tangents()
+	var mesh := st.commit()
+	_smussate[chiave] = mesh
+	return mesh
+
+
+## Le coordinate lungo un lato: i campioni dell'arco a un capo, i due bordi del
+## piano, i campioni dell'arco all'altro capo.
+static func _campioni(meta: float, raggio: float, segmenti: int) -> PackedFloat32Array:
+	var fuori := PackedFloat32Array()
+	for k in segmenti + 1:
+		fuori.append(-meta + raggio - raggio * cos(float(k) / float(segmenti) * PI * 0.5))
+	for k in range(segmenti, -1, -1):
+		fuori.append(meta - raggio + raggio * cos(float(k) / float(segmenti) * PI * 0.5))
+	return fuori
 
 
 ## Una sponda: un pannello liscio applicato sulla parete, con il filo di neon
@@ -270,6 +393,7 @@ static func piano(genitore: Node, contorno: PackedVector2Array, quota: float,
 	corpo.collision_layer = Strati.OSTACOLO
 	corpo.collision_mask = 0
 	corpo.add_to_group(GRUPPO_MURI)
+	corpo.add_to_group(GRUPPO_PAVIMENTI)
 	genitore.add_child(corpo)
 
 	var alto := quota
@@ -353,36 +477,69 @@ const CORDOLO_LARGHEZZA := 0.18
 const CORDOLO_ALTEZZA := 0.06
 
 
-## Il prisma di un contorno: la faccia di sopra, quella di sotto e i fianchi.
+## Il prisma di un contorno: la faccia di sopra e i fianchi.
+##
+## **Il verso dei triangoli si decide guardandolo, non si dà per scontato.** Fino al
+## 03/10/2026 la faccia di sopra era girata dalla parte sbagliata: Godot vuole il
+## senso orario visto da fuori, e un pavimento visto dall'alto con il senso
+## contrario **non si disegna**. Dalla tappa 5 in poi tutti i pavimenti dell'arena
+## sono stati invisibili dall'alto — si camminava sopra lo sfondo blu notte, ed è
+## con ogni probabilità il «cammino nel vuoto» arrivato dal telefono il 12/09/2026.
+## La fisica non c'entrava (la collisione è un'altra forma, ed era giusta), e
+## nessun collaudo poteva accorgersene: lo ha trovato il parquet, che non si vedeva.
+## Adesso ogni triangolo si controlla contro la normale che deve avere, e se
+## guarda dentro si legge al contrario.
 static func _prisma(contorno: PackedVector2Array, alto: float, basso: float) -> ArrayMesh:
 	var triangoli := Geometry2D.triangulate_polygon(contorno)
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 
-	var quanti := triangoli.size()
 	var i := 0
-	while i < quanti:
-		# sopra: si guarda da su, quindi i vertici vanno letti al contrario
-		for k in [2, 1, 0]:
+	while i < triangoli.size():
+		var tre: Array[Vector3] = []
+		for k in 3:
 			var p: Vector2 = contorno[triangoli[i + k]]
-			st.set_uv(p * 0.25)
-			st.add_vertex(Vector3(p.x, alto, p.y))
+			tre.append(Vector3(p.x, alto, p.y))
+		_triangolo_verso(st, tre, Vector3.UP, func(v: Vector3) -> Vector2:
+				return Vector2(v.x, v.z) * 0.25)
 		i += 3
 
 	var n := contorno.size()
 	for j in n:
 		var p1: Vector2 = contorno[j]
 		var p2: Vector2 = contorno[(j + 1) % n]
+		if p1.distance_to(p2) < 0.0001:
+			continue
+		# Il fuori di questo lato: la perpendicolare che esce dal poligono. Si prova
+		# un passo dal centro del lato — vale anche per i contorni concavi.
+		var lato := (p2 - p1).normalized()
+		var perpendicolare := Vector2(lato.y, -lato.x)
+		if Geometry2D.is_point_in_polygon((p1 + p2) * 0.5 + perpendicolare * 0.01, contorno):
+			perpendicolare = -perpendicolare
+		var fuori := Vector3(perpendicolare.x, 0.0, perpendicolare.y)
 		var quadro := [
 			Vector3(p1.x, alto, p1.y), Vector3(p2.x, alto, p2.y),
 			Vector3(p2.x, basso, p2.y), Vector3(p1.x, basso, p1.y),
 		]
-		for k in [0, 1, 2, 0, 2, 3]:
-			st.set_uv(Vector2(quadro[k].x + quadro[k].z, quadro[k].y) * 0.25)
-			st.add_vertex(quadro[k])
+		var uv := func(v: Vector3) -> Vector2:
+			return Vector2(v.x + v.z, v.y) * 0.25
+		_triangolo_verso(st, [quadro[0], quadro[1], quadro[2]] as Array[Vector3], fuori, uv)
+		_triangolo_verso(st, [quadro[0], quadro[2], quadro[3]] as Array[Vector3], fuori, uv)
 
 	st.generate_normals()
 	return st.commit()
+
+
+## Un triangolo girato in modo che la sua faccia guardi verso `fuori`: Godot disegna
+## il senso orario visto da fuori, cioè il prodotto dei lati che punta lontano da chi
+## guarda.
+static func _triangolo_verso(st: SurfaceTool, tre: Array[Vector3], fuori: Vector3,
+		uv: Callable) -> void:
+	var croce := (tre[1] - tre[0]).cross(tre[2] - tre[0])
+	var ordine := [0, 1, 2] if croce.dot(fuori) < 0.0 else [0, 2, 1]
+	for k in ordine:
+		st.set_uv(uv.call(tre[k]))
+		st.add_vertex(tre[k])
 
 
 static func _larghezza(contorno: PackedVector2Array) -> float:

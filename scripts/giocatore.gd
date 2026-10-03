@@ -55,7 +55,19 @@ const SCOSSA := 0.1             ## secondi di tremito della camera al colpo a se
 const AMPIEZZA_SCOSSA := 0.05   ## metri di scarto della camera nel tremito
 const ROLLIO_COLPO := 0.06      ## radianti di rollio della camera al colpo incassato
 
+## **Il corpo accusa** (tappa 8, blocco G): la vibrazione in mano, e la camera che
+## si abbassa un attimo quando si atterra da un salto o da una caduta.
+const VIBRA_COLPO := 22         ## millisecondi, colpo dato
+const VIBRA_INCASSATO := 65     ## millisecondi, colpo incassato
+const ATTERRAGGIO := 0.13       ## metri di discesa della camera all'atterraggio pieno
+const CADUTA_SENTITA := 3.0     ## m/s di caduta sotto i quali l'atterraggio non si sente
+
 var comandi: Node = null        ## i comandi per il pollice, se ci sono
+
+## **I potenziamenti** (tappa 8, blocco H): il turbo moltiplica la velocità, i punti
+## doppi i punti del colpo. Li accende e li spegne chi li gestisce (`Potenziamenti`).
+var spinta := 1.0
+var moltiplicatore_punti := 1
 
 var _pendenza := 0.0
 var _mescola := 0.0             ## 0 = terza persona, 1 = prima
@@ -74,9 +86,17 @@ var _braccio: SpringArm3D
 var _camera: Camera3D
 var _aspetto: Node3D
 var _corpo_visibile: Node3D
+## Il corpo vero (tappa 8): corre, salta, spara e accusa i colpi. In prima persona
+## sparisce e resta il blaster davanti agli occhi (`_arma`).
+var _corpo: Corpo
 var _arma: Node3D
 var _canna: Node3D
 var _linea: LineaMira
+## Il rinculo del blaster in prima persona: 1 appena sparato, torna a zero.
+var _rinculo := 0.0
+## L'atterraggio: 1 appena toccato terra da una caduta piena, torna a zero.
+var _atterraggio := 0.0
+var _caduta := 0.0
 
 
 ## Si gioca col pollice? Sul telefono, e anche **nel browser del telefono** — dove
@@ -128,6 +148,9 @@ func _process(delta: float) -> void:
 	_immunita = maxf(_immunita - delta, 0.0)
 	_aggiorna_camera(delta)
 	_aggiorna_linea()
+	if _corpo != null:
+		_corpo.aggiorna(velocity, is_on_floor(), _pendenza, delta)
+		_corpo.lampeggia(_immunita > 0.0 and fmod(_immunita, 0.16) > 0.08)
 
 
 ## La mira, da qualunque parte arrivi: mouse o pollice.
@@ -181,6 +204,9 @@ func spara() -> bool:
 	var dardo := Proiettile.lancia(get_parent(), partenza, verso, [get_rid()], self)
 	dardo.colpito.connect(_su_colpo)
 	Suoni.sparo(partenza, true)
+	if _corpo != null:
+		_corpo.spara()
+	_rinculo = 1.0
 	# Chi spara si fa sentire: gli avversari che stanno cercando hanno una
 	# notizia (tappa 7, blocco C). Si passa dal gruppo e non dalla classe, così
 	# il giocatore non nomina l'avversario — che nomina già lui, e in GDScript
@@ -194,6 +220,7 @@ func spara() -> bool:
 func salta() -> void:
 	if is_on_floor():
 		velocity.y = SPINTA_SALTO
+		Suoni.salto()
 
 
 func punto_di_partenza() -> Vector3:
@@ -204,12 +231,19 @@ func camera() -> Camera3D:
 	return _camera
 
 
+## Il corpo vero di chi gioca: serve a chi lo deve scaldare o fotografare.
+func corpo() -> Corpo:
+	return _corpo
+
+
 ## L'hanno preso. Stesso conto di tutti: 25 punti, raddoppiati a ogni muro.
 ## Restituisce falso se era immune, così chi ha sparato sa se ha fatto punti.
 func incassa(muri: int, da: Object = null) -> bool:
 	if _immunita > 0.0:
 		return false
 	_immunita = IMMUNITA
+	if _corpo != null:
+		_corpo.colpito()
 	var valgono := PUNTI_BASE * int(pow(2, muri))
 	incassato.emit(valgono, muri)
 	preso_da.emit(da, valgono, muri)
@@ -217,6 +251,7 @@ func incassa(muri: int, da: Object = null) -> bool:
 	# la vignetta sul bordo dello schermo è l'avviso periferico di MIGLIORIE.md
 	# § 4, e il contraccolpo — che c'era già — adesso inclina la camera.
 	Suoni.colpo_incassato()
+	Input.vibrate_handheld(VIBRA_INCASSATO)
 	var verso_schermo := Vector2(0, 1)
 	if da is Node3D:
 		var indietro := global_position - (da as Node3D).global_position
@@ -262,9 +297,14 @@ func _su_colpo(corpo: Object, punto: Vector3, _normale: Vector3, muri: int) -> v
 	# il suono pieno. Il conto dei punti è quello di tutti: 25, raddoppiati a muro.
 	Suoni.colpo_a_segno(muri)
 	_scossa = SCOSSA
+	# Il colpo si sente anche in mano: un tocco breve. Sull'app nativa del telefono
+	# lo fa il motore della vibrazione; nel browser di iOS non c'è, e non succede
+	# niente (tappa 8, blocco G).
+	Input.vibrate_handheld(VIBRA_COLPO)
 	if comandi != null and comandi.has_method("punti_dal_mondo"):
 		comandi.call("segna_il_colpo")
-		comandi.call("punti_dal_mondo", punto, PUNTI_BASE * int(pow(2, muri)), muri)
+		comandi.call("punti_dal_mondo", punto,
+				PUNTI_BASE * int(pow(2, muri)) * moltiplicatore_punti, muri)
 
 
 func _leggi_comandi(delta: float) -> void:
@@ -310,7 +350,7 @@ func _muovi(delta: float) -> void:
 	if verso.length_squared() > 1.0:
 		verso = verso.normalized()
 
-	var massima := VELOCITA * (LENTEZZA_PRIMA if _in_prima else 1.0)
+	var massima := VELOCITA * (LENTEZZA_PRIMA if _in_prima else 1.0) * spinta
 	var voluta := verso * massima
 	var presa := 1.0 if is_on_floor() else CONTROLLO_ARIA
 	var piano := Vector3(velocity.x, 0.0, velocity.z)
@@ -322,11 +362,18 @@ func _muovi(delta: float) -> void:
 
 	velocity.x = piano.x
 	velocity.z = piano.z
+	var era_in_aria := not is_on_floor()
 	if not is_on_floor():
 		velocity.y -= GRAVITA * delta
+		_caduta = maxf(_caduta, -velocity.y)
 	elif velocity.y < 0.0:
 		velocity.y = -0.1
 	move_and_slide()
+	if era_in_aria and is_on_floor():
+		if _caduta > CADUTA_SENTITA:
+			_atterraggio = clampf((_caduta - CADUTA_SENTITA) / 6.0, 0.35, 1.0)
+			Suoni.atterraggio(_atterraggio)
+		_caduta = 0.0
 	_segna_la_corsa(delta)
 
 
@@ -367,6 +414,10 @@ func _aggiorna_camera(delta: float) -> void:
 	else:
 		_camera.h_offset = 0.0
 		_camera.v_offset = 0.0
+	# L'atterraggio: giù di colpo, su in un quinto di secondo.
+	if _atterraggio > 0.0:
+		_atterraggio = maxf(_atterraggio - delta / 0.22, 0.0)
+		_camera.v_offset -= ATTERRAGGIO * sin(_atterraggio * PI * 0.5)
 	# Il rollio del colpo incassato: va di colpo da un lato e torna piano.
 	_rollio = move_toward(_rollio, _rollio_voluto, delta * 1.2)
 	_rollio_voluto = move_toward(_rollio_voluto, 0.0, delta * 0.25)
@@ -377,7 +428,15 @@ func _aggiorna_camera(delta: float) -> void:
 	# addossandosi a una parete si finisce a guardare l'interno della propria testa.
 	_corpo_visibile.visible = quota < 0.7 and _braccio.get_hit_length() > 2.2
 	_canna.position = Vector3(0.38, -0.24, -0.85).lerp(Vector3(0.30, -0.26, -1.05), quota)
-	_arma.position = Vector3(0.38, -0.28, -0.45).lerp(Vector3(0.28, -0.30, -0.88), quota)
+	# Il blaster davanti agli occhi serve solo in prima persona: in terza persona
+	# il blaster è quello che il corpo tiene in mano.
+	_arma.visible = quota >= 0.7
+	# Il rinculo: indietro e in su di colpo, poi torna in un decimo e mezzo.
+	_rinculo = maxf(_rinculo - delta / 0.15, 0.0)
+	var calcio := _rinculo * _rinculo
+	_arma.position = Vector3(0.38, -0.28, -0.45).lerp(Vector3(0.24, -0.27, -0.62), quota) \
+			+ Vector3(0.0, 0.015, 0.07) * calcio
+	_arma.rotation.x = 0.16 * calcio
 
 
 ## Il tiro, in un posto solo: da dove parte e dove va. Lo usano sia il colpo vero
@@ -429,43 +488,19 @@ func _costruisci() -> void:
 	_corpo_visibile = Node3D.new()
 	_aspetto.add_child(_corpo_visibile)
 
-	var busto := MeshInstance3D.new()
-	var mesh_busto := CapsuleMesh.new()
-	mesh_busto.radius = RAGGIO_CORPO
-	mesh_busto.height = ALTEZZA_CORPO
-	busto.mesh = mesh_busto
-	busto.position = Vector3(0, ALTEZZA_CORPO * 0.5, 0)
-	busto.material_override = _materiale(Color(0.16, 0.42, 0.95), 0.3)
-	_corpo_visibile.add_child(busto)
+	# **Il corpo vero** (tappa 8): fino al 03/10/2026 qui c'erano una capsula blu e
+	# una sfera gialla per casco. Per il motore resta la capsula di sopra.
+	_corpo = Corpo.crea("TU")
+	_corpo_visibile.add_child(_corpo)
 
-	var casco := MeshInstance3D.new()
-	var mesh_casco := SphereMesh.new()
-	mesh_casco.radius = 0.3
-	mesh_casco.height = 0.52
-	casco.mesh = mesh_casco
-	casco.position = Vector3(0, ALTEZZA_CORPO - 0.06, 0)
-	casco.material_override = _materiale(Color(0.95, 0.85, 0.12), 0.25)
-	_corpo_visibile.add_child(casco)
-
-	# L'arma di plastica vistosa: sta nell'anima del gioco del 1999 e resta.
-	# Gialla e blu di proposito — l'arancio è del proiettile e di nessun altro.
+	# Il blaster della prima persona: lo stesso giocattolo che il corpo tiene in
+	# mano, davanti agli occhi. Sta nell'anima del gioco del 1999 e resta.
 	_arma = Node3D.new()
-	var canna_mesh := MeshInstance3D.new()
-	var mesh_canna := BoxMesh.new()
-	mesh_canna.size = Vector3(0.16, 0.18, 0.7)
-	canna_mesh.mesh = mesh_canna
-	canna_mesh.material_override = _materiale(Color(0.95, 0.82, 0.1), 0.3)
-	_arma.add_child(canna_mesh)
-	var serbatoio := MeshInstance3D.new()
-	var mesh_serbatoio := CylinderMesh.new()
-	mesh_serbatoio.top_radius = 0.13
-	mesh_serbatoio.bottom_radius = 0.13
-	mesh_serbatoio.height = 0.3
-	serbatoio.mesh = mesh_serbatoio
-	serbatoio.rotation_degrees = Vector3(90, 0, 0)
-	serbatoio.position = Vector3(0, 0.14, 0.12)
-	serbatoio.material_override = _materiale(Color(0.1, 0.55, 0.95), 0.35)
-	_arma.add_child(serbatoio)
+	var blaster: Node3D = (load(Corpo.BLASTER) as PackedScene).instantiate()
+	# Nel file guarda verso +Z: girato, la bocca va avanti.
+	blaster.rotation_degrees = Vector3(0, 180, 0)
+	blaster.scale = Vector3.ONE * 0.62
+	_arma.add_child(blaster)
 
 	_testa = Node3D.new()
 	_testa.position = Vector3(0, ALTEZZA_OCCHI, 0)
@@ -500,16 +535,6 @@ func _costruisci() -> void:
 	_linea = LineaMira.new()
 	add_child(_linea)
 	_linea.imposta_colore(Proiettile.colore_riservato)
-
-
-func _materiale(colore: Color, luce: float) -> StandardMaterial3D:
-	var materiale := StandardMaterial3D.new()
-	materiale.albedo_color = colore
-	materiale.emission_enabled = true
-	materiale.emission = colore
-	materiale.emission_energy_multiplier = luce
-	materiale.roughness = 0.45
-	return materiale
 
 
 

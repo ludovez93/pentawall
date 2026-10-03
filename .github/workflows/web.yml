@@ -104,6 +104,14 @@ jobs:
           # dica: qui si verifica che sia nata dalla pianta di oggi.
           "$GODOT" --headless --path . -s tools/prova_arena.gd
 
+      - name: Collauda il gioco vivo
+        run: |
+          set -euo pipefail
+          # La tappa 8: corpi veri con le animazioni, pavimenti che si vedono
+          # dall'alto (fino al 03/10/2026 erano invisibili e nessuno se ne
+          # accorgeva), suoni, particelle, palle colorate.
+          "$GODOT" --headless --path . -s tools/prova_vivo.gd
+
       - name: Esporta per il browser
         run: |
           set -euo pipefail
