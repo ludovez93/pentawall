@@ -10,7 +10,8 @@ extends SceneTree
 ##   il blaster che punta dove guarda;
 ## - che la corsa usi davvero le animazioni giuste (avanti, indietro, di lato col
 ##   busto sulla mira);
-## - che **i pavimenti si vedano dall'alto**: fino al 03/10/2026 erano invisibili, e
+## - che **i pavimenti si vedano dall'alto e da sotto**: fino al 03/10/2026 erano
+##   invisibili dall'alto, e appena raddrizzati lo sono diventati da sotto — e
 ##   nessun collaudo poteva accorgersene;
 ## - che le scatole smussate guardino tutte fuori;
 ## - che i suoni si carichino e la musica cambi;
@@ -98,6 +99,11 @@ func _i_corpi() -> void:
 ## da fuori, girano in senso orario: il prodotto dei lati punta **lontano** da chi
 ## guarda. Un pavimento al contrario dall'alto non si vede — ed è successo per un
 ## mese, dalla tappa 5 al 03/10/2026.
+##
+## **E da sotto.** Raddrizzata la faccia di sopra, lo stesso giorno i piani alti
+## sono spariti visti da sotto: la faccia di sotto non c'era, e a fare da soffitto
+## era stata fino ad allora quella di sopra girata al contrario. Per questo non
+## basta il verso: ogni faccia deve **coprire tutto il contorno**, sopra e sotto.
 func _le_forme() -> void:
 	for prova in [
 		{"nome": "rettangolo", "punti": [Vector2(-3, -2), Vector2(3, -2), Vector2(3, 2), Vector2(-3, 2)]},
@@ -106,13 +112,15 @@ func _le_forme() -> void:
 	]:
 		var contorno := PackedVector2Array(prova["punti"])
 		var mesh := Muratura._prisma(contorno, 0.0, -0.6)
-		var vertici: PackedVector3Array = mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+		var dati := mesh.surface_get_arrays(0)
+		var vertici: PackedVector3Array = dati[Mesh.ARRAY_VERTEX]
+		var normali: PackedVector3Array = dati[Mesh.ARRAY_NORMAL]
 		var sopra_ok := true
+		var sotto_ok := true
 		var fianchi_ok := true
-		var centro := Vector2.ZERO
-		for p in contorno:
-			centro += p
-		centro /= float(contorno.size())
+		var piatte := true
+		var area_sopra := 0.0
+		var area_sotto := 0.0
 		for t in range(0, vertici.size(), 3):
 			var a := vertici[t]
 			var b := vertici[t + 1]
@@ -120,8 +128,24 @@ func _le_forme() -> void:
 			var croce := (b - a).cross(c - a)
 			var orizzontale := absf(a.y - b.y) < 0.0001 and absf(a.y - c.y) < 0.0001
 			if orizzontale:
-				if croce.dot(Vector3.UP) >= 0.0:
-					sopra_ok = false
+				# Sopra si guarda dall'alto, sotto dal basso: chi guarda sta dalla
+				# parte di `verso`, e il prodotto dei lati deve puntare lontano da lui.
+				var sopra := a.y > -0.3
+				var verso := Vector3.UP if sopra else Vector3.DOWN
+				if croce.dot(verso) >= 0.0:
+					if sopra:
+						sopra_ok = false
+					else:
+						sotto_ok = false
+				if sopra:
+					area_sopra += croce.length() * 0.5
+				else:
+					area_sotto += croce.length() * 0.5
+				# La luce di un piano è piatta: le normali dritte, non piegate verso
+				# i fianchi.
+				for k in 3:
+					if normali[t + k].dot(verso) < 0.999:
+						piatte = false
 			else:
 				# Un fianco: deve guardare fuori dal poligono.
 				var meta := (a + b + c) / 3.0
@@ -129,8 +153,13 @@ func _le_forme() -> void:
 				var passo := Vector2(meta.x + fuori.x * 0.02, meta.z + fuori.z * 0.02)
 				if Geometry2D.is_point_in_polygon(passo, contorno):
 					fianchi_ok = false
-		_conta("pavimento %s: la faccia di sopra si vede dall'alto" % prova["nome"], sopra_ok)
+		var area := _area(contorno)
+		_conta("pavimento %s: la faccia di sopra si vede dall'alto e lo copre tutto" % prova["nome"],
+				sopra_ok and is_equal_approx(area_sopra, area), "%.2f m² su %.2f" % [area_sopra, area])
+		_conta("pavimento %s: la faccia di sotto si vede da sotto e lo copre tutto" % prova["nome"],
+				sotto_ok and is_equal_approx(area_sotto, area), "%.2f m² su %.2f" % [area_sotto, area])
 		_conta("pavimento %s: i fianchi guardano fuori" % prova["nome"], fianchi_ok)
+		_conta("pavimento %s: sopra e sotto la luce è piatta" % prova["nome"], piatte)
 
 	var scatola := Muratura.scatola_smussata(Vector3(4.0, 2.2, 3.0), 0.3)
 	var vertici: PackedVector3Array = scatola.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
@@ -257,6 +286,16 @@ func _l_arena() -> void:
 
 	arena.queue_free()
 	await process_frame
+
+
+## L'area di un contorno, con la formula dei lacci.
+func _area(contorno: PackedVector2Array) -> float:
+	var doppia := 0.0
+	for i in contorno.size():
+		var p := contorno[i]
+		var q := contorno[(i + 1) % contorno.size()]
+		doppia += p.x * q.y - q.x * p.y
+	return absf(doppia) * 0.5
 
 
 func _il_via(arena: Node) -> void:

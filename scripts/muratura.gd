@@ -477,7 +477,7 @@ const CORDOLO_LARGHEZZA := 0.18
 const CORDOLO_ALTEZZA := 0.06
 
 
-## Il prisma di un contorno: la faccia di sopra e i fianchi.
+## Il prisma di un contorno: la faccia di sopra, quella di sotto e i fianchi.
 ##
 ## **Il verso dei triangoli si decide guardandolo, non si dà per scontato.** Fino al
 ## 03/10/2026 la faccia di sopra era girata dalla parte sbagliata: Godot vuole il
@@ -489,20 +489,32 @@ const CORDOLO_ALTEZZA := 0.06
 ## nessun collaudo poteva accorgersene: lo ha trovato il parquet, che non si vedeva.
 ## Adesso ogni triangolo si controlla contro la normale che deve avere, e se
 ## guarda dentro si legge al contrario.
+##
+## **E la faccia di sotto.** Il prisma non l'aveva mai avuta: da sotto, a fare da
+## soffitto alle terrazze, al ballatoio e alla passerella era proprio la faccia di
+## sopra girata al contrario. Raddrizzata quella, il 03/10/2026 i piani alti sono
+## spariti visti da sotto, e dal telefono: *«vedo la gente camminare sui soffitti
+## da sotto»* (`LEARNED.md` § 45).
 static func _prisma(contorno: PackedVector2Array, alto: float, basso: float) -> ArrayMesh:
 	var triangoli := Geometry2D.triangulate_polygon(contorno)
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	# Luce piatta: senza, `generate_normals` mescola le normali dei vertici che
+	# stanno nello stesso punto, e sugli spigoli quella del pavimento si piega
+	# verso i fianchi fino a 66 gradi (misurato sul ballatoio, 03/10/2026) — il
+	# parquet si illumina a chiazze.
+	st.set_smooth_group(-1)
 
-	var i := 0
-	while i < triangoli.size():
-		var tre: Array[Vector3] = []
-		for k in 3:
-			var p: Vector2 = contorno[triangoli[i + k]]
-			tre.append(Vector3(p.x, alto, p.y))
-		_triangolo_verso(st, tre, Vector3.UP, func(v: Vector3) -> Vector2:
-				return Vector2(v.x, v.z) * 0.25)
-		i += 3
+	for faccia in [[alto, Vector3.UP], [basso, Vector3.DOWN]]:
+		var i := 0
+		while i < triangoli.size():
+			var tre: Array[Vector3] = []
+			for k in 3:
+				var p: Vector2 = contorno[triangoli[i + k]]
+				tre.append(Vector3(p.x, faccia[0], p.y))
+			_triangolo_verso(st, tre, faccia[1], func(v: Vector3) -> Vector2:
+					return Vector2(v.x, v.z) * 0.25)
+			i += 3
 
 	var n := contorno.size()
 	for j in n:
