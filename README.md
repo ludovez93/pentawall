@@ -110,7 +110,7 @@ gravità 18,1 m/s², dardo a 19 m/s.
 Godot --path . -s tools/prova_balistica.gd       # 20 controlli sulla riflessione, senza schermo
 Godot --path . -s tools/prova_ingresso.gd        # 26 controlli sulla schermata d'ingresso
 Godot --path . -s tools/prova_arena.gd           # 117 controlli: pianta, cammino, partita, caccia
-Godot --path . -s tools/prova_vivo.gd            # 65 controlli: corpi, forme, pavimenti, camera, suoni, palle colorate
+Godot --path . -s tools/prova_vivo.gd            # 67 controlli: corpi, forme, pavimenti, camera, suoni, palle colorate, resa
 Godot --path . -s tools/prova_ritmo.gd           # una partita intera: si arriva nei primi tre?
 Godot --path . -s tools/prova_poligono.gd        # il giro completo: sponda, colpo, punteggio
 Godot --path . -s tools/prova_avversario.gd      # 18 controlli: anticipo, schivata, livelli, partita
@@ -124,6 +124,7 @@ Godot --path . --resolution 854x390 -s tools/scatti_pavimento.gd  # il pavimento
 Godot --path . --resolution 854x390 -s tools/scatti_bordo.gd      # la camera addossata ai muri
 Godot --path . --resolution 854x390 -s tools/prova_banco_scheda.gd  # il banco della scheda video, sul PC
 node tools/banco_web.js 8765                     # lo stesso banco nel browser (`?scheda` sulla pagina)
+PW_SPEDISCI=1 node tools/banco_web.js https://ludovez93.github.io/pentawall/index.html  # quello pubblicato, con le righe al Server 2
 python tools/prepara_suoni.py                    # i suoni, dal materiale libero ad assets/audio
 python tools/genera_maschere_divisa.py           # le maschere di scarpe, guanti e inserti
 ```

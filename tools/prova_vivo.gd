@@ -521,66 +521,77 @@ func _poligono(zona: Dictionary) -> PackedVector2Array:
 # ------------------------------------------------------------------ la resa
 
 ## **La risoluzione che si adatta** (tappa 9). Sul telefono non la si può provare
-## da qui; la decisione sì. Dal 04/10/2026 si giudica **in fondo alla discesa**: sul
-## telefono i fotogrammi vanno a scalini, 60 o 30, e un gradino da solo spesso non si
-## vede — la regola di prima, nella partita di quel giorno, si è fermata al primo.
+## da qui; la decisione sì. Dal 04/10/2026 (terza parte) si scende **guardando il
+## lavoro**: se il gioco lavora meno di metà del fotogramma il limite è la scheda video
+## e si scende; se lavora quasi tutto, non si tocca niente. E non si confrontano più
+## due momenti di gioco (`LEARNED.md` § 53): si scende e basta, non si risale.
 func _la_resa() -> void:
 	var di_prima := root.scaling_3d_scale
-	# Quanti gradini ci sono dalla partenza alla metà, e dove porta il secondo: i conti
-	# seguono le costanti, così cambiare la scala di partenza non rompe la prova.
+	# Quanti gradini ci sono dalla partenza alla metà: i conti seguono le costanti, così
+	# cambiare la scala di partenza non rompe la prova.
 	var gradini := int(ceil((Resa.SCALA_TELEFONO - Resa.SCALA_MINIMA) / Resa.GRADINO - 0.001))
-	var secondo := maxf(Resa.SCALA_TELEFONO - 2.0 * Resa.GRADINO, Resa.SCALA_MINIMA)
 
-	# Lo scalino del telefono: 30, ancora 30, poi 60.
+	# Il telefono del 04/10: 30 fotogrammi, e il gioco ne lavora 8 ms su 33.
 	var resa := Resa.new()
 	root.add_child(resa)
 	root.scaling_3d_scale = Resa.SCALA_TELEFONO
-	resa._decidi(30.0)
-	_conta("a 30 fotogrammi la scena scende di un gradino",
+	resa._decidi(30.0, 8.0)
+	_conta("aspettando la scheda video la scena scende di un gradino",
 			is_equal_approx(root.scaling_3d_scale, Resa.SCALA_TELEFONO - Resa.GRADINO),
 			"%.2f" % root.scaling_3d_scale)
-	resa._decidi(30.0)
-	_conta("se il gradino non si vede scende ancora, invece di arrendersi",
-			is_equal_approx(root.scaling_3d_scale, secondo), "%.2f" % root.scaling_3d_scale)
-	resa._decidi(60.0)
-	_conta("tornata sopra la soglia si ferma lì", resa.ferma() and is_equal_approx(
-			root.scaling_3d_scale, secondo), "%.2f" % root.scaling_3d_scale)
-	resa.queue_free()
-
-	# Il limite è il calcolo, non la scheda: a metà i fotogrammi sono gli stessi.
-	resa = Resa.new()
-	root.add_child(resa)
-	root.scaling_3d_scale = Resa.SCALA_TELEFONO
-	for i in gradini:
-		resa._decidi(30.0)
-	_conta("si scende fino a metà, non oltre",
-			is_equal_approx(root.scaling_3d_scale, Resa.SCALA_MINIMA), "%.2f" % root.scaling_3d_scale)
-	resa._decidi(31.0)
-	_conta("se a metà non è salita torna esattamente com'era", is_equal_approx(
-			root.scaling_3d_scale, Resa.SCALA_TELEFONO), "%.2f" % root.scaling_3d_scale)
-	_conta("e non si prova più", resa.ferma())
-	_conta("e non torna mai sopra la scala di partenza, che è quella del 04/10 mattina",
-			Resa.SCALA_TELEFONO <= 0.65 + 0.001, "%.2f" % Resa.SCALA_TELEFONO)
-	resa.queue_free()
-
-	# A metà è salita, ma non fino alla soglia: si resta a metà.
-	resa = Resa.new()
-	root.add_child(resa)
-	root.scaling_3d_scale = Resa.SCALA_TELEFONO
-	for i in gradini:
-		resa._decidi(30.0)
-	resa._decidi(40.0)
-	_conta("se a metà ha reso, anche sotto la soglia, resta a metà", resa.ferma()
+	for i in gradini + 2:
+		resa._decidi(30.0, 8.0)
+	_conta("e continua fino a metà, non oltre, anche se resta sotto la soglia", resa.ferma()
 			and is_equal_approx(root.scaling_3d_scale, Resa.SCALA_MINIMA), "%.2f" % root.scaling_3d_scale)
 	resa.queue_free()
 
+	# Gli stessi 30 fotogrammi, ma il gioco ne lavora 30 ms: il limite è il calcolo, e
+	# una scena sfocata non servirebbe. La controprova è la prova sopra: stessi
+	# fotogrammi, lavoro corto, e si scende.
 	resa = Resa.new()
 	root.add_child(resa)
 	root.scaling_3d_scale = Resa.SCALA_TELEFONO
-	resa._decidi(59.0)
+	for i in gradini + 2:
+		resa._decidi(30.0, 30.0)
+	_conta("se il limite è il calcolo non si tocca niente", not resa.ferma()
+			and is_equal_approx(root.scaling_3d_scale, Resa.SCALA_TELEFONO), "%.2f" % root.scaling_3d_scale)
+	resa.queue_free()
+
+	# Sceso un gradino, la scena si fa leggera: non si risale, perché tornerà pesante
+	# appena ci si gira.
+	resa = Resa.new()
+	root.add_child(resa)
+	root.scaling_3d_scale = Resa.SCALA_TELEFONO
+	resa._decidi(30.0, 8.0)
+	resa._decidi(60.0, 8.0)
+	_conta("sopra la soglia si resta dove si è arrivati",
+			is_equal_approx(root.scaling_3d_scale, Resa.SCALA_TELEFONO - Resa.GRADINO),
+			"%.2f" % root.scaling_3d_scale)
+	resa.queue_free()
+
+	# La riga della partita del 04/10 mattina: un fotogramma da 17,4 secondi con la
+	# pagina probabilmente ferma. Una finestra così non dice niente della scena.
+	resa = Resa.new()
+	root.add_child(resa)
+	root.scaling_3d_scale = Resa.SCALA_TELEFONO
+	resa._decidi(1.9, 2.0, 17416.0)
+	_conta("una finestra con la pagina ferma non si giudica",
+			is_equal_approx(root.scaling_3d_scale, Resa.SCALA_TELEFONO), "%.2f" % root.scaling_3d_scale)
+	resa._decidi(1.9, 2.0)
+	_conta("e senza il fotogramma lungo la stessa finestra farebbe scendere (controprova)",
+			is_equal_approx(root.scaling_3d_scale, Resa.SCALA_TELEFONO - Resa.GRADINO),
+			"%.2f" % root.scaling_3d_scale)
+	resa.queue_free()
+
+	resa = Resa.new()
+	root.add_child(resa)
+	root.scaling_3d_scale = Resa.SCALA_TELEFONO
+	resa._decidi(59.0, 3.0)
 	_conta("a 59 fotogrammi non si tocca niente",
 			is_equal_approx(root.scaling_3d_scale, Resa.SCALA_TELEFONO) and not resa.ferma())
 	resa.queue_free()
+	_conta("e non si parte mai sopra la scala del 04/10 mattina",
+			Resa.SCALA_TELEFONO <= 0.65 + 0.001, "%.2f" % Resa.SCALA_TELEFONO)
 	root.scaling_3d_scale = di_prima
 	await process_frame
 

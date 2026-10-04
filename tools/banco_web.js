@@ -5,6 +5,7 @@
 // Uso, dalla cartella dove servi `build/web` (python -m http.server 8765):
 //   node tools/banco_web.js <porta|indirizzo> [etichetta]
 // Con PW_VOCI=base,pieno,base si fanno solo quelle voci, in quell'ordine.
+// Con PW_SPEDISCI=1 le righe vanno davvero al Server 2 (di serie si intercettano).
 // Con PW_ANGLE=gl il browser usa OpenGL invece di Direct3D: compila più in fretta, ma
 // sulla scheda di questo PC l'immagine esce blu (LEARNED.md § 48).
 //
@@ -19,14 +20,18 @@ const URL = BASE + (BASE.includes('?') ? '&' : '?') + 'scheda' + (VOCI ? '=' + V
 const ULTIMA = VOCI ? VOCI.split(',').length : 14;
 
 (async () => {
-  const argomenti = ['--ignore-gpu-blocklist'];
+  // Fuori dallo schermo, come in `misura_web.js`: gli scatti escono lo stesso.
+  const argomenti = ['--ignore-gpu-blocklist', '--window-position=-3200,0'];
   if (process.env.PW_ANGLE) argomenti.push('--use-angle=' + process.env.PW_ANGLE);
   const browser = await chromium.launch({ headless: false, args: argomenti });
   const pagina = await browser.newPage({ viewport: { width: 854, height: 390 } });
   const righe = [];
+  // Con PW_SPEDISCI=1 le righe arrivano anche al Server 2: è la prova che il banco
+  // pubblicato spedisce davvero, prima di chiederlo al telefono (04/10/2026).
   await pagina.route(/sonda\.92-4-172-126/, (r) => {
     righe.push(decodeURIComponent(r.request().url().split('?')[1] || ''));
-    r.fulfill({ status: 204, body: '' });
+    if (process.env.PW_SPEDISCI) r.continue();
+    else r.fulfill({ status: 204, body: '' });
   });
   const consolle = [];
   pagina.on('console', (m) => { const t = m.text(); if (!/glBlitFramebuffer/.test(t)) consolle.push(t); });

@@ -86,7 +86,9 @@ const SONDA_INIT = `(() => {
   // anche un secondo a programma) ma disegna giusto. Con PW_ANGLE=gl compila dieci volte
   // più in fretta e i conteggi restano veri, ma l'immagine della partita esce blu: va
   // bene per contare, non per guardare (visto il 04/10/2026).
-  const argomenti = ['--ignore-gpu-blocklist'];
+  // La finestra si apre fuori dallo schermo: sul PC di Ludovico una partita tutta blu
+  // sembra un gioco rotto (04/10/2026). Gli scatti escono lo stesso.
+  const argomenti = ['--ignore-gpu-blocklist', '--window-position=-3200,0'];
   if (process.env.PW_ANGLE) argomenti.push('--use-angle=' + process.env.PW_ANGLE);
   const browser = await chromium.launch({ headless: false, args: argomenti });
   const pagina = await browser.newPage({ viewport: { width: 854, height: 390 } });
