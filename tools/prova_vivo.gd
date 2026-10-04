@@ -243,7 +243,15 @@ func _l_arena() -> void:
 			riga.text if riga != null else "manca")
 
 	# **Le palle colorate.** Si va sopra a una e la si prende.
+	# Gli avversari, intanto, fermi e sotto l'arena: una palla la prende chiunque ci
+	# passi, e il 03/10/2026 nella lavorazione uno di loro ci arrivava prima del
+	# giocatore — il collaudo falliva su un gioco sano, per due pubblicazioni di fila.
+	for b in bots:
+		(b as Node3D).process_mode = Node.PROCESS_MODE_DISABLED
+		(b as Node3D).global_position = Vector3(0.0, -50.0, 0.0)
 	var potenziamenti := arena.get_node("potenziamenti") as Potenziamenti
+	# E le palle rimesse tutte in campo: nei secondi prima, qualcuno può averne presa una.
+	potenziamenti.riparti()
 	_conta("ci sono tre palle colorate, tutte disponibili", potenziamenti.quante_disponibili() == 3,
 			str(potenziamenti.quante_disponibili()))
 	potenziamenti.imposta_ricomparsa(0.6)
@@ -266,6 +274,12 @@ func _l_arena() -> void:
 			turbo_c_e = true
 	_conta("e ricompare", turbo_c_e)
 
+	# La premessa, prima della prova (LEARNED.md § 19): la palla c'è.
+	var doppio_c_e := false
+	for p in Potenziamenti.disponibili:
+		if p.distance_to(doppio["dove"]) < 0.1:
+			doppio_c_e = true
+	_conta("la palla dei punti doppi è lì, libera", doppio_c_e)
 	giocatore.global_position = (doppio["dove"] as Vector3) + Vector3(0, 0.3, 0)
 	giocatore.velocity = Vector3.ZERO
 	await _aspetta(0.25)
