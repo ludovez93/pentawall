@@ -29,6 +29,10 @@ const CENTRO := Vector3(0.0, 1.0, 0.0)
 ## mondo. Ci si disegna l'arena un pezzo alla volta solo per compilarne gli shader.
 const MISURA_VETRINA := Vector2i(128, 72)
 
+## Chi ha appena cambiato l'aspetto dal banco di prova ritrova il banco aperto: si
+## confrontano le varianti una dopo l'altra, senza rifare ogni volta i cinque tocchi.
+static var banco_al_ritorno := false
+
 var _versione := "locale"
 var _riga_versione: Button
 var _tocchi := 0
@@ -300,6 +304,27 @@ func _pulsanti() -> void:
 			func() -> void: _vai("res://scenes/poligono.tscn")))
 	_banco.add_child(_pulsante("ANGOLO", Vector2(170, 68), Color(0.35, 0.4, 0.55),
 			func() -> void: _vai("res://scenes/angolo.tscn")))
+	# L'aspetto (tappa 10): passa alla variante seguente e riprepara l'arena con
+	# quella. La scelta resta salvata, e GIOCA dalla Home la usa. Sta in una riga sua
+	# sopra il banco: in fila con gli altri tre la riga passava gli 854 punti del
+	# telefono in orizzontale.
+	if Aspetto.NOMI.size() > 1:
+		var aspetto := _pulsante("ASPETTO · %s" % Aspetto.nome(), Vector2(300, 60),
+				Color(0.55, 0.35, 0.7), func() -> void:
+					Aspetto.avanti()
+					banco_al_ritorno = true
+					get_tree().reload_current_scene())
+		aspetto.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+		aspetto.offset_left = 90
+		aspetto.offset_right = 390
+		aspetto.offset_top = -224
+		aspetto.offset_bottom = -164
+		aspetto.visible = false
+		add_child(aspetto)
+		_banco.visibility_changed.connect(func() -> void: aspetto.visible = _banco.visible)
+	if banco_al_ritorno:
+		banco_al_ritorno = false
+		_banco.visible = true
 
 	_riga_versione = _pulsante("", Vector2(238, 52), Color(0, 0, 0), _tocco)
 	_riga_versione.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
@@ -587,3 +612,5 @@ func _leggi_la_versione() -> void:
 func _scrivi_la_versione() -> void:
 	if _riga_versione != null:
 		_riga_versione.text = "versione %s" % _versione
+		if Aspetto.scelta() > 0:
+			_riga_versione.text += " · %s" % Aspetto.nome().to_lower()

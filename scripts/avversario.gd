@@ -912,6 +912,7 @@ func _costruisci() -> void:
 
 	_aspetto = Node3D.new()
 	add_child(_aspetto)
+	Aspetto.ombra(self)
 
 	# **Il corpo vero** (tappa 8): fino al 03/10/2026 qui c'erano una capsula, una
 	# sfera per casco e una scatola per arma. Per il motore resta una capsula — la

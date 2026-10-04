@@ -120,6 +120,13 @@ jobs:
           # Fino al 04/10/2026 nessun controllo camminava sulle rampe.
           "$GODOT" --headless --path . -s tools/prova_gradini.gd
 
+      - name: Collauda le varianti dell'aspetto
+        run: |
+          set -euo pipefail
+          # La tappa 10: ogni variante si costruisce con i pezzi che la distinguono,
+          # e quella di oggi resta l'arena di prima.
+          "$GODOT" --headless --path . -s tools/prova_aspetto.gd
+
       - name: Esporta per il browser
         run: |
           set -euo pipefail

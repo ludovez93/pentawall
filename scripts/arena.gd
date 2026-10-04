@@ -27,6 +27,11 @@ const RETE := "res://arene/palestra_cammino.res"
 const SPESSORE_PIANO := 0.6
 const SPESSORE_RAMPA := 0.45
 
+## I soffitti e le fasce, i lucernari e le loro lampade: le varianti dell'aspetto
+## (tappa 10) li ritrovano per nome, invece di riconoscerli dal colore.
+const GRUPPO_SOFFITTI := &"soffitti"
+const GRUPPO_LUCERNARI := &"lucernari"
+
 ## **Si gioca a tempo, tre minuti** (decisione 19, dal blocco C). Il duello del
 ## poligono resta a 500 punti; qui no, e per due motivi misurati: a 500 la partita
 ## finiva in cinquanta secondi, e sapere quanto manca vale più di sapere quanto
@@ -216,10 +221,14 @@ func _ready() -> void:
 	_tabellone = Vestizione.arreda_arena(self, _pianta)
 	await _respiro()
 	_pubblico()
+	# L'aspetto (tappa 10): la variante scelta veste prima della luce per vertice, così
+	# i pezzi che aggiunge la calcolano sui vertici come tutti gli altri.
+	Aspetto.veste(self)
 	_luce_per_vertice()
 	await _respiro()
 	_rete_di_cammino()
 	_luci()
+	Aspetto.illumina(self)
 	_prepara_gli_anelli()
 	add_child(Scintille.new())
 	_potenziamenti = Potenziamenti.new()
@@ -395,7 +404,7 @@ func _costruisci() -> void:
 		var misura := Vector3(float(c["misura"][0]), spessore, float(c["misura"][1]))
 		Muratura.muro(self, Vector3(float(c["centro"][0]),
 				float(c["quota"]) + spessore * 0.5, float(c["centro"][1])),
-				misura, _tinta(c["tinta"]))
+				misura, _tinta(c["tinta"])).add_to_group(GRUPPO_SOFFITTI)
 
 	# Le fasce: dove il soffitto sale da 8 a 12 metri — dalle ali al cuore e al
 	# lato sud — fra i due soffitti restava un gradino aperto di quattro metri, e
@@ -405,7 +414,7 @@ func _costruisci() -> void:
 		var misura := Vector3(float(f["misura"][0]), float(f["alto"]), float(f["misura"][1]))
 		Muratura.muro(self, Vector3(float(f["centro"][0]),
 				float(f["quota"]) + misura.y * 0.5, float(f["centro"][1])),
-				misura, _tinta(f["tinta"]))
+				misura, _tinta(f["tinta"])).add_to_group(GRUPPO_SOFFITTI)
 
 	# I lucernari: nell'originale sono la cosa che dice «palestra» in mezzo
 	# secondo, e costano un rettangolo acceso l'uno.
@@ -413,7 +422,7 @@ func _costruisci() -> void:
 		Muratura.decoro(self, Vector3(float(l["dove"][0]), float(l["quota"]),
 				float(l["dove"][1])),
 				Vector3(float(l["misura"][0]), 0.12, float(l["misura"][1])),
-				Color(0.72, 0.52, 0.98), 0.72)
+				Color(0.72, 0.52, 0.98), 0.72).add_to_group(GRUPPO_LUCERNARI)
 
 	# Le insegne della pianta le costruisce l'arredo (`Vestizione.arreda_arena`):
 	# dal 03/10/2026 sono oggetti — pannello, cornice al neon, scritta — e non più
@@ -760,7 +769,7 @@ func _luci() -> void:
 		# Sotto il lucernario, non dentro: una lampada annegata nel soffitto
 		# illumina il soffitto.
 		_lampada(Vector3(float(l["dove"][0]), alto - 1.2, float(l["dove"][1])),
-				Color(0.80, 0.74, 1.0), 4.6, alto + 14.0)
+				Color(0.80, 0.74, 1.0), 4.6, alto + 14.0).add_to_group(GRUPPO_LUCERNARI)
 
 	# Le tre lampade di colore: sono quelle che danno un'aria a ogni zona, ed e'
 	# cosi' che un'ala si riconosce da lontano prima di leggerne l'insegna.
@@ -772,7 +781,7 @@ func _luci() -> void:
 	_lampada(Vector3(-24, 4.0, -24), Vestizione.NEON, 2.6, 22.0)
 
 
-func _lampada(dove: Vector3, colore: Color, forza: float, portata: float) -> void:
+func _lampada(dove: Vector3, colore: Color, forza: float, portata: float) -> OmniLight3D:
 	var luce := OmniLight3D.new()
 	luce.position = dove
 	luce.light_color = colore
@@ -780,6 +789,7 @@ func _lampada(dove: Vector3, colore: Color, forza: float, portata: float) -> voi
 	luce.omni_range = portata
 	luce.shadow_enabled = false
 	add_child(luce)
+	return luce
 
 
 # ------------------------------------------------------------------ comandi

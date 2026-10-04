@@ -311,6 +311,9 @@ func riga(motivo := "") -> String:
 		_calcolo_somma / n, _fisica_somma / float(maxi(_fisica_giri, 1)),
 		_disegno_somma / n, _gpu_somma / n, int(round(float(_chiamate_somma) / n)),
 		_lavoro_somma / float(maxi(_lavoro_giri, 1))]
+	# La variante dell'aspetto (tappa 10): le partite di misura si confrontano per
+	# variante, e la zero è l'arena di prima.
+	testo += "&aspetto=%d" % Aspetto.scelta()
 	if motivo == "apertura" or _spedite == 0:
 		# Come si chiama la scheda video per il motore: da questo nome Godot decide se
 		# fare la passata di profondità (la spegne solo se dice «Apple»). Nella prima

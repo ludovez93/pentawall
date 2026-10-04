@@ -521,6 +521,9 @@ func _costruisci() -> void:
 
 	_aspetto = Node3D.new()
 	add_child(_aspetto)
+	# L'ombra di contatto delle varianti dell'aspetto (tappa 10): sul corpo, non sulla
+	# parte visibile, così resta sul pavimento anche mentre la vista sale un gradino.
+	Aspetto.ombra(self)
 
 	_corpo_visibile = Node3D.new()
 	_aspetto.add_child(_corpo_visibile)
