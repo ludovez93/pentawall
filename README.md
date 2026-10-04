@@ -110,7 +110,7 @@ gravità 18,1 m/s², dardo a 19 m/s.
 Godot --path . -s tools/prova_balistica.gd       # 20 controlli sulla riflessione, senza schermo
 Godot --path . -s tools/prova_ingresso.gd        # 26 controlli sulla schermata d'ingresso
 Godot --path . -s tools/prova_arena.gd           # 117 controlli: pianta, cammino, partita, caccia
-Godot --path . -s tools/prova_vivo.gd            # 67 controlli: corpi, forme, pavimenti, camera, suoni, palle colorate, resa
+Godot --path . -s tools/prova_vivo.gd            # 70 controlli: corpi, forme, pavimenti, camera, suoni, palle colorate, luce, resa
 Godot --path . -s tools/prova_ritmo.gd           # una partita intera: si arriva nei primi tre?
 Godot --path . -s tools/prova_poligono.gd        # il giro completo: sponda, colpo, punteggio
 Godot --path . -s tools/prova_avversario.gd      # 18 controlli: anticipo, schivata, livelli, partita

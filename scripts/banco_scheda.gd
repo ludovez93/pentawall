@@ -41,12 +41,11 @@ extends Node
 ## 04/10/2026 (`Corpo.ritmo_pieno`): dice quanto vale il ritmo.
 ## Le voci si possono scegliere dall'indirizzo: `?scheda=risoluzione,lampade`; e il
 ## riscaldamento con `caldo=` in secondi (`?scheda=lampade&caldo=0`).
-## «vertice» calcola la luce sui vertici dei pezzi dell'arena invece che su ogni
-## pixel (i corpi restano come sono): nel secondo banco le lampade spente valevano
-## 26 ms su 48, e questa voce dice quanto se ne recupera tenendole accese. «misto»
-## fa lo stesso ma lascia per pixel le lamiere (tribune e soffitti, gli unici
-## materiali metallici), che sono quelle dove le lampade fanno i riflessi bianchi.
-const VOCI := ["bagliore", "antialias", "lampade", "vertice", "misto", "animazioni", "pieno", "corpi",
+## «pixel» rimette la luce su ogni pixel ai pezzi dell'arena, com'era fino al
+## 04/10/2026 (`Arena._luce_per_vertice`): dice quanto vale ancora quella scelta. Nel
+## banco di quel giorno, alla seconda velocità del telefono, la luce per vertice ha
+## portato il fotogramma da 46 a 11 ms.
+const VOCI := ["bagliore", "antialias", "lampade", "pixel", "animazioni", "pieno", "corpi",
 		"contorni", "pubblico", "superfici", "interfaccia", "risoluzione", "vuota"]
 ## Quanto si scalda, in secondi, prima delle coppie.
 const RISCALDA := 90.0
@@ -115,7 +114,7 @@ var _scritta: Label
 ## Com'era ogni cosa spenta, per rimetterla esattamente com'era.
 var _salvati := {}
 var _piatti := {}
-var _vertici := {}
+var _pixel := {}
 
 
 func _ready() -> void:
@@ -240,19 +239,14 @@ func _spegni(voce: String) -> void:
 				if pezzo.material_override != null and vere.has(pezzo.material_override):
 					_salvati[pezzo] = pezzo.material_override
 					pezzo.material_override = _piatto(pezzo.material_override as StandardMaterial3D)
-		"vertice", "misto":
-			var corpi: Array = [arena.call("giocatore")] + (arena.call("avversari") as Array)
+		"pixel":
 			for nodo in arena.find_children("*", "MeshInstance3D", true, false):
 				var pezzo := nodo as MeshInstance3D
 				var materiale := pezzo.material_override as BaseMaterial3D
-				if materiale == null or materiale.shading_mode != BaseMaterial3D.SHADING_MODE_PER_PIXEL:
-					continue
-				if voce == "misto" and materiale.metallic > 0.0:
-					continue
-				if corpi.any(func(c: Variant) -> bool: return (c as Node).is_ancestor_of(pezzo)):
+				if materiale == null or materiale.shading_mode != BaseMaterial3D.SHADING_MODE_PER_VERTEX:
 					continue
 				_salvati[pezzo] = materiale
-				pezzo.material_override = _per_vertice(materiale)
+				pezzo.material_override = _per_pixel(materiale)
 		"interfaccia":
 			(arena.get("_comandi") as CanvasLayer).visible = false
 		"risoluzione":
@@ -294,7 +288,7 @@ func _riaccendi(voce: String) -> void:
 			var pubblico := arena.get_node_or_null("pubblico") as Node3D
 			if pubblico != null:
 				pubblico.visible = true
-		"superfici", "vertice", "misto":
+		"superfici", "pixel":
 			for pezzo in _salvati:
 				if pezzo is MeshInstance3D:
 					(pezzo as MeshInstance3D).material_override = _salvati[pezzo]
@@ -327,17 +321,20 @@ func _ambiente() -> Environment:
 
 func _piatto(vero: StandardMaterial3D) -> StandardMaterial3D:
 	if not _piatti.has(vero):
-		_piatti[vero] = Muratura.tinta_unita(vero.albedo_color, 0.8)
+		var piatto := Muratura.tinta_unita(vero.albedo_color, 0.8)
+		# Con la luce del vero: la voce misura le texture, non la luce.
+		piatto.shading_mode = vero.shading_mode
+		_piatti[vero] = piatto
 	return _piatti[vero]
 
 
-## Lo stesso materiale, con la luce calcolata sui vertici.
-func _per_vertice(vero: BaseMaterial3D) -> BaseMaterial3D:
-	if not _vertici.has(vero):
+## Lo stesso materiale, con la luce calcolata su ogni pixel.
+func _per_pixel(vero: BaseMaterial3D) -> BaseMaterial3D:
+	if not _pixel.has(vero):
 		var copia := vero.duplicate() as BaseMaterial3D
-		copia.shading_mode = BaseMaterial3D.SHADING_MODE_PER_VERTEX
-		_vertici[vero] = copia
-	return _vertici[vero]
+		copia.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
+		_pixel[vero] = copia
+	return _pixel[vero]
 
 
 ## I fotogrammi al secondo come li vede chi gioca, le chiamate di disegno e, dove il

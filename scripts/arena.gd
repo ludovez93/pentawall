@@ -213,6 +213,7 @@ func _ready() -> void:
 	_tabellone = Vestizione.arreda_arena(self, _pianta)
 	await _respiro()
 	_pubblico()
+	_luce_per_vertice()
 	await _respiro()
 	_rete_di_cammino()
 	_luci()
@@ -237,6 +238,24 @@ func _ready() -> void:
 		preparata.emit()
 		return
 	entra_in_campo()
+
+
+## **La luce per vertice** (tappa 9, terza parte, 04/10/2026). Sul telefono, dopo i primi
+## 15-35 secondi, un fotogramma costava 45-54 ms, e le lampade ne valevano 26: Godot
+## calcola su ogni pixel le otto lampade migliori di ogni pezzo, e con 23 lampade da 10-26
+## metri di portata ogni pezzo ne ha quasi sempre otto. Qui i pezzi dell'arena le
+## calcolano sui vertici e le sfumano: nel banco del telefono, da 46 a 11 ms. Si perdono
+## i riflessi bianchi delle lampade sulle lamiere di tribune e soffitti (scelta di
+## Ludovico, 04/10/2026: tornano finti nella tappa 10). Corpi, pubblico e quello che
+## nasce dopo (anelli, palle colorate, dardi) restano per pixel: sono piccoli sullo
+## schermo. Si cambia il materiale stesso: quelli di `Vestizione` li condividono tutti i
+## pezzi, e il palco dell'ingresso ne usa una copia sua. Va fatto prima della vetrina,
+## che così scalda gli shader nella variante della partita.
+func _luce_per_vertice() -> void:
+	for nodo in find_children("*", "MeshInstance3D", true, false):
+		var materiale := (nodo as MeshInstance3D).material_override as BaseMaterial3D
+		if materiale != null and materiale.shading_mode == BaseMaterial3D.SHADING_MODE_PER_PIXEL:
+			materiale.shading_mode = BaseMaterial3D.SHADING_MODE_PER_VERTEX
 
 
 ## Un fotogramma di respiro fra due passi della costruzione, solo quando l'arena si

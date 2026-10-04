@@ -200,6 +200,33 @@ func _l_arena() -> void:
 	_conta("tutti i pavimenti sono vestiti", pavimenti > 0 and vestiti == pavimenti,
 			"%d su %d" % [vestiti, pavimenti])
 
+	# La luce per vertice (04/10/2026): pavimenti e muri la calcolano sui vertici, i corpi
+	# su ogni pixel. Sul telefono le lampade calcolate su ogni pixel valevano 26 ms su 48.
+	var pezzi := 0
+	var per_vertice := 0
+	for gruppo in [Muratura.GRUPPO_PAVIMENTI, Muratura.GRUPPO_MURI]:
+		for corpo in arena.get_tree().get_nodes_in_group(gruppo):
+			for figlio in corpo.get_children():
+				if not (figlio is MeshInstance3D):
+					continue
+				var m := (figlio as MeshInstance3D).material_override as BaseMaterial3D
+				if m == null:
+					continue
+				pezzi += 1
+				if m.shading_mode == BaseMaterial3D.SHADING_MODE_PER_VERTEX:
+					per_vertice += 1
+	_conta("pavimenti e muri calcolano la luce sui vertici", pezzi > 0 and per_vertice == pezzi,
+			"%d su %d" % [per_vertice, pezzi])
+	var del_corpo := 0
+	for nodo in (arena.call("giocatore") as Giocatore).corpo().find_children("*", "MeshInstance3D", true, false):
+		var m := (nodo as MeshInstance3D).material_override as BaseMaterial3D
+		if m != null and m.shading_mode == BaseMaterial3D.SHADING_MODE_PER_PIXEL:
+			del_corpo += 1
+	_conta("e il corpo del giocatore resta su ogni pixel (controprova)", del_corpo > 0,
+			"%d pezzi" % del_corpo)
+	_conta("un muro appena fatto nasce su ogni pixel: è l'arena a cambiarlo (controprova)",
+			Muratura.opaco(Color.WHITE).shading_mode == BaseMaterial3D.SHADING_MODE_PER_PIXEL)
+
 	# Le forme: colonne, piloni e pilastri sono tondi anche per i colpi.
 	var tondi := 0
 	for corpo in arena.get_tree().get_nodes_in_group(Muratura.GRUPPO_MURI):
