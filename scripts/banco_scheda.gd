@@ -15,28 +15,45 @@ extends Node
 ##   scalino dei 30 non nasconde niente: 19 ms e 31 ms restano due numeri diversi.
 ## Il costo si divide in due: **il lavoro** del gioco (calcolo e preparazione del
 ## disegno, fino all'ultima chiamata) e **l'attesa** della scheda dopo l'ultima
-## chiamata. Ogni voce manda una riga alla sonda, con `scena=banco`. Dal gioco normale non si
+## chiamata. Ogni misura manda una riga alla sonda, con `scena=banco`. Dal gioco normale non si
 ## arriva qui, e i banchi di prova dietro i cinque tocchi sono un'altra cosa.
+##
+## **Il telefono ha due velocità** (04/10/2026, primo banco in Safari). Per i primi
+## 20-35 secondi di gioco un fotogramma costava 12 ms; poi, con la stessa inquadratura
+## ferma, 43-46 ms, fino alla fine. Le partite dalla Home fanno lo stesso: 60 fotogrammi
+## per una ventina di secondi, poi meno. Sul PC, in due minuti e mezzo di partita, nodi e
+## memoria restano fermi: non è il gioco che cresce, è il telefono che dopo lo scatto
+## iniziale rallenta (calore o tetto di consumo: da qui non si distingue). Quello che
+## conta è la seconda velocità, dove si gioca quasi tutta la partita. Quindi il banco:
+## - prima **scalda**: misura l'inquadratura com'è (`caldo`) per un minuto e mezzo, e
+##   le righe mostrano quando il telefono cambia velocità;
+## - poi misura **a coppie**: ogni voce subito dopo una misura di riferimento (`base`),
+##   così ogni confronto è fra due momenti vicini, con il telefono nello stesso stato.
+##   Nel primo banco le voci stavano in fila fra due «base», e quando il telefono ha
+##   cambiato velocità a metà non si poteva più confrontare niente.
 
-## Le voci, in ordine. «base» due volte, in testa e in coda: se le due righe non si
-## somigliano, il telefono si è scaldato strada facendo, e le voci in mezzo vanno lette
-## con le pinze.
+## Le voci, in ordine; ognuna preceduta da una misura «base».
 ## «animazioni» lascia i corpi in scena ma ferma i loro scheletri: in Compatibility
 ## ogni pezzo di corpo animato si deforma a ogni fotogramma con un passaggio suo sulla
 ## scheda (`mesh_storage.cpp` di 4.7.2, `update_mesh_instances`), e questa voce dice
 ## quanto costa deformare rispetto a disegnare.
 ## «pieno» rimette tutti i corpi ad animarsi a ogni fotogramma, com'era fino al
-## 04/10/2026 (`Corpo.ritmo_pieno`): alternata a «base» dice quanto vale il ritmo.
-## Le voci si possono scegliere dall'indirizzo: `?scheda=base,pieno,base,pieno`.
-const VOCI := ["base", "bagliore", "antialias", "lampade", "animazioni", "pieno", "corpi",
-		"contorni", "pubblico", "superfici", "interfaccia", "risoluzione", "vuota", "base"]
+## 04/10/2026 (`Corpo.ritmo_pieno`): dice quanto vale il ritmo.
+## Le voci si possono scegliere dall'indirizzo: `?scheda=risoluzione,lampade`; e il
+## riscaldamento con `caldo=` in secondi (`?scheda=lampade&caldo=0`).
+const VOCI := ["bagliore", "antialias", "lampade", "animazioni", "pieno", "corpi",
+		"contorni", "pubblico", "superfici", "interfaccia", "risoluzione", "vuota"]
+## Quanto si scalda, in secondi, prima delle coppie.
+const RISCALDA := 90.0
 ## Fotogrammi dopo ogni cambio, prima di misurare: il primo fotogramma di una voce
 ## nuova può compilare uno shader.
-const ASSESTA := 45
+const ASSESTA := 20
 ## Fotogrammi contati per i fotogrammi al secondo.
-const CONTA := 90
+const CONTA := 40
 ## Fotogrammi pesati uno per uno, aspettando la scheda video.
-const PESA := 45
+const PESA := 40
+## Fotogrammi dopo aver riacceso, prima della misura seguente.
+const RIPOSA := 10
 ## Dove si ferma chi gioca: sul ballatoio, che guarda il cuore dell'arena.
 const DOVE_GIOCATORE := Vector3(0.0, 7.05, 20.0)
 ## Dove si fermano gli avversari: due sul ballatoio, dentro i quindici metri del
@@ -86,6 +103,8 @@ var arena: Node
 var sonda: Sonda
 ## Le voci di questo giro: tutte, o quelle scritte nell'indirizzo.
 var voci: Array = VOCI
+## I secondi di riscaldamento di questo giro: `RISCALDA`, o `caldo=` nell'indirizzo.
+var riscaldamento := RISCALDA
 var _pesando := false
 var _scritta: Label
 ## Com'era ogni cosa spenta, per rimetterla esattamente com'era.
@@ -97,6 +116,10 @@ func _ready() -> void:
 	RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(), true)
 	if OS.has_feature("web"):
 		JavaScriptBridge.eval(PESA_JS)
+		var caldo: Variant = JavaScriptBridge.eval(
+				"String(new URLSearchParams(window.location.search).get('caldo') || '')", true)
+		if caldo is String and (caldo as String).is_valid_float():
+			riscaldamento = maxf(float(caldo), 0.0)
 	RenderingServer.frame_post_draw.connect(_dopo_il_disegno)
 	_cartello()
 	_lavora()
@@ -122,17 +145,34 @@ func _lavora() -> void:
 		sonda.fermati("banco")
 	_metti_in_posa()
 	await _fotogrammi(90)
+	var n := 0
+	var inizio := Time.get_ticks_msec()
+	while float(Time.get_ticks_msec() - inizio) / 1000.0 < riscaldamento:
+		_scrivi("MISURO LA SCHEDA VIDEO · SCALDO · NON TOCCARE")
+		n += 1
+		await _misura(n, "caldo")
 	for i in voci.size():
-		var voce: String = voci[i]
 		_scrivi("MISURO LA SCHEDA VIDEO · %d DI %d · NON TOCCARE" % [i + 1, voci.size()])
-		_spegni(voce)
-		await _fotogrammi(ASSESTA)
-		var conto: Array = await _conta()
-		var pesata: Array = await _pesa()
-		_manda(i + 1, voce, conto, pesata[0], pesata[1])
-		_riaccendi(voce)
-		await _fotogrammi(15)
+		n += 1
+		await _misura(n, "base")
+		n += 1
+		await _misura(n, voci[i])
+	# L'ultima riga lo dice, così chi la legge sa che il giro è finito.
+	n += 1
+	await _misura(n, "base", true)
 	_scrivi("FATTO · PUOI CHIUDERE")
+
+
+## Una misura: si spegne la voce («base» e «caldo» non spengono niente), si aspetta
+## che si assesti, si conta, si pesa, si manda la riga e si riaccende.
+func _misura(n: int, voce: String, ultima := false) -> void:
+	_spegni(voce)
+	await _fotogrammi(ASSESTA)
+	var conto: Array = await _conta()
+	var pesata: Array = await _pesa()
+	_manda(n, voce, conto, pesata[0], pesata[1], ultima)
+	_riaccendi(voce)
+	await _fotogrammi(RIPOSA)
 
 
 ## Tutti fermi, sempre nello stesso posto: le voci si confrontano solo se
@@ -313,7 +353,7 @@ func _pesa() -> Array:
 
 
 func _manda(n: int, voce: String, conto: Array, lavori: PackedFloat64Array,
-		costi: PackedFloat64Array) -> void:
+		costi: PackedFloat64Array, ultima := false) -> void:
 	var ordinati := costi.duplicate()
 	ordinati.sort()
 	var massimo := ordinati[ordinati.size() - 1] if not ordinati.is_empty() else -1.0
@@ -322,6 +362,8 @@ func _manda(n: int, voce: String, conto: Array, lavori: PackedFloat64Array,
 			+ "&pesati=%d&chiamate=%d&gpu=%.1f&scala=%.2f&msaa=%d") % [
 		voce, n, float(conto[0]), _mediano(costi), _mediano(lavori), massimo, ordinati.size(),
 		int(round(float(conto[1]))), float(conto[2]), vp.scaling_3d_scale, vp.msaa_3d]
+	if ultima:
+		testo += "&ultima=1"
 	if sonda != null:
 		sonda.manda(testo)
 	else:
