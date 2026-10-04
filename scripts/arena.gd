@@ -58,6 +58,14 @@ static var modo_partita := false
 ## sullo schermo. Spenta (i collaudi, il banco di prova) l'arena nasce tutta subito.
 static var in_preparazione := false
 
+## **Il banco della scheda video** (`BancoScheda`, 04/10/2026): acceso dall'ingresso
+## quando l'indirizzo dice `?scheda`. La partita parte come sempre, poi il banco ferma
+## tutti e misura; la risoluzione resta quella di partenza, perché ogni voce si
+## confronta con la stessa.
+static var banco_scheda := false
+## Le voci del banco, se l'indirizzo le sceglie (`?scheda=base,pieno`); vuoto, tutte.
+static var voci_banco: Array = []
+
 ## Il mondo è pronto e l'arena aspetta di entrare in campo.
 signal preparata
 
@@ -247,7 +255,8 @@ func _respiro() -> void:
 func entra_in_campo() -> void:
 	_in_preparazione = false
 	Resa.regola(get_viewport())
-	add_child(Resa.new())
+	if not banco_scheda:
+		add_child(Resa.new())
 	_sonda = Sonda.new()
 	_sonda.arena = self
 	add_child(_sonda)
@@ -290,6 +299,13 @@ func entra_in_campo() -> void:
 	_modo_partita = modo_partita
 	if _modo_partita:
 		avvia_sfida()
+		if banco_scheda:
+			var banco := BancoScheda.new()
+			banco.arena = self
+			banco.sonda = _sonda
+			if not voci_banco.is_empty():
+				banco.voci = voci_banco
+			add_child(banco)
 
 
 ## La pianta si legge da un file di testo, non da un file del motore: si apre con
@@ -305,9 +321,10 @@ static func carica_pianta(percorso := PIANTA) -> Dictionary:
 # ------------------------------------------------------------------ costruzione
 
 func _costruisci() -> void:
-	for zona in _pianta["zone"]:
-		Muratura.piano(self, _contorno(zona["poligono"]), float(zona["quota"]),
-				SPESSORE_PIANO, _tinta(zona["tinta"]))
+	var zone: Array = _pianta["zone"]
+	for i in zone.size():
+		Muratura.piano(self, _contorno(zone[i]["poligono"]), float(zone[i]["quota"]),
+				SPESSORE_PIANO, _tinta(zone[i]["tinta"]), _parti_scoperte(i))
 
 	_cordoli()
 
@@ -372,6 +389,48 @@ func _costruisci() -> void:
 	# Le insegne della pianta le costruisce l'arredo (`Vestizione.arreda_arena`):
 	# dal 03/10/2026 sono oggetti — pannello, cornice al neon, scritta — e non più
 	# scritte sospese davanti al muro.
+
+
+## **Dove un pavimento si vede.** Nella pianta i quattro passaggi diagonali passano
+## sopra le ali e gli angoli **alla stessa quota**: due pavimenti nello stesso piano,
+## e la scheda video li disegnava tutti e due — moquette e parquet, e a ogni passo
+## vinceva l'altro. Dal telefono, il 04/10/2026: *«qualche zona del pavimento
+## lampeggia quando ci passo»*. Non si era mai visto perché fino alla tappa 8 i
+## pavimenti erano invisibili dall'alto (`LEARNED.md` § 42).
+##
+## Una zona si disegna solo dove nessuna zona scritta **dopo** di lei sta alla stessa
+## quota: chi viene dopo vince, come nella planimetria. È solo l'aspetto: la
+## collisione resta il contorno intero, e con lei la rete di cammino.
+func _parti_scoperte(indice: int) -> Array[PackedVector2Array]:
+	var zone: Array = _pianta["zone"]
+	var quota := float(zone[indice]["quota"])
+	var parti: Array[PackedVector2Array] = [_contorno(zone[indice]["poligono"])]
+	for j in range(indice + 1, zone.size()):
+		if absf(float(zone[j]["quota"]) - quota) > 0.01:
+			continue
+		var sopra := _contorno(zone[j]["poligono"])
+		var restano: Array[PackedVector2Array] = []
+		for parte in parti:
+			var pezzi := Geometry2D.clip_polygons(parte, sopra)
+			# Una zona tutta dentro un'altra lascerebbe un buco, e un pavimento col buco
+			# non si triangola così: si tiene intera e lo dice. Il collaudo dei
+			# pavimenti (`prova_vivo`) la troverebbe doppia.
+			if _ha_un_buco(pezzi):
+				push_warning("pavimento con un buco, non ritagliato: %s" % zone[indice]["nome"])
+				restano.append(parte)
+				continue
+			restano.append_array(pezzi)
+		parti = restano
+	return parti
+
+
+## Un ritaglio ha un buco quando un pezzo sta dentro un altro.
+static func _ha_un_buco(pezzi: Array[PackedVector2Array]) -> bool:
+	for a in pezzi:
+		for b in pezzi:
+			if a != b and Geometry2D.is_point_in_polygon(a[0], b):
+				return true
+	return false
 
 
 ## Tondi: colonne, piloni, pilastri. Tutto il resto è una scatola, smussata.

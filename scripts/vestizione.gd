@@ -274,7 +274,10 @@ static func _campo_del_catino(arena: Node3D) -> void:
 	nome.rotation_degrees = Vector3(-90, 0, 0)
 	# Vernice consumata, non un'insegna: a piena luce si mangiava mezzo schermo. E
 	# senza il contorno nero delle scritte, che a terra disegnava lettere vuote.
-	nome.modulate = Color(0.86, 0.82, 1.0, 0.42)
+	# **La consuma il colore, non la trasparenza** (04/10/2026): la scritta è ritagliata
+	# a soglia, e una trasparenza sotto la metà la ritaglia tutta — con 0,42 dalla
+	# tappa 8 non si vedeva più. Piena, a metà strada fra il bianco e la moquette.
+	nome.modulate = Color(0.86, 0.82, 1.0).lerp(Color(0.50, 0.28, 0.88), 0.45)
 	nome.outline_size = 0
 	nome.shaded = false
 	# A due facce come tutte le scritte dell'arena (vedi `_insegna`): da sotto la

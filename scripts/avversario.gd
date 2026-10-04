@@ -986,6 +986,9 @@ func _aggiorna_i_contorni() -> void:
 		var nodo: Variant = contorno.get("nodo")
 		if nodo is Node3D:
 			(nodo as Node3D).visible = quanto > 0.0
+	# Il contorno del corpo vero sono passate in più dei suoi materiali (`Corpo`).
+	if _corpo != null:
+		_corpo.accendi_contorni(quanto > 0.0)
 	if _targhetta != null:
 		_targhetta.visible = quanto > 0.0
 		_targhetta.modulate.a = 0.95 * quanto

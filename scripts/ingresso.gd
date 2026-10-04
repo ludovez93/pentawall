@@ -55,6 +55,20 @@ func _ready() -> void:
 	_leggi_la_versione()
 	# Chi torna qui dal podio non deve ritrovarsi in partita al tocco seguente.
 	Arena.modo_partita = false
+	# Il banco della scheda video (`BancoScheda`): con `?scheda` nell'indirizzo si
+	# entra da soli, appena l'arena è pronta, e si misura.
+	Arena.banco_scheda = false
+	Arena.voci_banco = []
+	if OS.has_feature("web"):
+		var cerca: Variant = JavaScriptBridge.eval("String(window.location.search || '')", true)
+		Arena.banco_scheda = cerca is String and (cerca as String).contains("scheda")
+		var scelte: Variant = JavaScriptBridge.eval(
+				"String(new URLSearchParams(window.location.search).get('scheda') || '')", true)
+		if scelte is String and (scelte as String) != "":
+			for voce in (scelte as String).split(",", false):
+				if BancoScheda.VOCI.has(voce):
+					Arena.voci_banco.append(voce)
+	_gioca_chiesto = Arena.banco_scheda
 	add_child(Suoni.new())
 	Suoni.musica("musica_ingresso")
 	_prepara_l_arena()

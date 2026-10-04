@@ -74,6 +74,25 @@ const DITA := ["index", "middle", "pinky", "ring", "thumb"]
 
 const DURATA_LAMPO_BOCCA := 0.06
 
+## **Il ritmo delle animazioni** (04/10/2026). In Compatibility uno scheletro che si
+## muove costa tre volte: l'albero delle animazioni lo calcola, lo scheletro rimanda
+## le sue ossa al motore di disegno, e **ogni pezzo del corpo si deforma con un
+## passaggio suo sulla scheda** (`mesh_storage.cpp` di 4.7.2). Con la torsione del
+## busto lo scheletro si ricalcolava a ogni fotogramma, per tutti e sei. Nel browser
+## del PC fermare gli scheletri vale quanto togliere i corpi: da 42-47 a 25 ms a
+## fotogramma (`BancoScheda`, 04/10/2026). Adesso chi è vicino si anima a ogni
+## fotogramma, chi è lontano uno sì e uno no o uno su tre, e chi sta fuori
+## dall'inquadratura uno su quattro: a venti metri, su un telefono, trenta passi al
+## secondo non si distinguono da sessanta. Misurato nello stesso browser alternando
+## le due regole: 37 ms a fotogramma contro 42, in quattro coppie su quattro.
+const RITMO_VICINO := 10.0   ## metri dalla camera: fin qui, ogni fotogramma
+const RITMO_MEDIO := 25.0    ## fin qui uno su due; oltre, uno su tre
+const OGNI_FUORI := 4        ## fuori dall'inquadratura: uno su quattro
+const RAGGIO_INQUADRATO := 1.2  ## un corpo è inquadrato se ne entra anche solo un pezzo
+## Tutti a ogni fotogramma, come prima del 04/10/2026: lo accende solo il banco della
+## scheda video (`BancoScheda`), per misurare quanto vale il ritmo.
+static var ritmo_pieno := false
+
 static var _libreria: AnimationLibrary = null
 
 ## **Modelli, capelli, blaster e la tuta, letti una volta per tutto il gioco**
@@ -103,6 +122,14 @@ var _angolo_gambe := 0.0
 var _in_aria := 0.0
 var _lampo := 0.0
 var _lampeggio := false
+## Quanti fotogrammi sono passati dall'ultimo passo dell'animazione, e quanto tempo.
+## Si parte «in ritardo», così il primo fotogramma in scena ha già la sua posa.
+var _turno := 1 << 20
+var _accumulato := 0.0
+## Le passate del contorno: per ogni pezzo di pelle, il materiale e il primo guscio
+## da appendergli dietro (`contorni`).
+var _contorno: Array = []
+var _contorno_acceso := false
 
 
 static func crea(nome: String) -> Corpo:
@@ -121,6 +148,13 @@ static func colore_di(nome: String) -> Color:
 
 
 func _process(delta: float) -> void:
+	_accumulato += delta
+	_turno += 1
+	if _turno >= _ogni():
+		_albero.advance(_accumulato)
+		_scheletro.advance(_accumulato)
+		_accumulato = 0.0
+		_turno = 0
 	if _vita_lampo_bocca > 0.0:
 		_vita_lampo_bocca -= delta
 		var quota := clampf(_vita_lampo_bocca / DURATA_LAMPO_BOCCA, 0.0, 1.0)
@@ -136,6 +170,26 @@ func _process(delta: float) -> void:
 	elif _lampeggio:
 		luce = 0.55
 	_materiale.set_shader_parameter("lampo", luce)
+
+
+## Ogni quanti fotogrammi questo corpo fa un passo d'animazione: dipende da dove sta
+## rispetto alla camera che disegna.
+func _ogni() -> int:
+	if ritmo_pieno:
+		return 1
+	if not is_visible_in_tree():
+		return OGNI_FUORI
+	var camera := get_viewport().get_camera_3d()
+	if camera == null:
+		return 1
+	var centro := global_position + Vector3(0.0, ALTEZZA_CORPO * 0.5, 0.0)
+	for piano in camera.get_frustum():
+		if piano.distance_to(centro) > RAGGIO_INQUADRATO:
+			return OGNI_FUORI
+	var distanza := camera.global_position.distance_to(centro)
+	if distanza < RITMO_VICINO:
+		return 1
+	return 2 if distanza < RITMO_MEDIO else 3
 
 
 # ------------------------------------------------------------------ comandi
@@ -244,26 +298,49 @@ func bocca() -> Vector3:
 ## Occhi e sopracciglia stanno dentro la testa, e un contorno su di loro sarebbe
 ## lavoro della scheda video per niente. `quota_filo` è lo spessore del filo scuro
 ## rispetto al contorno acceso (lo decide chi porta il corpo). Torna
-## `{materiale, quota, nodo}`.
+## `{materiale, quota}`; si accendono e si spengono con `accendi_contorni`.
+##
+## **Sono due passate in più dello stesso pezzo, non due copie** (04/10/2026). Fino ad
+## allora ogni guscio era una copia del corpo, e in Compatibility ogni copia di un
+## corpo animato si deforma per conto suo: tre deformazioni del corpo intero per ogni
+## avversario dentro i quindici metri. Una passata in più disegna di nuovo il corpo
+## già deformato.
 func contorni(scuro: Color, acceso: Color, quota_filo: float) -> Array:
 	var fuori := []
+	_contorno.clear()
 	for nodo in _tutti(_modello):
 		if not (nodo is MeshInstance3D):
 			continue
 		var pezzo := nodo as MeshInstance3D
 		if pezzo.name.begins_with("Eye") or _e_blaster(pezzo):
 			continue
-		for guscio in [
-			{"colore": scuro, "quota": quota_filo},
-			{"colore": acceso, "quota": 1.0},
-		]:
-			var copia := pezzo.duplicate() as MeshInstance3D
-			var pelle := pelle_contorno(guscio["colore"])
-			copia.material_override = pelle
-			copia.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			pezzo.add_sibling(copia)
-			fuori.append({"materiale": pelle, "quota": guscio["quota"], "nodo": copia})
+		# La passata si appende al materiale del pezzo, che dev'essere solo suo: il
+		# corpo ha già la sua tuta, i capelli la loro tinta.
+		if pezzo.material_override == null:
+			pezzo.material_override = pezzo.get_active_material(0).duplicate()
+		var filo := pelle_contorno(scuro)
+		var esterno := pelle_contorno(acceso)
+		filo.next_pass = esterno
+		_contorno.append([pezzo.material_override, filo])
+		fuori.append({"materiale": filo, "quota": quota_filo})
+		fuori.append({"materiale": esterno, "quota": 1.0})
+	_contorno_acceso = false
+	accendi_contorni(true)
 	return fuori
+
+
+## Il contorno acceso o spento. Spento non vuol dire trasparente: le passate se ne
+## vanno, e la scheda non disegna niente in più.
+func accendi_contorni(acceso: bool) -> void:
+	if acceso == _contorno_acceso:
+		return
+	_contorno_acceso = acceso
+	for coppia in _contorno:
+		(coppia[0] as Material).next_pass = coppia[1] if acceso else null
+
+
+func contorni_accesi() -> bool:
+	return _contorno_acceso
 
 
 ## **Il blaster dritto sulla mira.** La mano della posa di mira è girata come la
@@ -358,6 +435,8 @@ func _costruisci() -> void:
 	_torsione = Torsione.new()
 	_torsione.name = "Torsione"
 	_scheletro.add_child(_torsione)
+	# Albero e scheletro vanno avanti solo quando lo dice il ritmo (`_process`).
+	_scheletro.modifier_callback_mode_process = Skeleton3D.MODIFIER_CALLBACK_MODE_PROCESS_MANUAL
 
 
 func _vesti(sesso: String, dati: Dictionary) -> void:
@@ -505,6 +584,7 @@ static func libreria() -> AnimationLibrary:
 func _animazioni() -> void:
 	_albero = AnimationTree.new()
 	_albero.name = "Animazioni"
+	_albero.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
 	_albero.add_animation_library(&"", libreria())
 	_modello.add_child(_albero)
 

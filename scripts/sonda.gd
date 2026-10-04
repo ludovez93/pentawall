@@ -77,6 +77,48 @@ var _disegno_somma := 0.0
 var _gpu_somma := 0.0
 var _chiamate_somma := 0
 
+## **Quanto la pagina è stata via** (04/10/2026). Nella partita del 04/10 una riga
+## aveva un fotogramma da 17,4 secondi con il calcolo fermo a 34 ms: un blocco del
+## gioco, o il telefono che ha messo da parte la pagina (un'altra app, il centro
+## notifiche, uno screenshot)? Da qui non si poteva dire. La pagina adesso conta il
+## tempo in cui è nascosta o senza fuoco, e la riga lo porta come `via=` in secondi.
+const ASCOLTA_VIA := """
+	(function () {
+		if (window.__pw_via_leggi) return;
+		var via = 0, da = null, nascosta = document.hidden, sfuocata = false;
+		function aggiorna() {
+			var t = performance.now();
+			var fuori = nascosta || sfuocata;
+			if (fuori && da === null) da = t;
+			else if (!fuori && da !== null) { via += t - da; da = null; }
+		}
+		document.addEventListener('visibilitychange', function () { nascosta = document.hidden; aggiorna(); });
+		window.addEventListener('pagehide', function () { nascosta = true; aggiorna(); });
+		window.addEventListener('pageshow', function () { nascosta = document.hidden; aggiorna(); });
+		window.addEventListener('blur', function () { sfuocata = true; aggiorna(); });
+		window.addEventListener('focus', function () { sfuocata = false; aggiorna(); });
+		window.__pw_via_leggi = function () {
+			var t = performance.now();
+			var tutto = via + (da !== null ? t - da : 0);
+			via = 0;
+			if (da !== null) da = t;
+			return tutto / 1000;
+		};
+	})();
+"""
+var _via := 0.0
+
+## **Il lavoro di un fotogramma** (04/10/2026): dal primo calcolo dello script che
+## gira per primo all'ultima chiamata di disegno. Calcolo, fisica e disegno ne vedono
+## solo dei pezzi: nel browser del PC, dove il banco della scheda (`BancoScheda`)
+## misurava 35-45 ms di lavoro, le tre voci ne sommavano 11. Con questa, una riga dice
+## da sola se il fotogramma aspetta il gioco (lavoro vicino al tempo del fotogramma)
+## o la scheda video (lavoro molto più corto).
+var _inizio_giro := 0
+var _giro_aperto := false
+var _lavoro_somma := 0.0
+var _lavoro_giri := 0
+
 
 ## L'ultimo a girare, a ogni fotogramma e a ogni passo di fisica: segna quando il
 ## calcolo è finito.
@@ -102,6 +144,7 @@ func _ready() -> void:
 	coda.sonda = self
 	add_child(coda)
 	RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(), true)
+	RenderingServer.frame_post_draw.connect(_fine_del_giro)
 	if OS.has_feature("web"):
 		# La versione la conosce solo la pagina: `versione.txt` lo scrive la
 		# lavorazione accanto al gioco. Si legge una volta, in sottofondo.
@@ -112,6 +155,7 @@ func _ready() -> void:
 				.then(function (t) { window.__pw_v = t.trim().slice(0, 7); })
 				.catch(function () {});
 		""")
+		JavaScriptBridge.eval(ASCOLTA_VIA)
 		var letto: Variant = JavaScriptBridge.eval("""
 			[window.innerWidth, window.innerHeight, window.devicePixelRatio,
 			 (navigator.standalone || matchMedia('(display-mode: fullscreen)').matches) ? 1 : 0
@@ -161,7 +205,28 @@ func fermati(motivo: String) -> void:
 		_spedisci(motivo)
 
 
+func _exit_tree() -> void:
+	if RenderingServer.frame_post_draw.is_connected(_fine_del_giro):
+		RenderingServer.frame_post_draw.disconnect(_fine_del_giro)
+
+
+## Il giro comincia al primo script del fotogramma — la fisica, se ce n'è, o il calcolo
+## — e finisce quando il disegno è partito.
+func _apri_il_giro() -> void:
+	if not _giro_aperto:
+		_giro_aperto = true
+		_inizio_giro = Time.get_ticks_usec()
+
+
+func _fine_del_giro() -> void:
+	if _giro_aperto and _in_partita:
+		_lavoro_somma += float(Time.get_ticks_usec() - _inizio_giro) / 1000.0
+		_lavoro_giri += 1
+	_giro_aperto = false
+
+
 func _physics_process(_delta: float) -> void:
+	_apri_il_giro()
 	var adesso := Time.get_ticks_usec()
 	if _in_partita and _fine_fisica > _inizio_fisica and _inizio_fisica > 0:
 		_fisica_somma += float(_fine_fisica - _inizio_fisica) / 1000.0
@@ -170,6 +235,7 @@ func _physics_process(_delta: float) -> void:
 
 
 func _process(_delta: float) -> void:
+	_apri_il_giro()
 	var adesso_calcolo := Time.get_ticks_usec()
 	var calcolo_ms := 0.0
 	if _fine_calcolo > _inizio_calcolo and _inizio_calcolo > 0:
@@ -241,14 +307,17 @@ func riga(motivo := "") -> String:
 		cpu, int(round(_cpu_max)), int(round(_peggiore_cpu)), _peggiore_velocita, _peggiore_dardi,
 		avversari, dardi, scala, int(round(mem)), _schermo]
 	var n := float(maxi(_fotogrammi, 1))
-	testo += "&calcolo=%.1f&fisica=%.1f&disegno=%.1f&gpu=%.1f&chiamate=%d" % [
+	testo += "&calcolo=%.1f&fisica=%.1f&disegno=%.1f&gpu=%.1f&chiamate=%d&lavoro=%.1f" % [
 		_calcolo_somma / n, _fisica_somma / float(maxi(_fisica_giri, 1)),
-		_disegno_somma / n, _gpu_somma / n, int(round(float(_chiamate_somma) / n))]
+		_disegno_somma / n, _gpu_somma / n, int(round(float(_chiamate_somma) / n)),
+		_lavoro_somma / float(maxi(_lavoro_giri, 1))]
 	if motivo == "apertura" or _spedite == 0:
 		# Come si chiama la scheda video per il motore: da questo nome Godot decide se
 		# fare la passata di profondità (la spegne solo se dice «Apple»). Nella prima
 		# riga di ogni partita: entrando da GIOCA il saluto non parte.
 		testo += "&scheda=" + RenderingServer.get_video_adapter_name().uri_encode()
+	if _via > 0.05:
+		testo += "&via=%.1f" % _via
 	if motivo != "":
 		testo += "&fine=" + motivo.uri_encode()
 	return testo
@@ -259,8 +328,26 @@ func _spedisci(motivo: String) -> void:
 		var letta: Variant = JavaScriptBridge.eval("String(window.__pw_v || '?')", true)
 		if letta is String:
 			_versione = String(letta)
+		var via: Variant = JavaScriptBridge.eval(
+				"window.__pw_via_leggi ? window.__pw_via_leggi() : 0", true)
+		_via = float(via) if (via is float or via is int) else 0.0
 	var testo := riga(motivo)
 	_spedite += 1
+	_invia(testo)
+	_azzera()
+
+
+## Una riga qualunque, con versione e schermo: la usa il banco della scheda video
+## (`BancoScheda`), che ha voci sue.
+func manda(testo: String) -> void:
+	if OS.has_feature("web"):
+		var letta: Variant = JavaScriptBridge.eval("String(window.__pw_v || '?')", true)
+		if letta is String:
+			_versione = String(letta)
+	_invia("v=%s&%s&%s" % [_versione.uri_encode(), testo, _schermo])
+
+
+func _invia(testo: String) -> void:
 	if OS.has_feature("web"):
 		# `no-cors`: la risposta non ci interessa, conta che la richiesta arrivi.
 		# `keepalive`: parte anche se la pagina sta per chiudersi.
@@ -277,10 +364,11 @@ func _spedisci(motivo: String) -> void:
 		""" % indirizzo)
 	else:
 		print("sonda: ", testo)
-	_azzera()
 
 
 func _azzera() -> void:
+	_lavoro_somma = 0.0
+	_lavoro_giri = 0
 	_calcolo_somma = 0.0
 	_fisica_somma = 0.0
 	_fisica_giri = 0

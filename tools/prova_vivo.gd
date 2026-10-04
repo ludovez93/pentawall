@@ -14,6 +14,9 @@ extends SceneTree
 ##   invisibili dall'alto, e appena raddrizzati lo sono diventati da sotto — e
 ##   nessun collaudo poteva accorgersene;
 ## - che le scatole smussate guardino tutte fuori;
+## - che sopra ogni punto dell'arena ci sia **un solo pavimento** (dal 04/10/2026: due
+##   nello stesso piano lampeggiano) e che **la camera non esca dall'arena** quando ci
+##   si addossa ai muri (dal 04/10/2026: la spalla finiva dentro il muro);
 ## - che i suoni si carichino e la musica cambi;
 ## - che un colpo faccia schizzare le particelle;
 ## - che le palle colorate si prendano, facciano quello che dicono e ricompaiano.
@@ -209,6 +212,24 @@ func _l_arena() -> void:
 	_conta("il pubblico è gente, almeno cento persone", int(arena.call("quanto_pubblico")) >= 100,
 			str(arena.call("quanto_pubblico")))
 
+	_i_pavimenti(arena)
+	await _la_camera(arena)
+
+	# Le scritte ritagliate a soglia si vedono o non si vedono: una trasparenza sotto la
+	# soglia le ritaglia tutte. Il nome dipinto nel catino, a 0,42, dalla tappa 8 non si
+	# vedeva più, e nessuno se n'era accorto (04/10/2026).
+	var ritagliate := 0
+	var sparite := []
+	for nodo in arena.find_children("*", "Label3D", true, false):
+		var scritta := nodo as Label3D
+		if scritta.alpha_cut != Label3D.ALPHA_CUT_DISCARD:
+			continue
+		ritagliate += 1
+		if scritta.modulate.a < scritta.alpha_scissor_threshold:
+			sparite.append(scritta.text)
+	_conta("nessuna scritta ritagliata a soglia è più trasparente della soglia",
+			ritagliate > 0 and sparite.is_empty(), "%d scritte, sparite: %s" % [ritagliate, sparite])
+
 	# I suoni: tutti si caricano, e la musica della partita parte col fischio.
 	var mancano := []
 	for nome in Suoni.NOMI:
@@ -228,6 +249,7 @@ func _l_arena() -> void:
 	for b in bots:
 		nomi[(b as Avversario).personaggio] = true
 	_conta("e sono cinque persone diverse", nomi.size() == 5, str(nomi.keys()))
+	await _i_corpi_costano_poco(giocatore, bots)
 
 	# Il tabellone dice il tempo.
 	await _aspetta(0.4)
@@ -303,40 +325,249 @@ func _l_arena() -> void:
 	await process_frame
 
 
+## **I corpi costano poco** (04/10/2026). In Compatibility ogni corpo animato si
+## deforma a ogni passo d'animazione, pezzo per pezzo, e il contorno era fatto di due
+## **copie** del corpo che si deformavano per conto loro. Adesso il contorno sono due
+## passate in più degli stessi pezzi, e chi è lontano o alle spalle si anima più di
+## rado. Qui: nessun pezzo deformato è la copia di un altro; il contorno si accende da
+## vicino e si spegne da lontano; il ritmo segue distanza e inquadratura.
+func _i_corpi_costano_poco(giocatore: Giocatore, bots: Array) -> void:
+	var copie := 0
+	for b in bots:
+		var visti := {}
+		for nodo in ((b as Node).get("_corpo") as Node).find_children("*", "MeshInstance3D", true, false):
+			var pezzo := nodo as MeshInstance3D
+			if not (pezzo.mesh is ArrayMesh):
+				continue
+			var mesh := pezzo.mesh as ArrayMesh
+			if mesh.get_surface_count() == 0 or not (mesh.surface_get_format(0) & Mesh.ARRAY_FORMAT_BONES):
+				continue
+			if visti.has(mesh):
+				copie += 1
+			visti[mesh] = true
+	_conta("nessun pezzo deformato è la copia di un altro", copie == 0, "%d copie" % copie)
+
+	var camera := giocatore.camera()
+	var bot := bots[0] as Avversario
+	var corpo := bot.get("_corpo") as Corpo
+	bot.set_physics_process(false)
+	var avanti := -camera.global_transform.basis.z
+	avanti.y = 0.0
+	avanti = avanti.normalized()
+	var esiti := []
+	var sbagliati := 0
+	for prova in [{"metri": 6.0, "contorno": true, "ogni": 1},
+			{"metri": 18.0, "contorno": false, "ogni": 2},
+			{"metri": 32.0, "contorno": false, "ogni": 3},
+			{"metri": -6.0, "contorno": true, "ogni": Corpo.OGNI_FUORI}]:
+		bot.global_position = camera.global_position + avanti * float(prova["metri"]) 				- Vector3(0.0, Corpo.ALTEZZA_CORPO * 0.5, 0.0)
+		for i in 3:
+			await process_frame
+		var ogni: int = corpo._ogni()
+		var acceso := corpo.contorni_accesi()
+		var giusto: bool = ogni == int(prova["ogni"]) and acceso == bool(prova["contorno"])
+		esiti.append("%+.0f m: uno su %d, contorno %s%s" % [prova["metri"], ogni,
+				"acceso" if acceso else "spento", "" if giusto else " ←"])
+		if not giusto:
+			sbagliati += 1
+	bot.set_physics_process(true)
+	_conta("contorno e ritmo seguono distanza e inquadratura", sbagliati == 0, " · ".join(esiti))
+
+
+## **Un pavimento solo sopra ogni punto.** Dal telefono, il 04/10/2026: *«qualche zona
+## del pavimento lampeggia quando ci passo»*. I passaggi diagonali stavano sopra le ali
+## e gli angoli alla stessa quota, e la scheda video disegnava due pavimenti nello
+## stesso piano: a ogni passo vinceva l'altro. Si campiona la pianta ogni metro, a ogni
+## quota: sopra ogni punto di una zona ci deve essere **una** faccia di sopra. Due
+## lampeggiano, zero sono un buco.
+func _i_pavimenti(arena: Node) -> void:
+	var zone: Array = (arena.call("pianta") as Dictionary)["zone"]
+	# La premessa (LEARNED.md § 19): la pianta ha davvero zone che si sovrappongono,
+	# altrimenti la prova passerebbe senza aver provato niente.
+	var coppie := 0
+	for i in zone.size():
+		for j in range(i + 1, zone.size()):
+			if absf(float(zone[i]["quota"]) - float(zone[j]["quota"])) > 0.01:
+				continue
+			for pezzo in Geometry2D.intersect_polygons(_poligono(zone[i]), _poligono(zone[j])):
+				if _area(pezzo) > 0.01:
+					coppie += 1
+					break
+	_conta("la pianta ha zone sovrapposte alla stessa quota (la premessa)", coppie >= 4,
+			"%d coppie" % coppie)
+
+	# Le facce di sopra dei pavimenti costruiti, per quota: triangoli orizzontali che si
+	# vedono dall'alto (il prodotto dei lati punta in giù, lontano da chi guarda).
+	var facce := {}
+	for corpo in arena.get_tree().get_nodes_in_group(Muratura.GRUPPO_PAVIMENTI):
+		for figlio in corpo.get_children():
+			if not (figlio is MeshInstance3D):
+				continue
+			var pezzo := figlio as MeshInstance3D
+			var vertici: PackedVector3Array = pezzo.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+			for t in range(0, vertici.size(), 3):
+				var a := pezzo.global_transform * vertici[t]
+				var b := pezzo.global_transform * vertici[t + 1]
+				var c := pezzo.global_transform * vertici[t + 2]
+				if absf(a.y - b.y) > 0.001 or absf(a.y - c.y) > 0.001:
+					continue
+				if (b - a).cross(c - a).y >= 0.0:
+					continue
+				var quota := snappedf(a.y, 0.01)
+				if not facce.has(quota):
+					facce[quota] = []
+				(facce[quota] as Array).append([Vector2(a.x, a.z), Vector2(b.x, b.z), Vector2(c.x, c.z)])
+
+	# Un metro di passo, spostato di un quarto e di sei decimi: così nessun punto cade
+	# su un bordo, né dritto né in diagonale.
+	var doppi := 0
+	var buchi := 0
+	var punti := 0
+	for zona in zone:
+		var quota := snappedf(float(zona["quota"]), 0.01)
+		var contorno := _poligono(zona)
+		var triangoli: Array = facce.get(quota, [])
+		var x := -33.0 + 0.25
+		while x < 33.0:
+			var z := -33.0 + 0.6
+			while z < 33.0:
+				var p := Vector2(x, z)
+				if Geometry2D.is_point_in_polygon(p, contorno):
+					punti += 1
+					var sopra := 0
+					for tri in triangoli:
+						if Geometry2D.point_is_inside_triangle(p, tri[0], tri[1], tri[2]):
+							sopra += 1
+					if sopra == 0:
+						buchi += 1
+					elif sopra > 1:
+						doppi += 1
+				z += 1.0
+			x += 1.0
+	_conta("sopra ogni punto della pianta un pavimento solo, mai due nello stesso piano",
+			doppi == 0, "%d punti con due pavimenti, su %d" % [doppi, punti])
+	_conta("e nessun buco dove la pianta ha un pavimento", buchi == 0,
+			"%d punti scoperti, su %d" % [buchi, punti])
+
+
+## **La camera non esce dall'arena.** Dal telefono, il 04/10/2026: *«se sono attaccato
+## ai bordi dell'arena e giro la visuale vedo il nero fuori dell'arena»*. La spalla della
+## camera sta 85 cm a destra della testa: col muro a destra finiva dentro il muro, e il
+## braccio — che cerca gli ostacoli partendo da lì — ignorava proprio quello. Il
+## giocatore contro i quattro muri e nei quattro angoli, girato su otto direzioni: la
+## camera abbastanza lontana dalle facce interne (±33 m) perché il piano vicino non ci
+## entri, e raggiungibile dalla testa passando dalla spalla senza attraversare niente.
+func _la_camera(arena: Node) -> void:
+	# Gli angoli del piano vicino stanno a 11 cm dal centro della camera, sul telefono.
+	const VICINO := 0.12
+	var giocatore: Giocatore = arena.call("giocatore")
+	var testa := giocatore.get("_testa") as Node3D
+	var braccio := giocatore.get("_braccio") as Node3D
+	var spazio := giocatore.get_world_3d().direct_space_state
+	var prove := 0
+	var spostati := 0
+	var nel_muro := 0
+	var fuori := 0
+	var attraversa := 0
+	# Contro i muri, dove ci si può stare davvero: a ovest e a sud, lungo il muro, corre
+	# una sponda bassa a mezzo metro dalla parete, e un punto messo lì nasce dentro la
+	# sponda (la fisica lo spinge nell'intercapedine, dove nessuno può stare).
+	for dove in [Vector3(32.5, 0.4, 2.0), Vector3(-32.0, 0.4, 1.0), Vector3(2.0, 0.4, -32.5),
+			Vector3(-3.0, 0.4, 32.1), Vector3(32.5, 0.4, -32.5), Vector3(-32.5, 0.4, -32.5),
+			Vector3(32.5, 0.4, 32.5), Vector3(-32.5, 0.4, 32.5)]:
+		for giro in range(0, 360, 45):
+			giocatore.global_position = dove
+			giocatore.velocity = Vector3.ZERO
+			giocatore.punta(float(giro), -6.0)
+			# Il braccio si allunga nella fisica, la spalla si cerca nel disegno.
+			for i in 3:
+				await physics_frame
+				await process_frame
+			prove += 1
+			# Le premesse (LEARNED.md § 19): il giocatore sta dove l'ho messo, e senza
+			# rimedio la spalla sarebbe finita oltre il muro.
+			var scarto: Vector3 = giocatore.global_position - (dove as Vector3)
+			if Vector2(scarto.x, scarto.z).length() > 0.1:
+				spostati += 1
+			var spalla := testa.global_transform * Vector3(Giocatore.SPALLA_TERZA, 0.22, 0.0)
+			if absf(spalla.x) > 33.0 or absf(spalla.z) > 33.0:
+				nel_muro += 1
+			var c := giocatore.camera().global_position
+			if absf(c.x) > 33.0 - VICINO or absf(c.z) > 33.0 - VICINO:
+				fuori += 1
+			for tratto in [[testa.global_position, braccio.global_position],
+					[braccio.global_position, c]]:
+				var domanda := PhysicsRayQueryParameters3D.create(tratto[0], tratto[1],
+						Strati.SOLIDO, [giocatore.get_rid()])
+				if not spazio.intersect_ray(domanda).is_empty():
+					attraversa += 1
+	_conta("il giocatore sta dove la prova lo mette (la premessa)", spostati == 0,
+			"%d volte spostato su %d" % [spostati, prove])
+	_conta("la prova mette davvero la spalla oltre il muro (la premessa)", nel_muro >= 8,
+			"%d volte su %d" % [nel_muro, prove])
+	_conta("addossati ai muri, la camera resta dentro e il piano vicino non tocca il muro",
+			fuori == 0, "%d volte troppo vicina su %d" % [fuori, prove])
+	_conta("e dalla testa alla spalla alla camera non si attraversa niente", attraversa == 0,
+			"%d tratti su %d" % [attraversa, prove * 2])
+
+
+func _poligono(zona: Dictionary) -> PackedVector2Array:
+	var fuori := PackedVector2Array()
+	for p in zona["poligono"]:
+		fuori.append(Vector2(float(p[0]), float(p[1])))
+	return fuori
+
+
 # ------------------------------------------------------------------ la resa
 
 ## **La risoluzione che si adatta** (tappa 9). Sul telefono non la si può provare
-## da qui; la decisione sì: a 30 fotogrammi si scende di un gradino, e se il
-## gradino non rende si torna esattamente dov'era e non si tocca più.
+## da qui; la decisione sì. Dal 04/10/2026 si giudica **in fondo alla discesa**: sul
+## telefono i fotogrammi vanno a scalini, 60 o 30, e un gradino da solo spesso non si
+## vede — la regola di prima, nella partita di quel giorno, si è fermata al primo.
 func _la_resa() -> void:
 	var di_prima := root.scaling_3d_scale
+
+	# Lo scalino del telefono: 30, ancora 30, poi 60.
 	var resa := Resa.new()
 	root.add_child(resa)
-
 	root.scaling_3d_scale = Resa.SCALA_TELEFONO
 	resa._decidi(30.0)
 	_conta("a 30 fotogrammi la scena scende di un gradino",
 			is_equal_approx(root.scaling_3d_scale, Resa.SCALA_TELEFONO - Resa.GRADINO),
 			"%.2f" % root.scaling_3d_scale)
-	resa._decidi(31.0)
-	_conta("se il gradino non rende si torna a com'era", is_equal_approx(root.scaling_3d_scale,
-			Resa.SCALA_TELEFONO), "%.2f" % root.scaling_3d_scale)
-	_conta("e non si prova più", resa.ferma())
+	resa._decidi(30.0)
+	_conta("se il gradino non si vede scende ancora, invece di arrendersi",
+			is_equal_approx(root.scaling_3d_scale, Resa.SCALA_TELEFONO - 2.0 * Resa.GRADINO),
+			"%.2f" % root.scaling_3d_scale)
+	resa._decidi(60.0)
+	_conta("tornata sopra la soglia si ferma lì", resa.ferma() and is_equal_approx(
+			root.scaling_3d_scale, Resa.SCALA_TELEFONO - 2.0 * Resa.GRADINO),
+			"%.2f" % root.scaling_3d_scale)
 	resa.queue_free()
 
-	# Il caso buono: il gradino rende, e si scende finché serve, mai sotto il minimo.
+	# Il limite è il calcolo, non la scheda: a metà i fotogrammi sono gli stessi.
 	resa = Resa.new()
 	root.add_child(resa)
 	root.scaling_3d_scale = Resa.SCALA_TELEFONO
-	resa._decidi(30.0)
-	resa._decidi(40.0)
-	resa._decidi(46.0)
-	_conta("se ogni gradino rende si scende fino al minimo, non oltre",
+	for i in 3:
+		resa._decidi(30.0)
+	_conta("si scende fino a metà, non oltre",
 			is_equal_approx(root.scaling_3d_scale, Resa.SCALA_MINIMA), "%.2f" % root.scaling_3d_scale)
-	resa._decidi(47.0)
-	_conta("e un gradino al minimo che non rende torna esattamente a quello di prima",
-			is_equal_approx(root.scaling_3d_scale, Resa.SCALA_TELEFONO - 2.0 * Resa.GRADINO),
-			"%.2f" % root.scaling_3d_scale)
+	resa._decidi(31.0)
+	_conta("se a metà non è salita torna esattamente com'era", is_equal_approx(
+			root.scaling_3d_scale, Resa.SCALA_TELEFONO), "%.2f" % root.scaling_3d_scale)
+	_conta("e non si prova più", resa.ferma())
+	resa.queue_free()
+
+	# A metà è salita, ma non fino alla soglia: si resta a metà.
+	resa = Resa.new()
+	root.add_child(resa)
+	root.scaling_3d_scale = Resa.SCALA_TELEFONO
+	for i in 3:
+		resa._decidi(30.0)
+	resa._decidi(40.0)
+	_conta("se a metà ha reso, anche sotto la soglia, resta a metà", resa.ferma()
+			and is_equal_approx(root.scaling_3d_scale, Resa.SCALA_MINIMA), "%.2f" % root.scaling_3d_scale)
 	resa.queue_free()
 
 	resa = Resa.new()
@@ -344,7 +575,7 @@ func _la_resa() -> void:
 	root.scaling_3d_scale = Resa.SCALA_TELEFONO
 	resa._decidi(59.0)
 	_conta("a 59 fotogrammi non si tocca niente",
-			is_equal_approx(root.scaling_3d_scale, Resa.SCALA_TELEFONO))
+			is_equal_approx(root.scaling_3d_scale, Resa.SCALA_TELEFONO) and not resa.ferma())
 	resa.queue_free()
 	root.scaling_3d_scale = di_prima
 	await process_frame

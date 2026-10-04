@@ -108,9 +108,9 @@ gravità 18,1 m/s², dardo a 19 m/s.
 
 ```
 Godot --path . -s tools/prova_balistica.gd       # 20 controlli sulla riflessione, senza schermo
-Godot --path . -s tools/prova_ingresso.gd        # 11 controlli sulla schermata d'ingresso
+Godot --path . -s tools/prova_ingresso.gd        # 26 controlli sulla schermata d'ingresso
 Godot --path . -s tools/prova_arena.gd           # 117 controlli: pianta, cammino, partita, caccia
-Godot --path . -s tools/prova_vivo.gd            # 42 controlli: corpi, forme, suoni, particelle, palle colorate
+Godot --path . -s tools/prova_vivo.gd            # 65 controlli: corpi, forme, pavimenti, camera, suoni, palle colorate
 Godot --path . -s tools/prova_ritmo.gd           # una partita intera: si arriva nei primi tre?
 Godot --path . -s tools/prova_poligono.gd        # il giro completo: sponda, colpo, punteggio
 Godot --path . -s tools/prova_avversario.gd      # 18 controlli: anticipo, schivata, livelli, partita
@@ -120,6 +120,10 @@ Godot --path . -s tools/scatti_avversario.gd     # scatti della sfida
 Godot --path . -s tools/misura_prestazioni.gd    # prestazioni; con `-- senza-sfida` per il paragone
 Godot --path . --resolution 854x390 -s tools/scatti_corpi.gd   # i sei corpi in arena
 Godot --path . --resolution 1280x560 -s tools/scatti_pose.gd   # le pose da vicino: corsa, lato, indietro
+Godot --path . --resolution 854x390 -s tools/scatti_pavimento.gd  # il pavimento fotogramma per fotogramma
+Godot --path . --resolution 854x390 -s tools/scatti_bordo.gd      # la camera addossata ai muri
+Godot --path . --resolution 854x390 -s tools/prova_banco_scheda.gd  # il banco della scheda video, sul PC
+node tools/banco_web.js 8765                     # lo stesso banco nel browser (`?scheda` sulla pagina)
 python tools/prepara_suoni.py                    # i suoni, dal materiale libero ad assets/audio
 python tools/genera_maschere_divisa.py           # le maschere di scarpe, guanti e inserti
 ```

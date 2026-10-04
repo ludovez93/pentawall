@@ -32,6 +32,13 @@ const ALTEZZA_CORPO := 1.8
 
 const BRACCIO_TERZA := 3.9
 const SPALLA_TERZA := 0.85
+## Quanto la camera resta lontana da muri e soffitti. Gli angoli del piano vicino
+## stanno a 11 cm dal suo centro (5 cm avanti, schermo del telefono a 2,17 di formato,
+## campo in corsa di 81 gradi), e non devono mai entrare in un muro; facendo scorrere
+## la sfera il motore si concede 3-4 cm (misurato da `prova_vivo`, 04/10/2026). Più di
+## 20 no: a salto pieno la testa arriva a 2,68 m e sotto le terrazze il soffitto sta a
+## 2,90.
+const RAGGIO_CAMERA := 0.2
 const CAMPO_TERZA := 75.0
 const CAMPO_PRIMA := 62.0
 const LENTEZZA_PRIMA := 0.82    ## in prima si mira meglio e ci si muove peggio
@@ -399,8 +406,8 @@ func _aggiorna_camera(delta: float) -> void:
 		_mescola = move_toward(_mescola, bersaglio, delta / TEMPO_CAMBIO)
 	var quota := smoothstep(0.0, 1.0, _mescola)
 	_braccio.spring_length = lerpf(BRACCIO_TERZA, 0.0, quota)
-	_braccio.position.x = lerpf(SPALLA_TERZA, 0.0, quota)
-	_braccio.position.y = lerpf(0.22, 0.0, quota)
+	_braccio.position = _spalla_libera(Vector3(lerpf(SPALLA_TERZA, 0.0, quota),
+			lerpf(0.22, 0.0, quota), 0.0))
 	# Il campo si allarga di qualche grado in corsa e torna fermo da fermi: è il
 	# segnale di velocità che costa meno di tutti.
 	_camera.fov = lerpf(CAMPO_TERZA, CAMPO_PRIMA, quota) + CAMPO_CORSA * _corsa
@@ -437,6 +444,28 @@ func _aggiorna_camera(delta: float) -> void:
 	_arma.position = Vector3(0.38, -0.28, -0.45).lerp(Vector3(0.24, -0.27, -0.62), quota) \
 			+ Vector3(0.0, 0.015, 0.07) * calcio
 	_arma.rotation.x = 0.16 * calcio
+
+
+## **La spalla non attraversa i muri.** Dal telefono, il 04/10/2026: *«se sono
+## attaccato ai bordi dell'arena e giro la visuale vedo il nero fuori dell'arena»*.
+## La camera in terza persona è appesa a una spalla 85 cm a destra della testa, e il
+## corpo è largo 42: col muro a destra, la spalla finiva dentro il muro. Il braccio
+## cerca gli ostacoli **partendo dalla spalla**, e il motore ignora l'ostacolo in cui
+## si parte — così la camera usciva dall'arena, fino a 2,8 m (`tools/scatti_bordo.gd`).
+## Adesso la spalla si cerca dalla testa, che sta sempre dentro il corpo, facendo
+## scorrere la stessa sfera del braccio: dove la sfera si ferma, si ferma la spalla.
+func _spalla_libera(spalla: Vector3) -> Vector3:
+	if spalla.length_squared() < 0.0001:
+		return spalla
+	var testa := _testa.global_position
+	var domanda := PhysicsShapeQueryParameters3D.new()
+	domanda.shape = _braccio.shape
+	domanda.transform = Transform3D(Basis.IDENTITY, testa)
+	domanda.motion = _testa.global_transform * spalla - testa
+	domanda.collision_mask = Strati.SOLIDO
+	domanda.exclude = [get_rid()]
+	var frazioni := get_world_3d().direct_space_state.cast_motion(domanda)
+	return spalla * frazioni[0]
 
 
 ## Il tiro, in un posto solo: da dove parte e dove va. Lo usano sia il colpo vero
@@ -520,7 +549,14 @@ func _costruisci() -> void:
 	# schermo, che è esattamente dove si mira.
 	_braccio.position = Vector3(SPALLA_TERZA, 0.22, 0)
 	_braccio.collision_mask = Strati.SOLIDO
-	_braccio.margin = 0.3
+	# **Una sfera, non la camera.** Senza forma, il braccio fa scorrere la piramide
+	# della camera e la lascia **toccare** il muro: il margine vale solo per il raggio
+	# di un braccio senza camera (sorgente di 4.7.2, `spring_arm_3d.cpp`). In diagonale
+	# un angolo del piano vicino entrava nel muro di tre centimetri, e da lì si vede
+	# fuori. Con la sfera la camera resta sempre lontana da tutto quanto il suo raggio.
+	var sfera := SphereShape3D.new()
+	sfera.radius = RAGGIO_CAMERA
+	_braccio.shape = sfera
 	_testa.add_child(_braccio)
 
 	_camera = Camera3D.new()

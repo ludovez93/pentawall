@@ -399,8 +399,13 @@ static func _cornice(corpo: Node3D, faccia: Vector2, neon: Color) -> void:
 ##
 ## Come i muri: ferma il dardo e non lo rimbalza. Quello che rimbalza si dichiara
 ## con `sponda()`, sempre e solo.
+##
+## `parti` sono i pezzi del contorno **da disegnare**, quando un altro pavimento alla
+## stessa quota ne copre una parte (`Arena._parti_scoperte`): vuoto vuol dire tutto.
+## La collisione resta sempre il contorno intero.
 static func piano(genitore: Node, contorno: PackedVector2Array, quota: float,
-		spessore: float, colore: Color) -> StaticBody3D:
+		spessore: float, colore: Color,
+		parti: Array[PackedVector2Array] = []) -> StaticBody3D:
 	var corpo := StaticBody3D.new()
 	corpo.collision_layer = Strati.OSTACOLO
 	corpo.collision_mask = 0
@@ -422,11 +427,15 @@ static func piano(genitore: Node, contorno: PackedVector2Array, quota: float,
 	forma.shape = scatola
 	corpo.add_child(forma)
 
-	var pezzo := MeshInstance3D.new()
-	pezzo.mesh = _prisma(contorno, alto, basso)
-	pezzo.material_override = opaco(colore, Vector3(_larghezza(contorno), spessore,
-			_larghezza(contorno)))
-	corpo.add_child(pezzo)
+	var materiale := opaco(colore, Vector3(_larghezza(contorno), spessore, _larghezza(contorno)))
+	var da_disegnare := parti
+	if da_disegnare.is_empty():
+		da_disegnare = [contorno]
+	for parte in da_disegnare:
+		var pezzo := MeshInstance3D.new()
+		pezzo.mesh = _prisma(parte, alto, basso)
+		pezzo.material_override = materiale
+		corpo.add_child(pezzo)
 	return corpo
 
 

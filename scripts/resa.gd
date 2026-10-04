@@ -14,17 +14,23 @@ extends Node
 ## **E si adatta** (tappa 9, 03/10/2026). Con i materiali veri della tappa 8 il
 ## telefono è tornato a 30: tre quarti non bastano più. In partita, ogni due
 ## secondi si guarda quanti fotogrammi sono passati; sotto i 50 la scena scende di
-## un gradino, fino a metà. **Ogni gradino è una prova**: se nel giro dopo i
-## fotogrammi non salgono, il limite non è la scheda video ma il calcolo, e
-## scendere ancora sfocherebbe la scena per niente — si torna al gradino di prima
-## e non si tocca più.
+## un gradino, fino a metà.
+##
+## **Si giudica in fondo alla discesa, non a ogni gradino** (04/10/2026). Sul
+## telefono i fotogrammi vanno a scalini, 60 o 30, perché lo schermo aspetta il suo
+## turno: un gradino che toglie tre millesimi su venti lascia i fotogrammi a 30.
+## Fino al 04/10 ogni gradino doveva rendere il 12%, e nella partita di quel giorno
+## la discesa si è fermata a 0,65 senza mai provare i gradini sotto. Adesso si
+## scende finché si torna sopra i 50 o si arriva a metà; e se a metà i fotogrammi non
+## sono saliti almeno del 12%, il limite non è la scheda video ma il calcolo: una
+## scena sfocata non serve a niente, si torna dov'era e non si tocca più.
 
 const SCALA_TELEFONO := 0.75
 const SCALA_MINIMA := 0.5
 const GRADINO := 0.1
 ## Sotto questi fotogrammi al secondo si prova a scendere.
 const SOGLIA := 50.0
-## Di quanto deve salire un giro dopo un gradino, perché il gradino resti.
+## Di quanto deve salire, in fondo alla discesa, perché la discesa resti.
 const GUADAGNO := 1.12
 const GIRO := 2.0
 ## I primi secondi della partita non contano: entrano i corpi, parte il fischio.
@@ -33,7 +39,7 @@ const ATTESA := 3.0
 var _attesa := ATTESA
 var _tempo := 0.0
 var _fotogrammi := 0
-var _prova_da := -1.0        ## i fotogrammi al secondo prima dell'ultimo gradino
+var _prova_da := -1.0        ## i fotogrammi al secondo prima della discesa
 var _scala_prima := SCALA_TELEFONO
 var _ferma := false
 
@@ -69,17 +75,22 @@ func _process(delta: float) -> void:
 func _decidi(al_secondo: float) -> void:
 	var viewport := get_viewport()
 	var adesso := viewport.scaling_3d_scale
-	if _prova_da > 0.0:
-		if al_secondo < _prova_da * GUADAGNO:
-			# Il gradino non ha reso: il limite è altrove. Si torna su e si smette.
-			viewport.scaling_3d_scale = _scala_prima
+	if al_secondo >= SOGLIA:
+		# Sopra la soglia: se si stava scendendo, il gradino giusto è questo.
+		if _prova_da > 0.0:
 			_ferma = true
-			return
-		_prova_da = -1.0
-	if al_secondo < SOGLIA and adesso > SCALA_MINIMA + 0.001:
+		return
+	if _prova_da < 0.0:
 		_prova_da = al_secondo
 		_scala_prima = adesso
+	if adesso > SCALA_MINIMA + 0.001:
 		viewport.scaling_3d_scale = maxf(adesso - GRADINO, SCALA_MINIMA)
+		return
+	# A metà, e ancora sotto: se la discesa non ha reso, il limite è altrove. Si
+	# torna dov'era e si smette.
+	if al_secondo < _prova_da * GUADAGNO:
+		viewport.scaling_3d_scale = _scala_prima
+	_ferma = true
 
 
 ## Se ha smesso di adattarsi: serve al collaudo.
