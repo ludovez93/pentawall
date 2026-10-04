@@ -82,7 +82,13 @@ const SONDA_INIT = `(() => {
 })();`;
 
 (async () => {
-  const browser = await chromium.launch({ headless: false, args: ['--ignore-gpu-blocklist', '--use-angle=gl'] });
+  // Di serie il browser usa ANGLE su Direct3D: compila lento (sulla scheda di questo PC
+  // anche un secondo a programma) ma disegna giusto. Con PW_ANGLE=gl compila dieci volte
+  // più in fretta e i conteggi restano veri, ma l'immagine della partita esce blu: va
+  // bene per contare, non per guardare (visto il 04/10/2026).
+  const argomenti = ['--ignore-gpu-blocklist'];
+  if (process.env.PW_ANGLE) argomenti.push('--use-angle=' + process.env.PW_ANGLE);
+  const browser = await chromium.launch({ headless: false, args: argomenti });
   const pagina = await browser.newPage({ viewport: { width: 854, height: 390 } });
   const sonda = [];
   await pagina.route(/sonda\.92-4-172-126/, (r) => { sonda.push(decodeURIComponent(r.request().url().split('?')[1] || '')); r.fulfill({ status: 204, body: '' }); });
@@ -97,9 +103,12 @@ const SONDA_INIT = `(() => {
     let ultimo = -1, da = Date.now();
     while (Date.now() - inizio < limite * 1000) {
       await pagina.waitForTimeout(500);
-      const n = await pagina.evaluate(() => window.__pw.programmi.length + ':' + window.__pw.fotogrammi.length);
-      const [p, fr] = n.split(':').map(Number);
-      if (p !== ultimo || fr < 100) { ultimo = p; da = Date.now(); }
+      // Pronta vuol dire che la scena 3D si disegna davvero: sulla pagina pubblicata
+      // i primi secondi sono lo scaricamento, con fotogrammi vuoti e niente da compilare.
+      const n = await pagina.evaluate(() => { const f = window.__pw.fotogrammi; const u = f.slice(-30);
+        return window.__pw.programmi.length + ':' + f.length + ':' + Math.max(0, ...u.map((x) => x.disegni)); });
+      const [p, fr, disegni] = n.split(':').map(Number);
+      if (p !== ultimo || fr < 100 || disegni < 10) { ultimo = p; da = Date.now(); }
       else if (Date.now() - da > secondi * 1000) return;
     }
   };
