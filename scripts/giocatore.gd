@@ -104,6 +104,9 @@ var _rinculo := 0.0
 ## L'atterraggio: 1 appena toccato terra da una caduta piena, torna a zero.
 var _atterraggio := 0.0
 var _caduta := 0.0
+## Il gradino appena salito che la vista non ha ancora raggiunto, in metri
+## (`Gradino`): il corpo sale in un fotogramma, gli occhi e le gambe in un decimo.
+var _scalino := 0.0
 
 
 ## Si gioca col pollice? Sul telefono, e anche **nel browser del telefono** — dove
@@ -375,6 +378,7 @@ func _muovi(delta: float) -> void:
 		_caduta = maxf(_caduta, -velocity.y)
 	elif velocity.y < 0.0:
 		velocity.y = -0.1
+	_scalino = minf(_scalino + Gradino.sali(self, delta), Gradino.ALTEZZA)
 	move_and_slide()
 	if era_in_aria and is_on_floor():
 		if _caduta > CADUTA_SENTITA:
@@ -425,6 +429,10 @@ func _aggiorna_camera(delta: float) -> void:
 	if _atterraggio > 0.0:
 		_atterraggio = maxf(_atterraggio - delta / 0.22, 0.0)
 		_camera.v_offset -= ATTERRAGGIO * sin(_atterraggio * PI * 0.5)
+	# Il gradino: il corpo è già sopra, la vista e le gambe lo raggiungono.
+	_scalino = move_toward(_scalino, 0.0, delta * Gradino.VISTA)
+	_testa.position.y = ALTEZZA_OCCHI - _scalino
+	_aspetto.position.y = -_scalino
 	# Il rollio del colpo incassato: va di colpo da un lato e torna piano.
 	_rollio = move_toward(_rollio, _rollio_voluto, delta * 1.2)
 	_rollio_voluto = move_toward(_rollio_voluto, 0.0, delta * 0.25)

@@ -402,10 +402,14 @@ static func _cornice(corpo: Node3D, faccia: Vector2, neon: Color) -> void:
 ##
 ## `parti` sono i pezzi del contorno **da disegnare**, quando un altro pavimento alla
 ## stessa quota ne copre una parte (`Arena._parti_scoperte`): vuoto vuol dire tutto.
-## La collisione resta sempre il contorno intero.
+## `solidi` sono i pezzi **che reggono il peso**, quando una rampa ha ritagliato il
+## pavimento (`Arena._ritaglia_le_rampe`): vuoto vuol dire il contorno intero. Un
+## pezzo ritagliato può essere concavo, e la collisione di un prisma deve essere
+## convessa: lo si spezza in parti convesse, una forma per parte.
 static func piano(genitore: Node, contorno: PackedVector2Array, quota: float,
 		spessore: float, colore: Color,
-		parti: Array[PackedVector2Array] = []) -> StaticBody3D:
+		parti: Array[PackedVector2Array] = [],
+		solidi: Array[PackedVector2Array] = []) -> StaticBody3D:
 	var corpo := StaticBody3D.new()
 	corpo.collision_layer = Strati.OSTACOLO
 	corpo.collision_mask = 0
@@ -415,17 +419,22 @@ static func piano(genitore: Node, contorno: PackedVector2Array, quota: float,
 
 	var alto := quota
 	var basso := quota - spessore
-	var punti := PackedVector3Array()
-	for p in contorno:
-		punti.append(Vector3(p.x, alto, p.y))
-	for p in contorno:
-		punti.append(Vector3(p.x, basso, p.y))
-
-	var forma := CollisionShape3D.new()
-	var scatola := ConvexPolygonShape3D.new()
-	scatola.points = punti
-	forma.shape = scatola
-	corpo.add_child(forma)
+	var convessi: Array[PackedVector2Array] = [contorno]
+	if not solidi.is_empty():
+		convessi.clear()
+		for pezzo in solidi:
+			convessi.append_array(Geometry2D.decompose_polygon_in_convex(pezzo))
+	for convesso in convessi:
+		var punti := PackedVector3Array()
+		for p in convesso:
+			punti.append(Vector3(p.x, alto, p.y))
+		for p in convesso:
+			punti.append(Vector3(p.x, basso, p.y))
+		var forma := CollisionShape3D.new()
+		var scatola := ConvexPolygonShape3D.new()
+		scatola.points = punti
+		forma.shape = scatola
+		corpo.add_child(forma)
 
 	var materiale := opaco(colore, Vector3(_larghezza(contorno), spessore, _larghezza(contorno)))
 	var da_disegnare := parti
@@ -459,9 +468,13 @@ static func rampa(genitore: Node, da: Vector2, a: Vector2, larghezza: float,
 	corpo.collision_layer = Strati.OSTACOLO
 	corpo.collision_mask = 0
 	corpo.add_to_group(GRUPPO_MURI)
+	# Il centro scende di mezzo spessore **lungo la normale** della rampa, non in
+	# verticale: così la faccia di sopra va esattamente da (da, quota_da) ad
+	# (a, quota_a). In verticale le cime restavano fino a 13 cm indietro e 4 cm
+	# sotto il piano d'arrivo (misurato il 04/10/2026).
 	corpo.transform = Transform3D(Basis(destra, su, -avanti),
-			Vector3((da.x + a.x) * 0.5, (quota_da + quota_a) * 0.5 - spessore * 0.5,
-					(da.y + a.y) * 0.5))
+			Vector3((da.x + a.x) * 0.5, (quota_da + quota_a) * 0.5, (da.y + a.y) * 0.5)
+					- su * spessore * 0.5)
 	genitore.add_child(corpo)
 
 	var misura := Vector3(larghezza, spessore, lunghezza)

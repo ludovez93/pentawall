@@ -450,16 +450,19 @@ func _i_pavimenti(arena: Node) -> void:
 	var doppi := 0
 	var buchi := 0
 	var punti := 0
-	for zona in zone:
-		var quota := snappedf(float(zona["quota"]), 0.01)
-		var contorno := _poligono(zona)
+	for indice in zone.size():
+		var quota := snappedf(float(zone[indice]["quota"]), 0.01)
+		# La pianta già ritagliata dalle rampe (tappa 10): dove una rampa passa sotto
+		# un pavimento, lì il pavimento non c'è apposta.
+		var pezzi: Array = arena.call("pezzi_della_zona", indice)
 		var triangoli: Array = facce.get(quota, [])
 		var x := -33.0 + 0.25
 		while x < 33.0:
 			var z := -33.0 + 0.6
 			while z < 33.0:
 				var p := Vector2(x, z)
-				if Geometry2D.is_point_in_polygon(p, contorno):
+				if pezzi.any(func(pezzo: PackedVector2Array) -> bool:
+						return Geometry2D.is_point_in_polygon(p, pezzo)):
 					punti += 1
 					var sopra := 0
 					for tri in triangoli:

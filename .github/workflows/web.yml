@@ -112,6 +112,14 @@ jobs:
           # accorgeva), suoni, particelle, palle colorate.
           "$GODOT" --headless --path . -s tools/prova_vivo.gd
 
+      - name: Collauda i gradini
+        run: |
+          set -euo pipefail
+          # La tappa 10: il gradino si sale da solo fino a 48 cm e non oltre, nessun
+          # pavimento copre una rampa, e le nove rampe si percorrono da cima a fondo.
+          # Fino al 04/10/2026 nessun controllo camminava sulle rampe.
+          "$GODOT" --headless --path . -s tools/prova_gradini.gd
+
       - name: Esporta per il browser
         run: |
           set -euo pipefail

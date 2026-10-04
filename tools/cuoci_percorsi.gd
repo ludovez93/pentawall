@@ -28,6 +28,11 @@ const ALTEZZA := 1.8
 ## Quanto si scavalca camminando. Le sponde a pavimento sporgono sette centimetri
 ## e gli zoccoli poco più; i cassoni sono alti due metri e restano ostacoli, che è
 ## esattamente quello che devono essere.
+##
+## Il corpo ne sale 48 (`Gradino.ALTEZZA`, dalla tappa 10): la rete resta sotto, così
+## non chiede mai un gradino che il corpo non sale. Fino al 04/10/2026 era il
+## contrario — la rete 40, il corpo 12 — e la strada passava dove i piedi si
+## fermavano. Con celle alte 20 cm, del resto, 48 diventerebbe comunque 40.
 const SCALINO := 0.4
 
 ## La rampa più ripida dell'arena è quella che sale in piattaforma nell'ocra: 3,5

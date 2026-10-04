@@ -207,6 +207,8 @@ var _fermo_da := 0.0
 
 var _aspetto: Node3D
 var _canna: Node3D
+## Il gradino appena salito che il corpo visibile non ha ancora raggiunto (`Gradino`).
+var _scalino := 0.0
 ## Il corpo vero (tappa 8): chi è, e il nodo che corre, spara e accusa i colpi.
 var personaggio := "BRACE"
 ## Il turbo dei potenziamenti (tappa 8, blocco H): lo accende `Potenziamenti`.
@@ -233,8 +235,11 @@ func _ready() -> void:
 
 ## Il contorno si aggiorna con il disegno, non con la fisica: dipende da dove sta
 ## la camera, e la camera si muove a ogni fotogramma.
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	_aggiorna_i_contorni()
+	if _scalino > 0.0:
+		_scalino = move_toward(_scalino, 0.0, delta * Gradino.VISTA)
+		_aspetto.position.y = -_scalino
 
 
 func _physics_process(delta: float) -> void:
@@ -547,6 +552,7 @@ func _muovi(delta: float) -> void:
 		velocity.y -= Giocatore.GRAVITA * delta
 	elif velocity.y < 0.0:
 		velocity.y = -0.1
+	_scalino = minf(_scalino + Gradino.sali(self, delta), Gradino.ALTEZZA)
 	move_and_slide()
 
 	# Guarda dove spara, non dove corre: l'arma deve seguire la mira, o si vede

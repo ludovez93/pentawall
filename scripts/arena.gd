@@ -148,6 +148,9 @@ const ANELLI_IN_RISERVA := 12
 const VITA_ANELLO := 0.36
 
 var _pianta: Dictionary = {}
+## I pezzi di ogni zona dopo il ritaglio delle rampe che le passano sotto, nello
+## stesso ordine della pianta (`_ritaglia_le_rampe`).
+var _pezzi: Array = []
 var _giocatore: Giocatore
 var _comandi: Comandi
 var _bersagli: Array[Bersaglio] = []
@@ -341,9 +344,16 @@ static func carica_pianta(percorso := PIANTA) -> Dictionary:
 
 func _costruisci() -> void:
 	var zone: Array = _pianta["zone"]
+	_pezzi.clear()
+	for zona in zone:
+		_pezzi.append(_ritaglia_le_rampe(_contorno(zona["poligono"]), float(zona["quota"])))
 	for i in zone.size():
-		Muratura.piano(self, _contorno(zone[i]["poligono"]), float(zone[i]["quota"]),
-				SPESSORE_PIANO, _tinta(zone[i]["tinta"]), _parti_scoperte(i))
+		var contorno := _contorno(zone[i]["poligono"])
+		var solidi: Array[PackedVector2Array] = []
+		if _pezzi[i].size() != 1 or _pezzi[i][0] != contorno:
+			solidi.assign(_pezzi[i])
+		Muratura.piano(self, contorno, float(zone[i]["quota"]),
+				SPESSORE_PIANO, _tinta(zone[i]["tinta"]), _parti_scoperte(i), solidi)
 
 	_cordoli()
 
@@ -423,7 +433,8 @@ func _costruisci() -> void:
 func _parti_scoperte(indice: int) -> Array[PackedVector2Array]:
 	var zone: Array = _pianta["zone"]
 	var quota := float(zone[indice]["quota"])
-	var parti: Array[PackedVector2Array] = [_contorno(zone[indice]["poligono"])]
+	var parti: Array[PackedVector2Array] = []
+	parti.assign(_pezzi[indice])
 	for j in range(indice + 1, zone.size()):
 		if absf(float(zone[j]["quota"]) - quota) > 0.01:
 			continue
@@ -441,6 +452,58 @@ func _parti_scoperte(indice: int) -> Array[PackedVector2Array]:
 			restano.append_array(pezzi)
 		parti = restano
 	return parti
+
+
+## **Un pavimento non copre una rampa che gli passa sotto** (tappa 10, blocco A).
+## Dove la rampa sta fra i piedi e la testa di chi la sale — sotto la quota del
+## pavimento, ma non tanto da passarci sotto in piedi — il pavimento si ritaglia,
+## anche nella collisione, e la rampa ci arriva a filo. Dalla tappa 5 non lo faceva:
+## la scala nord-est usciva dal catino contro un gradino di 80 cm (la zona della
+## scala e gli spigoli delle due ali le passavano sopra) e finiva contro l'angolo
+## della terrazza, e la rampa dell'ocra finiva mezzo metro dentro la piattaforma
+## (31 cm). Misurato con una capsula come il giocatore, 04/10/2026.
+func _ritaglia_le_rampe(contorno: PackedVector2Array, quota: float) -> Array[PackedVector2Array]:
+	var pezzi: Array[PackedVector2Array] = [contorno]
+	for r in _pianta["rampe"]:
+		var taglio := _rampa_sotto(r, quota)
+		if taglio.is_empty():
+			continue
+		var restano: Array[PackedVector2Array] = []
+		for pezzo in pezzi:
+			var esito := Geometry2D.clip_polygons(pezzo, taglio)
+			if _ha_un_buco(esito):
+				push_warning("pavimento bucato da una rampa, non ritagliato: %s" % r["nome"])
+				restano.append(pezzo)
+				continue
+			restano.append_array(esito)
+		pezzi = restano
+	return pezzi
+
+
+## I pezzi di una zona dopo il ritaglio delle rampe: servono a chi collauda i
+## pavimenti, che altrimenti scambierebbe per un buco il posto di una rampa.
+func pezzi_della_zona(indice: int) -> Array:
+	return _pezzi[indice]
+
+
+## L'impronta del pezzo di rampa che sta fra i piedi e la testa di chi starebbe su
+## un pavimento a questa quota: vuota se la rampa non ci passa.
+func _rampa_sotto(r: Dictionary, quota: float) -> PackedVector2Array:
+	var q_da := float(r["quota_da"])
+	var q_a := float(r["quota_a"])
+	if is_equal_approx(q_da, q_a):
+		return PackedVector2Array()
+	var basso := quota - SPESSORE_PIANO - Giocatore.ALTEZZA_CORPO
+	var t1 := clampf((basso - q_da) / (q_a - q_da), 0.0, 1.0)
+	var t2 := clampf((quota - q_da) / (q_a - q_da), 0.0, 1.0)
+	if absf(t2 - t1) < 0.001:
+		return PackedVector2Array()
+	var da := _punto(r["da"])
+	var a := _punto(r["a"])
+	var lato := (a - da).normalized().orthogonal() * float(r["larghezza"]) * 0.5
+	var p1 := da.lerp(a, minf(t1, t2))
+	var p2 := da.lerp(a, maxf(t1, t2))
+	return PackedVector2Array([p1 - lato, p2 - lato, p2 + lato, p1 + lato])
 
 
 ## Un ritaglio ha un buco quando un pezzo sta dentro un altro.
@@ -485,33 +548,63 @@ static func _smusso_di(nome: String, misura: Vector3) -> float:
 ## stessa quota. Fra due zone che si toccano sarebbe una riga in mezzo al niente.
 func _cordoli() -> void:
 	var tinta := Muratura.CORDOLO
-	for zona in _pianta["zone"]:
-		var quota := float(zona["quota"])
+	var zone: Array = _pianta["zone"]
+	for z in zone.size():
+		var quota := float(zone[z]["quota"])
 		if quota <= 0.0:
 			continue
-		var contorno := _contorno(zona["poligono"])
-		for i in contorno.size():
-			var da := contorno[i]
-			var a := contorno[(i + 1) % contorno.size()]
-			var lungo := da.distance_to(a)
-			if lungo < 0.6:
-				continue
-			var mezzo := (da + a) * 0.5
-			var verso := (a - da).normalized()
-			var fuori := Vector2(verso.y, -verso.x)
-			# Un lato che confina con un altro piano alla stessa quota non è un
-			# bordo: è una giuntura, e segnarla vorrebbe dire disegnare una riga
-			# in mezzo al pavimento.
-			if _piano_alla_quota(mezzo + fuori * 0.8, quota):
-				continue
-			# E un lato su cui arriva una rampa non è un bordo: è l'ingresso. Una
-			# riga lì è una riga da scavalcare (visto sugli scatti della rampa
-			# dell'ocra, 12/09/2026).
-			if _rampa_arriva(mezzo, quota):
-				continue
-			Muratura.decoro(self, Vector3(mezzo.x, quota + 0.03, mezzo.y),
-					Vector3(lungo, 0.06, 0.18), tinta, 0.55,
-					Vector3(0, rad_to_deg(atan2(-verso.y, verso.x)), 0))
+		for contorno: PackedVector2Array in _pezzi[z]:
+			_cordoli_di(contorno, quota, tinta)
+
+
+func _cordoli_di(contorno: PackedVector2Array, quota: float, tinta: Color) -> void:
+	for i in contorno.size():
+		var da := contorno[i]
+		var a := contorno[(i + 1) % contorno.size()]
+		var lungo := da.distance_to(a)
+		if lungo < 0.6:
+			continue
+		var mezzo := (da + a) * 0.5
+		var verso := (a - da).normalized()
+		var fuori := Vector2(verso.y, -verso.x)
+		# Il fuori si prova, non si deduce dal verso del contorno: un pezzo ritagliato
+		# da una rampa può uscire girato al contrario, e allora ogni bordo sembrerebbe
+		# una giuntura con sé stesso.
+		if Geometry2D.is_point_in_polygon(mezzo + fuori * 0.01, contorno):
+			fuori = -fuori
+		# Un lato su cui arriva una rampa non è un bordo: è l'ingresso. Una riga lì
+		# è una riga da scavalcare (visto sugli scatti della rampa dell'ocra,
+		# 12/09/2026).
+		if _rampa_arriva(mezzo, quota):
+			continue
+		# Un tratto che confina con un altro piano alla stessa quota non è un bordo:
+		# è una giuntura, e segnarla vorrebbe dire disegnare una riga in mezzo al
+		# pavimento. Il lato si guarda a passi di mezzo metro, non dal suo punto di
+		# mezzo: dopo il ritaglio della scala, il lato ovest della terrazza nord-est
+		# dà sul vuoto per cinque metri e tocca la passerella per gli altri cinque, e
+		# il punto di mezzo cadeva proprio sul confine (04/10/2026).
+		var passi := maxi(1, roundi(lungo / 0.5))
+		var inizio := -1
+		for k in passi + 1:
+			var bordo := k < passi and not _piano_alla_quota(
+					da.lerp(a, (k + 0.5) / passi) + fuori * 0.8, quota)
+			if bordo and inizio < 0:
+				inizio = k
+			elif not bordo and inizio >= 0:
+				_cordolo(da.lerp(a, float(inizio) / passi), da.lerp(a, float(k) / passi),
+						quota, tinta)
+				inizio = -1
+
+
+func _cordolo(da: Vector2, a: Vector2, quota: float, tinta: Color) -> void:
+	var lungo := da.distance_to(a)
+	if lungo < 0.6:
+		return
+	var mezzo := (da + a) * 0.5
+	var verso := (a - da).normalized()
+	Muratura.decoro(self, Vector3(mezzo.x, quota + 0.03, mezzo.y),
+			Vector3(lungo, 0.06, 0.18), tinta, 0.55,
+			Vector3(0, rad_to_deg(atan2(-verso.y, verso.x)), 0))
 
 
 ## Una rampa parte o arriva a quella quota, vicino a quel punto?
@@ -525,13 +618,16 @@ func _rampa_arriva(dove: Vector2, quota: float) -> bool:
 
 
 ## C'è un pavimento a quella quota, in quel punto della pianta? Si guarda la
-## pianta, non la scena: qui la scena non è ancora costruita.
+## pianta, non la scena: qui la scena non è ancora costruita. E la pianta già
+## ritagliata dalle rampe: dove passa una rampa, a quella quota non c'è pavimento.
 func _piano_alla_quota(dove: Vector2, quota: float) -> bool:
-	for zona in _pianta["zone"]:
-		if absf(float(zona["quota"]) - quota) > 0.2:
+	var zone: Array = _pianta["zone"]
+	for z in zone.size():
+		if absf(float(zone[z]["quota"]) - quota) > 0.2:
 			continue
-		if Geometry2D.is_point_in_polygon(dove, _contorno(zona["poligono"])):
-			return true
+		for pezzo: PackedVector2Array in _pezzi[z]:
+			if Geometry2D.is_point_in_polygon(dove, pezzo):
+				return true
 	return false
 
 
