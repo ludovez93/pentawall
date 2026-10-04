@@ -526,6 +526,10 @@ func _poligono(zona: Dictionary) -> PackedVector2Array:
 ## vede — la regola di prima, nella partita di quel giorno, si è fermata al primo.
 func _la_resa() -> void:
 	var di_prima := root.scaling_3d_scale
+	# Quanti gradini ci sono dalla partenza alla metà, e dove porta il secondo: i conti
+	# seguono le costanti, così cambiare la scala di partenza non rompe la prova.
+	var gradini := int(ceil((Resa.SCALA_TELEFONO - Resa.SCALA_MINIMA) / Resa.GRADINO - 0.001))
+	var secondo := maxf(Resa.SCALA_TELEFONO - 2.0 * Resa.GRADINO, Resa.SCALA_MINIMA)
 
 	# Lo scalino del telefono: 30, ancora 30, poi 60.
 	var resa := Resa.new()
@@ -537,19 +541,17 @@ func _la_resa() -> void:
 			"%.2f" % root.scaling_3d_scale)
 	resa._decidi(30.0)
 	_conta("se il gradino non si vede scende ancora, invece di arrendersi",
-			is_equal_approx(root.scaling_3d_scale, Resa.SCALA_TELEFONO - 2.0 * Resa.GRADINO),
-			"%.2f" % root.scaling_3d_scale)
+			is_equal_approx(root.scaling_3d_scale, secondo), "%.2f" % root.scaling_3d_scale)
 	resa._decidi(60.0)
 	_conta("tornata sopra la soglia si ferma lì", resa.ferma() and is_equal_approx(
-			root.scaling_3d_scale, Resa.SCALA_TELEFONO - 2.0 * Resa.GRADINO),
-			"%.2f" % root.scaling_3d_scale)
+			root.scaling_3d_scale, secondo), "%.2f" % root.scaling_3d_scale)
 	resa.queue_free()
 
 	# Il limite è il calcolo, non la scheda: a metà i fotogrammi sono gli stessi.
 	resa = Resa.new()
 	root.add_child(resa)
 	root.scaling_3d_scale = Resa.SCALA_TELEFONO
-	for i in 3:
+	for i in gradini:
 		resa._decidi(30.0)
 	_conta("si scende fino a metà, non oltre",
 			is_equal_approx(root.scaling_3d_scale, Resa.SCALA_MINIMA), "%.2f" % root.scaling_3d_scale)
@@ -557,13 +559,15 @@ func _la_resa() -> void:
 	_conta("se a metà non è salita torna esattamente com'era", is_equal_approx(
 			root.scaling_3d_scale, Resa.SCALA_TELEFONO), "%.2f" % root.scaling_3d_scale)
 	_conta("e non si prova più", resa.ferma())
+	_conta("e non torna mai sopra la scala di partenza, che è quella del 04/10 mattina",
+			Resa.SCALA_TELEFONO <= 0.65 + 0.001, "%.2f" % Resa.SCALA_TELEFONO)
 	resa.queue_free()
 
 	# A metà è salita, ma non fino alla soglia: si resta a metà.
 	resa = Resa.new()
 	root.add_child(resa)
 	root.scaling_3d_scale = Resa.SCALA_TELEFONO
-	for i in 3:
+	for i in gradini:
 		resa._decidi(30.0)
 	resa._decidi(40.0)
 	_conta("se a metà ha reso, anche sotto la soglia, resta a metà", resa.ferma()

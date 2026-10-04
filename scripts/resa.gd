@@ -24,8 +24,17 @@ extends Node
 ## scende finché si torna sopra i 50 o si arriva a metà; e se a metà i fotogrammi non
 ## sono saliti almeno del 12%, il limite non è la scheda video ma il calcolo: una
 ## scena sfocata non serve a niente, si torna dov'era e non si tocca più.
+##
+## **Si parte da 0,65, non più da tre quarti** (04/10/2026, sera). Nella partita del
+## pomeriggio la discesa è arrivata a metà, ha confrontato i fotogrammi con quelli di
+## un momento in cui la scena era più leggera, ed è tornata a tre quarti: 21-27
+## fotogrammi nei tratti pesanti, contro i 28-33 del mattino a 0,65 — un terzo di
+## pixel in più, un quarto di tempo in più. Il telefono aspetta la scheda (`lavoro=`
+## 3-11 ms su 37-47), quindi i pixel contano. Partendo da 0,65 il caso peggiore è il
+## mattino. La regola giusta guarderà il lavoro, non i fotogrammi di due momenti
+## diversi (`PLAN.md`, tappa 9, terza parte).
 
-const SCALA_TELEFONO := 0.75
+const SCALA_TELEFONO := 0.65
 const SCALA_MINIMA := 0.5
 const GRADINO := 0.1
 ## Sotto questi fotogrammi al secondo si prova a scendere.
