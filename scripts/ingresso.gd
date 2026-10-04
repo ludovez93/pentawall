@@ -447,14 +447,19 @@ func _scalda_l_arena(arena: Node) -> void:
 				(su as Node3D).visible = true
 			su = su.get_parent()
 
-	# Il primo fotogramma: dardo, scintille e lampo dello sparo davanti all'occhio.
-	# Le scintille vivono nella loro simulazione: per questo fotogramma girano.
+	# Il primo fotogramma: dardo, scintille e lampo dello sparo, due volte — davanti
+	# all'occhio, lassù lontano da ogni lampada, e davanti alla camera del giocatore,
+	# che sta sotto le lampade: in partita volano in tutti e due i posti, e per il
+	# motore sono due varianti. Le scintille vivono nella loro simulazione: per
+	# questi fotogrammi girano.
 	var scintille := Scintille.attivo
-	if scintille != null:
-		scintille.process_mode = Node.PROCESS_MODE_ALWAYS
-		scintille.scalda(occhio)
-	Proiettile.scalda(arena, occhio)
-	(arena.call("giocatore") as Giocatore).corpo().scalda(occhio)
+	var giocatore := arena.call("giocatore") as Giocatore
+	for camera in [occhio, giocatore.camera()]:
+		if scintille != null:
+			scintille.process_mode = Node.PROCESS_MODE_ALWAYS
+			scintille.scalda(camera)
+		Proiettile.scalda(arena, camera)
+		giocatore.corpo().scalda(camera)
 	await get_tree().process_frame
 	await get_tree().process_frame
 
@@ -477,7 +482,6 @@ func _scalda_l_arena(arena: Node) -> void:
 	# La scorta tiene in vita gli shader appena compilati: dell'arena, della
 	# comparsa e del palco. Uscendo dalla partita e rientrando, non si rifanno.
 	Scorta.tieni(arena)
-	Scorta.tieni(comparsa)
 	Scorta.tieni(_palco)
 	comparsa.queue_free()
 	occhio.queue_free()
