@@ -219,8 +219,11 @@ static func _ora_blu(arena: Node3D) -> void:
 	var faro := _acceso(Color(0.94, 0.96, 1.0), 0.95)
 	var fascio := _materiale_additivo(Color(0.62, 0.72, 1.0), 0.16, true)
 	var i := 0
-	for angolo in [Vector2(-31.5, -31.5), Vector2(31.5, -31.5), Vector2(31.5, 31.5),
-			Vector2(-31.5, 31.5)]:
+	# Fuori dai perimetri, come in uno stadio: spuntano sopra i muri di dodici metri.
+	# Dentro gli angoli la camera di chi parte da lì finiva nel palo (scatto del
+	# 04/10/2026, partenza nord-ovest: mezzo schermo blu).
+	for angolo in [Vector2(-35.5, -35.5), Vector2(35.5, -35.5), Vector2(35.5, 35.5),
+			Vector2(-35.5, 35.5)]:
 		var testa := Vector3(angolo.x, 19.0, angolo.y)
 		var palo := MeshInstance3D.new()
 		var forma := BoxMesh.new()
