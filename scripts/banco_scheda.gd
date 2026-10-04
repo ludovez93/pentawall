@@ -41,7 +41,12 @@ extends Node
 ## 04/10/2026 (`Corpo.ritmo_pieno`): dice quanto vale il ritmo.
 ## Le voci si possono scegliere dall'indirizzo: `?scheda=risoluzione,lampade`; e il
 ## riscaldamento con `caldo=` in secondi (`?scheda=lampade&caldo=0`).
-const VOCI := ["bagliore", "antialias", "lampade", "animazioni", "pieno", "corpi",
+## «vertice» calcola la luce sui vertici dei pezzi dell'arena invece che su ogni
+## pixel (i corpi restano come sono): nel secondo banco le lampade spente valevano
+## 26 ms su 48, e questa voce dice quanto se ne recupera tenendole accese. «misto»
+## fa lo stesso ma lascia per pixel le lamiere (tribune e soffitti, gli unici
+## materiali metallici), che sono quelle dove le lampade fanno i riflessi bianchi.
+const VOCI := ["bagliore", "antialias", "lampade", "vertice", "misto", "animazioni", "pieno", "corpi",
 		"contorni", "pubblico", "superfici", "interfaccia", "risoluzione", "vuota"]
 ## Quanto si scalda, in secondi, prima delle coppie.
 const RISCALDA := 90.0
@@ -110,6 +115,7 @@ var _scritta: Label
 ## Com'era ogni cosa spenta, per rimetterla esattamente com'era.
 var _salvati := {}
 var _piatti := {}
+var _vertici := {}
 
 
 func _ready() -> void:
@@ -234,6 +240,19 @@ func _spegni(voce: String) -> void:
 				if pezzo.material_override != null and vere.has(pezzo.material_override):
 					_salvati[pezzo] = pezzo.material_override
 					pezzo.material_override = _piatto(pezzo.material_override as StandardMaterial3D)
+		"vertice", "misto":
+			var corpi: Array = [arena.call("giocatore")] + (arena.call("avversari") as Array)
+			for nodo in arena.find_children("*", "MeshInstance3D", true, false):
+				var pezzo := nodo as MeshInstance3D
+				var materiale := pezzo.material_override as BaseMaterial3D
+				if materiale == null or materiale.shading_mode != BaseMaterial3D.SHADING_MODE_PER_PIXEL:
+					continue
+				if voce == "misto" and materiale.metallic > 0.0:
+					continue
+				if corpi.any(func(c: Variant) -> bool: return (c as Node).is_ancestor_of(pezzo)):
+					continue
+				_salvati[pezzo] = materiale
+				pezzo.material_override = _per_vertice(materiale)
 		"interfaccia":
 			(arena.get("_comandi") as CanvasLayer).visible = false
 		"risoluzione":
@@ -275,7 +294,7 @@ func _riaccendi(voce: String) -> void:
 			var pubblico := arena.get_node_or_null("pubblico") as Node3D
 			if pubblico != null:
 				pubblico.visible = true
-		"superfici":
+		"superfici", "vertice", "misto":
 			for pezzo in _salvati:
 				if pezzo is MeshInstance3D:
 					(pezzo as MeshInstance3D).material_override = _salvati[pezzo]
@@ -310,6 +329,15 @@ func _piatto(vero: StandardMaterial3D) -> StandardMaterial3D:
 	if not _piatti.has(vero):
 		_piatti[vero] = Muratura.tinta_unita(vero.albedo_color, 0.8)
 	return _piatti[vero]
+
+
+## Lo stesso materiale, con la luce calcolata sui vertici.
+func _per_vertice(vero: BaseMaterial3D) -> BaseMaterial3D:
+	if not _vertici.has(vero):
+		var copia := vero.duplicate() as BaseMaterial3D
+		copia.shading_mode = BaseMaterial3D.SHADING_MODE_PER_VERTEX
+		_vertici[vero] = copia
+	return _vertici[vero]
 
 
 ## I fotogrammi al secondo come li vede chi gioca, le chiamate di disegno e, dove il
