@@ -29,6 +29,11 @@ renderer/rendering_method.mobile="gl_compatibility"
 ; e non dice nemmeno perche' (il controllo e' muto).
 textures/vram_compression/import_etc2_astc=true
 anti_aliasing/quality/msaa_3d=2
+; Niente passata di profondita' prima del colore: raddoppia i disegni (1.250 a
+; fotogramma per 601 oggetti, misurato il 03/10/2026) e su un telefono non serve,
+; la scheda scarta da sola i pixel coperti. Godot la spegne gia' sulle schede
+; "Apple", ma nel browser dell'iPhone la scheda si chiama "WebKit WebGL".
+driver/depth_prepass/enable=false
 
 [layer_names]
 

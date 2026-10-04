@@ -269,6 +269,18 @@ static func lucido(colore: Color) -> StandardMaterial3D:
 
 
 ## Una superficie che fa luce da sé: neon, zoccoli, segnatura a terra.
+## Un colore pieno, senza texture e senza luce propria. **Ha l'emissione accesa, e
+## nera**: così usa lo stesso shader di `acceso` invece di farne compilare uno suo.
+## Sul telefono ogni shader diverso sono cinque compilazioni (tappa 9, `Scorta`).
+static func tinta_unita(colore: Color, ruvidita: float) -> StandardMaterial3D:
+	var materiale := StandardMaterial3D.new()
+	materiale.albedo_color = colore
+	materiale.roughness = ruvidita
+	materiale.emission_enabled = true
+	materiale.emission = Color.BLACK
+	return materiale
+
+
 static func acceso(colore: Color, luce: float) -> StandardMaterial3D:
 	var materiale := StandardMaterial3D.new()
 	materiale.albedo_color = colore

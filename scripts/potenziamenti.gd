@@ -240,9 +240,10 @@ func _sfera(tipo: String) -> Node3D:
 	pelle.emission_enabled = true
 	pelle.emission = colore
 	# Accesa, ma sotto la soglia del bagliore: sopra l'uno ci va solo il dardo.
+	# Senza il bordo di luce (`rim`) che aveva il 03/10/2026: era l'unico materiale
+	# dell'arena ad averlo, e uno shader in più sono cinque compilazioni sul
+	# telefono (tappa 9). La palla si vede perché è accesa, non per il bordo.
 	pelle.emission_energy_multiplier = 0.9
-	pelle.rim_enabled = true
-	pelle.rim = 0.6
 	guscio.material_override = pelle
 	guscio.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	palla.add_child(guscio)

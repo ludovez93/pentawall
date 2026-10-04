@@ -84,6 +84,19 @@ static func vesti(arena: Node3D) -> void:
 
 ## La superficie di una tinta, costruita una volta e prestata a tutti i pezzi:
 ## un materiale solo per tinta è anche meno lavoro per la scheda video.
+static var _pixel_bianco: ImageTexture = null
+
+
+## Un pixel bianco: la texture di chi non ne ha una ma deve usare lo stesso shader
+## di chi ce l'ha.
+static func _bianco() -> ImageTexture:
+	if _pixel_bianco == null:
+		var immagine := Image.create(1, 1, false, Image.FORMAT_L8)
+		immagine.fill(Color.WHITE)
+		_pixel_bianco = ImageTexture.create_from_image(immagine)
+	return _pixel_bianco
+
+
 static func materiale_di(nome: String) -> StandardMaterial3D:
 	if _pronti.has(nome):
 		return _pronti[nome]
@@ -103,7 +116,10 @@ static func materiale_di(nome: String) -> StandardMaterial3D:
 	# Il parquet usciva blu scuro con due righe di legno (visto il 03/10/2026).
 	m.metallic_specular = 0.18 if String(nome).begins_with("parquet") else 0.3
 	if String(nome).begins_with("parquet"):
-		m.roughness_texture = null
+		# Ruvidità uguale dappertutto, ma **con una texture** (un pixel bianco): senza
+		# texture il parquet aveva uno shader suo, e sul telefono uno shader in più
+		# sono cinque compilazioni (tappa 9). Bianco per 0,82 fa 0,82.
+		m.roughness_texture = _bianco()
 		m.roughness = 0.82
 	# Proiezione dal mondo, uguale su scatole e su piani di forma qualunque: la
 	# grana ha lo stesso passo dappertutto, e un muro lungo non la stira.
@@ -199,9 +215,7 @@ static func _cassone_da_palestra(arena: Node3D, muro: Dictionary) -> void:
 	cuscino.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	radice.add_child(cuscino)
 
-	var scuro := StandardMaterial3D.new()
-	scuro.albedo_color = Color(0.10, 0.09, 0.14)
-	scuro.roughness = 0.7
+	var scuro := Muratura.tinta_unita(Color(0.10, 0.09, 0.14), 0.7)
 	for quota in [alto * 0.34, alto * 0.62]:
 		var cinghia := MeshInstance3D.new()
 		cinghia.mesh = Muratura.scatola_smussata(Vector3(largo + 0.04, 0.07, fondo + 0.04), 0.3)
@@ -263,7 +277,9 @@ static func _campo_del_catino(arena: Node3D) -> void:
 	nome.modulate = Color(0.86, 0.82, 1.0, 0.42)
 	nome.outline_size = 0
 	nome.shaded = false
-	nome.double_sided = false
+	# A due facce come tutte le scritte dell'arena (vedi `_insegna`): da sotto la
+	# copre il pavimento.
+	nome.double_sided = true
 	nome.alpha_cut = Label3D.ALPHA_CUT_DISCARD
 	arena.add_child(nome)
 
@@ -312,7 +328,8 @@ static func _tabellone(arena: Node3D) -> Node3D:
 			riga.position = Vector3(0, 0.32 if k == 0 else -0.5, 2.64)
 			riga.modulate = Color(1.0, 1.0, 1.0) if k == 0 else Color(0.80, 0.86, 1.0)
 			riga.shaded = false
-			riga.double_sided = false
+			# A due facce (vedi `_insegna`): da dietro la copre lo schermo.
+			riga.double_sided = true
 			riga.alpha_cut = Label3D.ALPHA_CUT_DISCARD
 			riga.text = "PENTAWALL" if k == 0 else "5 MURI"
 			lato.add_child(riga)
@@ -498,7 +515,10 @@ static func _insegna(arena: Node3D, testo: String, dove: Vector3, giro: float,
 	etichetta.outline_size = 22
 	etichetta.outline_modulate = Color(NEON.r * 0.6, NEON.g * 0.4, NEON.b * 0.7, 1.0)
 	etichetta.shaded = false
-	etichetta.double_sided = false
+	# **A due facce**, come tutte le scritte dell'arena (tappa 9): a una faccia
+	# avevano uno shader loro, e sul telefono uno shader in più sono cinque
+	# compilazioni. Da dietro non si legge a specchio: la copre il pannello.
+	etichetta.double_sided = true
 	etichetta.alpha_cut = Label3D.ALPHA_CUT_DISCARD
 	pannello.add_child(etichetta)
 

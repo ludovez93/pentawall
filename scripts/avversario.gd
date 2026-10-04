@@ -925,18 +925,8 @@ func _costruisci() -> void:
 
 	# Il nome sopra la testa, piccolo: risponde a «chi mi ha preso?». Vive con il
 	# contorno — entro i quindici metri — e per lo stesso motivo.
-	_targhetta = Label3D.new()
-	_targhetta.text = personaggio
-	_targhetta.font = Comandi.carattere_titolo()
-	_targhetta.font_size = 72
-	_targhetta.pixel_size = 0.0036
+	_targhetta = targhetta(personaggio)
 	_targhetta.position = Vector3(0, ALTEZZA_CORPO + 0.32, 0)
-	_targhetta.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	_targhetta.modulate = Color(1, 1, 1, 0.95)
-	_targhetta.outline_size = 16
-	_targhetta.outline_modulate = Color(0.02, 0.02, 0.06, 0.85)
-	_targhetta.shaded = false
-	_targhetta.alpha_cut = Label3D.ALPHA_CUT_DISCARD
 	_aspetto.add_child(_targhetta)
 
 	# La canna del gioco: da qui parte il dardo, come sempre. Il lampo alla bocca lo
@@ -944,6 +934,24 @@ func _costruisci() -> void:
 	_canna = Node3D.new()
 	_canna.position = Vector3(0.52, ALTEZZA_OCCHI - 0.14, -0.9)
 	_aspetto.add_child(_canna)
+
+
+## La targhetta col nome, come la porta ogni avversario. Sta in una funzione sola
+## perché la usa anche l'ingresso, che ne scalda lo shader prima della partita
+## (tappa 9): una copia scritta a mano altrove smetterebbe presto di essere uguale.
+static func targhetta(nome: String) -> Label3D:
+	var etichetta := Label3D.new()
+	etichetta.text = nome
+	etichetta.font = Comandi.carattere_titolo()
+	etichetta.font_size = 72
+	etichetta.pixel_size = 0.0036
+	etichetta.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	etichetta.modulate = Color(1, 1, 1, 0.95)
+	etichetta.outline_size = 16
+	etichetta.outline_modulate = Color(0.02, 0.02, 0.06, 0.85)
+	etichetta.shaded = false
+	etichetta.alpha_cut = Label3D.ALPHA_CUT_DISCARD
+	return etichetta
 
 
 ## La pelle del contorno: la capsula vista **da dentro** e cresciuta di poco, senza

@@ -310,9 +310,7 @@ static func _folla(radice: Node3D, nome: String, forma: Mesh, persone: Array, su
 ## quota di ogni fila. Solo per gli occhi — sopra la gradinata non ci sale nessuno.
 static func _gradini(radice: Node3D, centro: Vector2, misura: Vector2, piano: float) -> void:
 	var davanti := centro.x + misura.x * 0.5
-	var pelle := StandardMaterial3D.new()
-	pelle.albedo_color = Color(0.20, 0.17, 0.36)
-	pelle.roughness = 0.8
+	var pelle := Muratura.tinta_unita(Color(0.20, 0.17, 0.36), 0.8)
 	for fila in range(1, FILE):
 		var alto := GRADINO * float(fila)
 		var profondo := misura.x - PASSO_FILA * float(fila)

@@ -32,6 +32,7 @@ func _lavora() -> void:
 	await _i_corpi()
 	_le_forme()
 	await _l_arena()
+	await _la_resa()
 	print("\nVIVO: %d prove, %s" % [_prove, "tutte passate." if _errori == 0 else "%d ERRORI." % _errori])
 	quit(1 if _errori > 0 else 0)
 
@@ -285,6 +286,53 @@ func _l_arena() -> void:
 	_conta("un colpo fa schizzare le particelle", scintille.accese("colpo") > prima_colpo)
 
 	arena.queue_free()
+	await process_frame
+
+
+# ------------------------------------------------------------------ la resa
+
+## **La risoluzione che si adatta** (tappa 9). Sul telefono non la si può provare
+## da qui; la decisione sì: a 30 fotogrammi si scende di un gradino, e se il
+## gradino non rende si torna esattamente dov'era e non si tocca più.
+func _la_resa() -> void:
+	var di_prima := root.scaling_3d_scale
+	var resa := Resa.new()
+	root.add_child(resa)
+
+	root.scaling_3d_scale = Resa.SCALA_TELEFONO
+	resa._decidi(30.0)
+	_conta("a 30 fotogrammi la scena scende di un gradino",
+			is_equal_approx(root.scaling_3d_scale, Resa.SCALA_TELEFONO - Resa.GRADINO),
+			"%.2f" % root.scaling_3d_scale)
+	resa._decidi(31.0)
+	_conta("se il gradino non rende si torna a com'era", is_equal_approx(root.scaling_3d_scale,
+			Resa.SCALA_TELEFONO), "%.2f" % root.scaling_3d_scale)
+	_conta("e non si prova più", resa.ferma())
+	resa.queue_free()
+
+	# Il caso buono: il gradino rende, e si scende finché serve, mai sotto il minimo.
+	resa = Resa.new()
+	root.add_child(resa)
+	root.scaling_3d_scale = Resa.SCALA_TELEFONO
+	resa._decidi(30.0)
+	resa._decidi(40.0)
+	resa._decidi(46.0)
+	_conta("se ogni gradino rende si scende fino al minimo, non oltre",
+			is_equal_approx(root.scaling_3d_scale, Resa.SCALA_MINIMA), "%.2f" % root.scaling_3d_scale)
+	resa._decidi(47.0)
+	_conta("e un gradino al minimo che non rende torna esattamente a quello di prima",
+			is_equal_approx(root.scaling_3d_scale, Resa.SCALA_TELEFONO - 2.0 * Resa.GRADINO),
+			"%.2f" % root.scaling_3d_scale)
+	resa.queue_free()
+
+	resa = Resa.new()
+	root.add_child(resa)
+	root.scaling_3d_scale = Resa.SCALA_TELEFONO
+	resa._decidi(59.0)
+	_conta("a 59 fotogrammi non si tocca niente",
+			is_equal_approx(root.scaling_3d_scale, Resa.SCALA_TELEFONO))
+	resa.queue_free()
+	root.scaling_3d_scale = di_prima
 	await process_frame
 
 

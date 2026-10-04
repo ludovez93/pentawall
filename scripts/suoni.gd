@@ -54,6 +54,13 @@ const DISSOLVENZA_MUSICA := 0.9
 
 static var attivo: Suoni = null
 
+## I flussi si leggono **una volta per tutto il gioco**, non una per scena. Sul web
+## un suono si decodifica intero la prima volta che suona (Godot lo registra come
+## campione, e lo riconosce dall'oggetto): rileggendo i file a ogni scena, entrare in
+## partita decodificava di nuovo tutto — 297 secondi di suono in un fotogramma solo,
+## misurato nel browser il 03/10/2026 — e i campioni di prima restavano in memoria.
+static var _letti := {}
+
 var _flussi := {}
 var _voci: Array[AudioStreamPlayer3D] = []
 var _prossima_voce := 0
@@ -68,13 +75,9 @@ var _folla: AudioStreamPlayer
 func _ready() -> void:
 	attivo = self
 	for nome in NOMI:
-		var percorso: String = CARTELLA + String(nome) + ".ogg"
-		var flusso: AudioStream = load(percorso) if ResourceLoader.exists(percorso) else null
+		var flusso := _leggi(String(nome))
 		if flusso == null:
-			push_warning("manca il suono %s: si gioca senza" % percorso)
-		elif flusso is AudioStreamOggVorbis and (String(nome).begins_with("musica")
-				or nome == "folla"):
-			(flusso as AudioStreamOggVorbis).loop = true
+			push_warning("manca il suono %s: si gioca senza" % nome)
 		_flussi[String(nome)] = flusso
 
 	for i in VOCI_NEL_MONDO:
@@ -104,10 +107,23 @@ func _ready() -> void:
 		add_child(lettore)
 		_musica.append(lettore)
 	_folla = AudioStreamPlayer.new()
+	# **In streaming, non come campione**: la folla è un giro di 57 secondi, e come
+	# campione si decodificherebbe intero in un fotogramma e terrebbe 20 megabyte.
+	_folla.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
 	_folla.stream = _flussi.get("folla")
 	_folla.volume_db = FOLLA_DB
 	add_child(_folla)
 	_scalda.call_deferred()
+
+
+static func _leggi(nome: String) -> AudioStream:
+	if not _letti.has(nome):
+		var percorso := CARTELLA + nome + ".ogg"
+		var flusso: AudioStream = load(percorso) if ResourceLoader.exists(percorso) else null
+		if flusso is AudioStreamOggVorbis and (nome.begins_with("musica") or nome == "folla"):
+			(flusso as AudioStreamOggVorbis).loop = true
+		_letti[nome] = flusso
+	return _letti[nome]
 
 
 ## Ogni suono suona una volta all'apertura, muto: la prima riproduzione di un Ogg
@@ -281,6 +297,16 @@ static func musica(nome: String) -> void:
 	var vecchio := attivo._musica[attivo._musica_accesa]
 	attivo._musica_accesa = 1 - attivo._musica_accesa
 	var nuovo := attivo._musica[attivo._musica_accesa]
+	# La musica della partita e dell'ultimo minuto **in streaming**: come campioni si
+	# decodificherebbero interi in un fotogramma (72 e 102 secondi di suono), e in
+	# memoria starebbero 25 e 36 megabyte. Quella dell'ingresso resta com'è di serie
+	# — sul web un campione: suona mentre il gioco prepara la partita, e un campione
+	# non si inceppa quando un fotogramma dura tanto. (Forzarla a campione la
+	# zittirebbe fuori dal web, dove i campioni non esistono.)
+	if nome == "musica_ingresso":
+		nuovo.playback_type = AudioServer.PLAYBACK_TYPE_DEFAULT
+	else:
+		nuovo.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
 	nuovo.stream = flusso
 	nuovo.volume_db = -60.0
 	nuovo.play()

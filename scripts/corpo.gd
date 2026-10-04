@@ -76,6 +76,19 @@ const DURATA_LAMPO_BOCCA := 0.06
 
 static var _libreria: AnimationLibrary = null
 
+## **Modelli, capelli, blaster e la tuta, letti una volta per tutto il gioco**
+## (tappa 9). Con `load` restavano in memoria solo finché qualcuno li usava: chiuso
+## l'ingresso si buttavano, e il primo avversario in campo li rileggeva — 1,3 secondi
+## per il primo corpo femminile, misurato sul PC il 03/10/2026, di più sul telefono.
+## E con loro se ne andavano i loro shader, da ricompilare.
+static var _letti := {}
+
+
+static func _leggi(percorso: String) -> Resource:
+	if not _letti.has(percorso):
+		_letti[percorso] = load(percorso)
+	return _letti[percorso]
+
 var chi := "BRACE"
 
 var _modello: Node3D
@@ -327,12 +340,13 @@ func _e_blaster(pezzo: Node) -> bool:
 func _costruisci() -> void:
 	var dati: Dictionary = PERSONAGGI[chi]
 	var file := "Superhero_%s_FullBody" % String(dati["sesso"])
-	_modello = (load(MODELLI + file + ".gltf") as PackedScene).instantiate()
+	_modello = (_leggi(MODELLI + file + ".gltf") as PackedScene).instantiate()
 	# Nel file guarda verso +Z; da noi avanti è −Z.
 	_modello.rotation.y = PI
 	_modello.scale = Vector3.ONE * (ALTEZZA_CORPO / ALTEZZA_MODELLO)
 	add_child(_modello)
 	_scheletro = _modello.find_child("Skeleton3D", true, false) as Skeleton3D
+	_senza_rilievo(_modello)
 
 	_vesti(String(dati["sesso"]), dati)
 	for taglio in dati["capelli"]:
@@ -349,23 +363,28 @@ func _costruisci() -> void:
 func _vesti(sesso: String, dati: Dictionary) -> void:
 	var grande: MeshInstance3D = null
 	var quanti := 0
+	# Il pezzo più grande è il corpo. Si contano i vertici, non le facce:
+	# `get_faces` costruisce l'elenco intero dei triangoli solo per contarli.
 	for nodo in _tutti(_modello):
-		if nodo is MeshInstance3D and (nodo as MeshInstance3D).mesh != null:
-			var facce := (nodo as MeshInstance3D).mesh.get_faces().size()
-			if facce > quanti:
-				quanti = facce
+		if nodo is MeshInstance3D and (nodo as MeshInstance3D).mesh is ArrayMesh:
+			var mesh := (nodo as MeshInstance3D).mesh as ArrayMesh
+			var vertici := 0
+			for s in mesh.get_surface_count():
+				vertici += mesh.surface_get_array_len(s)
+			if vertici > quanti:
+				quanti = vertici
 				grande = nodo
 	if grande == null:
 		return
 	var vecchio := grande.get_active_material(0) as BaseMaterial3D
 	_materiale = ShaderMaterial.new()
-	_materiale.shader = load(TUTA)
+	_materiale.shader = _leggi(TUTA)
 	if vecchio != null:
 		_materiale.set_shader_parameter("base", vecchio.albedo_texture)
 		_materiale.set_shader_parameter("normale", vecchio.normal_texture)
 		_materiale.set_shader_parameter("rugosita", vecchio.roughness_texture)
-	_materiale.set_shader_parameter("maschera", load(MODELLI + "Maschera_Testa_" + sesso + ".png"))
-	_materiale.set_shader_parameter("divisa", load(MODELLI + "Maschera_Divisa_" + sesso + ".png"))
+	_materiale.set_shader_parameter("maschera", _leggi(MODELLI + "Maschera_Testa_" + sesso + ".png"))
+	_materiale.set_shader_parameter("divisa", _leggi(MODELLI + "Maschera_Divisa_" + sesso + ".png"))
 	_materiale.set_shader_parameter("tuta", dati["tuta"])
 	_materiale.set_shader_parameter("secondo", dati["secondo"])
 	grande.material_override = _materiale
@@ -378,7 +397,7 @@ func _pettina(taglio: String, tinta: Color) -> void:
 	var testa := _scheletro.find_bone("Head")
 	if testa < 0:
 		return
-	var scena: PackedScene = load(CAPELLI + taglio + ".gltf")
+	var scena := _leggi(CAPELLI + taglio + ".gltf") as PackedScene
 	if scena == null:
 		return
 	var attacco := BoneAttachment3D.new()
@@ -394,7 +413,23 @@ func _pettina(taglio: String, tinta: Color) -> void:
 			if materiale is BaseMaterial3D:
 				var tinto := (materiale as BaseMaterial3D).duplicate() as BaseMaterial3D
 				tinto.albedo_color = tinta
+				tinto.normal_enabled = false
 				pezzo.material_override = tinto
+
+
+## **Occhi, sopracciglia e capelli senza mappa del rilievo** (tappa 9). A due metri
+## sullo schermo di un telefono non si vede, ma ognuno dei tre modi in cui il
+## pacchetto la usava era uno shader suo — e sul telefono uno shader in più sono
+## cinque compilazioni. Senza, usano lo stesso del blaster. I materiali del modello
+## sono condivisi da tutti i corpi dello stesso sesso: si toccano una volta.
+static func _senza_rilievo(radice: Node) -> void:
+	for nodo in _tutti(radice):
+		if nodo is MeshInstance3D and (nodo as MeshInstance3D).mesh != null:
+			var pezzo := nodo as MeshInstance3D
+			for s in pezzo.mesh.get_surface_count():
+				var materiale := pezzo.get_active_material(s)
+				if materiale is BaseMaterial3D:
+					(materiale as BaseMaterial3D).normal_enabled = false
 
 
 func _arma() -> void:
@@ -402,7 +437,7 @@ func _arma() -> void:
 	attacco.bone_name = "hand_r"
 	attacco.name = "Mano"
 	_scheletro.add_child(attacco)
-	_blaster = (load(BLASTER) as PackedScene).instantiate()
+	_blaster = (_leggi(BLASTER) as PackedScene).instantiate()
 	attacco.add_child(_blaster)
 
 	# Il lampo alla bocca: un disco caldo che si apre e sparisce in sei centesimi.

@@ -25,6 +25,10 @@ const GIRO_CAMERA := 0.42
 const PERIODO_CAMERA := 14.0
 const CENTRO := Vector3(0.0, 1.0, 0.0)
 
+## La vetrina dove l'arena si prepara: una finestra invisibile, piccola, col suo
+## mondo. Ci si disegna l'arena un pezzo alla volta solo per compilarne gli shader.
+const MISURA_VETRINA := Vector2i(128, 72)
+
 var _versione := "locale"
 var _riga_versione: Button
 var _tocchi := 0
@@ -33,6 +37,12 @@ var _palco: Node3D
 var _camera: Camera3D
 var _corpo: Corpo
 var _tempo := 0.0
+var _gioca: Button
+var _attesa: Label
+var _vetrina: SubViewport
+var _arena_pronta: Node = null
+var _gioca_chiesto := false
+var _quota := 0.0
 
 
 func _ready() -> void:
@@ -47,6 +57,7 @@ func _ready() -> void:
 	Arena.modo_partita = false
 	add_child(Suoni.new())
 	Suoni.musica("musica_ingresso")
+	_prepara_l_arena()
 
 
 func _process(delta: float) -> void:
@@ -135,10 +146,7 @@ func _scena() -> void:
 	piano.size = Vector2(40, 40)
 	pavimento.mesh = piano
 	pavimento.position = Vector3(0, -0.21, 0)
-	var scuro := StandardMaterial3D.new()
-	scuro.albedo_color = Color(0.06, 0.05, 0.11)
-	scuro.roughness = 0.35
-	pavimento.material_override = scuro
+	pavimento.material_override = Muratura.tinta_unita(Color(0.06, 0.05, 0.11), 0.35)
 	_palco.add_child(pavimento)
 	# Sul fondo, le strisce al neon di una palestra lontana.
 	for i in 4:
@@ -251,6 +259,17 @@ func _pulsanti() -> void:
 	gioca.add_theme_stylebox_override("pressed", _pieno(Color(0.30, 0.86, 0.80), 3.0))
 	gioca.pressed.connect(_comincia)
 	add_child(gioca)
+	_gioca = gioca
+
+	# Sotto GIOCA, finché l'arena si prepara: quanto manca. Sparisce quando è pronta.
+	_attesa = Label.new()
+	_attesa.position = Vector2(92, 486)
+	_attesa.add_theme_font_override("font", Comandi.carattere_testo())
+	_attesa.add_theme_font_size_override("font_size", 22)
+	_attesa.add_theme_color_override("font_color", Color(0.40, 1.0, 0.92, 0.8))
+	_attesa.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_attesa)
+	_scrivi_l_attesa()
 
 	# Il banco di prova: c'è, ma spento, finché non lo si chiama col gesto.
 	_banco = HBoxContainer.new()
@@ -319,8 +338,187 @@ func _sfondo(colore: Color, opacita: float) -> StyleBoxFlat:
 
 func _comincia() -> void:
 	Suoni.tocco()
+	if _arena_pronta == null:
+		# L'arena si sta ancora preparando: si entra appena è pronta.
+		_gioca_chiesto = true
+		_scrivi_l_attesa()
+		return
+	_entra()
+
+
+## **Si entra nell'arena già pronta**: la si porta dalla vetrina allo schermo, la
+## si accende e la si fa entrare in campo. Niente da costruire e niente da compilare:
+## dal telefono, il 03/10/2026, questo era un fotogramma da 15,5 secondi.
+func _entra() -> void:
+	var arena := _arena_pronta
+	_arena_pronta = null
 	Arena.modo_partita = true
-	_vai("res://scenes/arena.tscn")
+	arena.get_parent().remove_child(arena)
+	get_tree().root.add_child(arena)
+	get_tree().current_scene = arena
+	arena.process_mode = Node.PROCESS_MODE_INHERIT
+	arena.call("entra_in_campo")
+	queue_free()
+
+
+# ------------------------------------------------------------------ la vetrina
+
+## **L'arena si prepara dietro l'ingresso** (tappa 9, 03/10/2026).
+##
+## Dal telefono, premuto GIOCA, un fotogramma durava 15,5 secondi: l'arena nasceva
+## tutta in quel momento, e il browser ci compilava dentro i suoi shader — 99
+## programmi nel browser del PC, cinque per ogni materiale diverso. Adesso nasce qui,
+## in una vetrina invisibile, mentre si guarda il palco: un passo di costruzione per
+## fotogramma, poi un gruppo di materiali per fotogramma, e sotto GIOCA si legge
+## quanto manca. Premuto GIOCA, l'arena pronta passa sullo schermo.
+func _prepara_l_arena() -> void:
+	# Prima il palco: che il primo disegno dell'ingresso arrivi intero.
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_vetrina = SubViewport.new()
+	_vetrina.size = MISURA_VETRINA
+	_vetrina.own_world_3d = true
+	_vetrina.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(_vetrina)
+	var arena: Node = load("res://scenes/arena.tscn").instantiate()
+	# Ferma finché non entra in campo: nessuno corre, nessun orologio gira.
+	arena.process_mode = Node.PROCESS_MODE_DISABLED
+	Arena.in_preparazione = true
+	_vetrina.add_child(arena)
+	Arena.in_preparazione = false
+	await arena.preparata
+	_quota = 0.15
+	_scrivi_l_attesa()
+	await _scalda_l_arena(arena)
+	# Pronta: la vetrina smette di disegnare, e l'arena aspetta GIOCA.
+	_vetrina.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	_arena_pronta = arena
+	_quota = 1.0
+	_scrivi_l_attesa()
+	if _gioca_chiesto:
+		_entra()
+
+
+## **Il riscaldamento**: ogni pezzo dell'arena si disegna una volta nella vetrina,
+## un gruppo di materiali per fotogramma. Il browser compila uno shader quando lo
+## disegna la prima volta, e in partita quel momento era tutto insieme; qui è a
+## pezzi, mentre il palco continua a girare. Dentro ci vanno anche le cose che in
+## partita nascono dopo: un avversario col suo contorno e la targhetta, il dardo, le
+## scintille, il lampo dello sparo. Tutto si disegna con la luce e l'ambiente
+## dell'arena, così gli shader escono già nella variante che userà la partita.
+func _scalda_l_arena(arena: Node) -> void:
+	var occhio := Camera3D.new()
+	occhio.projection = Camera3D.PROJECTION_ORTHOGONAL
+	occhio.size = 90.0
+	occhio.far = 200.0
+	arena.add_child(occhio)
+	occhio.global_transform = Transform3D(Basis.looking_at(Vector3.DOWN, Vector3.FORWARD),
+			Vector3(0.0, 80.0, 0.0))
+	occhio.current = true
+
+	var comparsa := Corpo.crea("QUARZO")
+	arena.add_child(comparsa)
+	comparsa.contorni(Color(0.03, 0.03, 0.06), Color(Avversario.ALONI[0]["colore"]),
+			Avversario.SPESSORE_FILO)
+	var targhetta := Avversario.targhetta("QUARZO")
+	targhetta.position = Vector3(0.0, 2.1, 0.0)
+	comparsa.add_child(targhetta)
+
+	# Tutto spento, poi un gruppo alla volta: un gruppo è uno shader.
+	var gruppi := {}
+	var visibili := {}
+	for nodo in arena.find_children("*", "GeometryInstance3D", true, false):
+		var pezzo := nodo as GeometryInstance3D
+		visibili[pezzo] = pezzo.visible
+		pezzo.visible = false
+		var chiave := _chiave_del_pezzo(pezzo)
+		if not gruppi.has(chiave):
+			gruppi[chiave] = []
+		(gruppi[chiave] as Array).append(pezzo)
+		# Chi sta sotto un genitore spento non si disegnerebbe mai: i genitori si
+		# accendono (i pezzi restano spenti finché non tocca a loro).
+		var su := pezzo.get_parent()
+		while su != null and su != arena:
+			if su is Node3D and not (su as Node3D).visible:
+				# Si annota com'era solo la prima volta: un pezzo che fa da genitore
+				# a un altro è già annotato, e spento da noi un momento fa.
+				if not visibili.has(su):
+					visibili[su] = false
+				(su as Node3D).visible = true
+			su = su.get_parent()
+
+	# Il primo fotogramma: dardo, scintille e lampo dello sparo davanti all'occhio.
+	# Le scintille vivono nella loro simulazione: per questo fotogramma girano.
+	var scintille := Scintille.attivo
+	if scintille != null:
+		scintille.process_mode = Node.PROCESS_MODE_ALWAYS
+		scintille.scalda(occhio)
+	Proiettile.scalda(arena, occhio)
+	(arena.call("giocatore") as Giocatore).corpo().scalda(occhio)
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	var fatti := 0
+	for chiave in gruppi:
+		for pezzo in gruppi[chiave]:
+			(pezzo as GeometryInstance3D).visible = true
+		await get_tree().process_frame
+		for pezzo in gruppi[chiave]:
+			(pezzo as GeometryInstance3D).visible = false
+		fatti += 1
+		_quota = 0.15 + 0.85 * float(fatti) / float(gruppi.size())
+		_scrivi_l_attesa()
+
+	for nodo in visibili:
+		if is_instance_valid(nodo):
+			(nodo as Node3D).visible = visibili[nodo]
+	if scintille != null:
+		scintille.process_mode = Node.PROCESS_MODE_INHERIT
+	# La scorta tiene in vita gli shader appena compilati: dell'arena, della
+	# comparsa e del palco. Uscendo dalla partita e rientrando, non si rifanno.
+	Scorta.tieni(arena)
+	Scorta.tieni(comparsa)
+	Scorta.tieni(_palco)
+	comparsa.queue_free()
+	occhio.queue_free()
+
+
+## La chiave dello shader di un pezzo: quella del suo primo materiale. Le scritte
+## hanno un materiale loro, che dipende da come sono girate e ritagliate.
+func _chiave_del_pezzo(pezzo: GeometryInstance3D) -> String:
+	if pezzo is Label3D:
+		var l := pezzo as Label3D
+		return "scritta %d %s %s %d" % [l.billboard, l.shaded, l.double_sided, l.alpha_cut]
+	if pezzo.material_override != null:
+		return Scorta.chiave_di(pezzo.material_override)
+	var mesh: Mesh = null
+	if pezzo is MeshInstance3D:
+		mesh = (pezzo as MeshInstance3D).mesh
+		if mesh != null and mesh.get_surface_count() > 0:
+			var m := (pezzo as MeshInstance3D).get_active_material(0)
+			if m != null:
+				return Scorta.chiave_di(m)
+	elif pezzo is MultiMeshInstance3D and (pezzo as MultiMeshInstance3D).multimesh != null:
+		mesh = (pezzo as MultiMeshInstance3D).multimesh.mesh
+	elif pezzo is CPUParticles3D:
+		mesh = (pezzo as CPUParticles3D).mesh
+	if mesh != null and mesh.get_surface_count() > 0 and mesh.surface_get_material(0) != null:
+		return Scorta.chiave_di(mesh.surface_get_material(0)) + " (ripetuto)"
+	return pezzo.get_class()
+
+
+## La riga sotto GIOCA: quanto manca, o niente quando l'arena è pronta.
+func _scrivi_l_attesa() -> void:
+	if _attesa == null:
+		return
+	if _arena_pronta != null or _quota >= 1.0:
+		_attesa.text = ""
+		return
+	var percento := int(round(_quota * 100.0))
+	if _gioca_chiesto:
+		_attesa.text = "ENTRI APPENA L'ARENA È PRONTA · %d%%" % percento
+	else:
+		_attesa.text = "PREPARO L'ARENA · %d%%" % percento
 
 
 func _vai(scena: String) -> void:

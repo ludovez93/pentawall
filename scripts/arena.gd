@@ -51,6 +51,16 @@ const ATTESA_ANNUNCIO := 3.0
 ## l'arena è quella di sempre.
 static var modo_partita := false
 
+## **L'arena che si prepara dietro l'ingresso** (tappa 9, 03/10/2026). Accesa da
+## chi la costruisce in una vetrina invisibile: si fa solo il mondo — muri, pubblico,
+## luci, il giocatore — un passo per fotogramma, e poi si aspetta. Interfaccia,
+## suoni, sonda e partita arrivano con `entra_in_campo`, quando l'ingresso la porta
+## sullo schermo. Spenta (i collaudi, il banco di prova) l'arena nasce tutta subito.
+static var in_preparazione := false
+
+## Il mondo è pronto e l'arena aspetta di entrare in campo.
+signal preparata
+
 ## **I cinque avversari.** Il numero non è nostro: la partita di carriera del 1999
 ## girava con cinque bot più il giocatore (`RICERCA-ORIGINALE.md` § 2), ed è anche
 ## il motivo per cui questa pianta ha sei partenze. Uno per partenza, nessuno
@@ -155,6 +165,7 @@ var _finita := false
 ## Il livello di partenza è **il facile**: la prima partita si deve poter vincere.
 var _livello := 0
 var _modo_partita := false
+var _in_preparazione := false
 var _durata := DURATA_PARTITA
 var _tempo := 0.0
 var _conto := 0.0
@@ -178,24 +189,26 @@ var _potenziamenti: Potenziamenti
 
 
 func _ready() -> void:
+	_in_preparazione = in_preparazione
+	# **Il mondo**, in passi. Preparata dietro l'ingresso, fra un passo e l'altro
+	# l'arena lascia passare un fotogramma: sul telefono l'arena intera costava un
+	# fotogramma solo da secondi, e così il palco continua a muoversi.
 	_pianta = carica_pianta()
 	_ambiente()
 	_costruisci()
+	await _respiro()
 	# Le superfici vere al posto delle tinte piatte (tappa 8, blocco E): moquette,
 	# intonaco, mattoni e lamiera PBR, ognuna con il colore della sua tinta. Fino al
 	# 03/10/2026 vestivano solo l'angolo dell'attrezzo degli scatti.
 	Vestizione.vesti(self)
+	await _respiro()
 	_tabellone = Vestizione.arreda_arena(self, _pianta)
+	await _respiro()
 	_pubblico()
+	await _respiro()
 	_rete_di_cammino()
 	_luci()
 	_prepara_gli_anelli()
-
-	Resa.regola(get_viewport())
-	_sonda = Sonda.new()
-	_sonda.arena = self
-	add_child(_sonda)
-	add_child(Suoni.new())
 	add_child(Scintille.new())
 	_potenziamenti = Potenziamenti.new()
 	_potenziamenti.name = "potenziamenti"
@@ -204,6 +217,41 @@ func _ready() -> void:
 	_potenziamenti.prepara(POTENZIAMENTI)
 	_potenziamenti.preso.connect(_su_potenziamento_preso)
 	_potenziamenti.finito.connect(_su_potenziamento_finito)
+	await _respiro()
+	_giocatore = Giocatore.new()
+	add_child(_giocatore)
+	# Si collega una volta sola, non a ogni partita: `preso_da` porta **chi** ha
+	# sparato, ed è l'unico posto da cui passano i punti di chiunque.
+	_giocatore.preso_da.connect(_su_colpo_valido.bind(_giocatore))
+	_mettiti_alla_partenza(0)
+
+	if _in_preparazione:
+		preparata.emit()
+		return
+	entra_in_campo()
+
+
+## Un fotogramma di respiro fra due passi della costruzione, solo quando l'arena si
+## prepara dietro l'ingresso.
+func _respiro() -> void:
+	if _in_preparazione:
+		await get_tree().process_frame
+
+
+## **L'arena entra in campo**: la resa del telefono, la sonda, i suoni,
+## l'interfaccia, la camera — e la partita, se si è arrivati da GIOCA. Quando
+## l'arena si è preparata dietro l'ingresso, la chiama l'ingresso dopo averla
+## portata sullo schermo: niente di questo ha senso dentro una vetrina invisibile
+## (la sonda misurerebbe l'ingresso, i suoni ruberebbero la musica al palco,
+## l'interfaccia si disporrebbe su una finestra di 128 punti).
+func entra_in_campo() -> void:
+	_in_preparazione = false
+	Resa.regola(get_viewport())
+	add_child(Resa.new())
+	_sonda = Sonda.new()
+	_sonda.arena = self
+	add_child(_sonda)
+	add_child(Suoni.new())
 
 	_comandi = Comandi.new()
 	add_child(_comandi)
@@ -219,13 +267,9 @@ func _ready() -> void:
 	_bottone_dardo = _comandi.pulsante_di_scena("DARDO 19", Color(0.8, 0.55, 0.25), commuta_dardo)
 	_scrivi_il_dardo()
 
-	_giocatore = Giocatore.new()
-	add_child(_giocatore)
 	_giocatore.comandi = _comandi
-	# Si collega una volta sola, non a ogni partita: `preso_da` porta **chi** ha
-	# sparato, ed è l'unico posto da cui passano i punti di chiunque.
-	_giocatore.preso_da.connect(_su_colpo_valido.bind(_giocatore))
-	_mettiti_alla_partenza(0)
+	# Dalla vetrina la camera corrente era un'altra: qui torna quella di chi gioca.
+	_giocatore.camera().make_current()
 
 	# Il primo colpo di una partita costava un fotogramma intero: si scalda lo
 	# shader del bagliore appena la scena si apre (LEARNED.md § 26 e 27).
