@@ -32,6 +32,12 @@ const SPESSORE_RAMPA := 0.45
 const GRUPPO_SOFFITTI := &"soffitti"
 const GRUPPO_LUCERNARI := &"lucernari"
 
+## I muri della pianta e le rampe (tappa 10, blocco D): l'arena-giocattolo costruisce i
+## suoi moduli sopra le loro scatole, e li ritrova qui. Ogni muro porta il suo posto
+## nell'elenco della pianta (`muro`), ogni pavimento quello della sua zona (`zona`).
+const GRUPPO_PARETI := &"pareti"
+const GRUPPO_RAMPE := &"rampe"
+
 ## **Si gioca a tempo, tre minuti** (decisione 19, dal blocco C). Il duello del
 ## poligono resta a 500 punti; qui no, e per due motivi misurati: a 500 la partita
 ## finiva in cinquanta secondi, e sapere quanto manca vale più di sapere quanto
@@ -222,8 +228,9 @@ func _ready() -> void:
 	await _respiro()
 	_pubblico()
 	# L'aspetto (tappa 10): la variante scelta veste prima della luce per vertice, così
-	# i pezzi che aggiunge la calcolano sui vertici come tutti gli altri.
-	Aspetto.veste(self)
+	# i pezzi che aggiunge la calcolano sui vertici come tutti gli altri. L'arena-giocattolo
+	# lo fa a passi, un fotogramma l'uno quando si prepara dietro l'ingresso.
+	await Aspetto.veste(self)
 	_luce_per_vertice()
 	await _respiro()
 	_rete_di_cammino()
@@ -362,16 +369,19 @@ func _costruisci() -> void:
 		if _pezzi[i].size() != 1 or _pezzi[i][0] != contorno:
 			solidi.assign(_pezzi[i])
 		Muratura.piano(self, contorno, float(zone[i]["quota"]),
-				SPESSORE_PIANO, _tinta(zone[i]["tinta"]), _parti_scoperte(i), solidi)
+				SPESSORE_PIANO, _tinta(zone[i]["tinta"]), _parti_scoperte(i), solidi) \
+				.set_meta(&"zona", i)
 
 	_cordoli()
 
 	for r in _pianta["rampe"]:
 		Muratura.rampa(self, _punto(r["da"]), _punto(r["a"]), float(r["larghezza"]),
 				float(r["quota_da"]), float(r["quota_a"]), SPESSORE_RAMPA,
-				_tinta("moquette"))
+				_tinta("moquette")).add_to_group(GRUPPO_RAMPE)
 
-	for m in _pianta["muri"]:
+	var muri: Array = _pianta["muri"]
+	for i in muri.size():
+		var m: Dictionary = muri[i]
 		var misura := Vector3(float(m["misura"][0]), float(m["alto"]), float(m["misura"][1]))
 		var centro := Vector3(float(m["centro"][0]),
 				float(m["quota"]) + misura.y * 0.5, float(m["centro"][1]))
@@ -380,11 +390,14 @@ func _costruisci() -> void:
 		# vivo. Colonne, piloni e pilastri diventano tondi; tutto il resto si smussa,
 		# di più le cose basse che si guardano da vicino (cassoni, casse, blocchi),
 		# di meno i muri alti. Lo decide il nome nella pianta, non la misura.
+		var corpo: StaticBody3D
 		if _e_tondo(nome) and absf(misura.x - misura.z) < 0.01:
-			Muratura.pilone(self, centro, misura.x * 0.5, misura.y, _tinta(m["tinta"]))
+			corpo = Muratura.pilone(self, centro, misura.x * 0.5, misura.y, _tinta(m["tinta"]))
 		else:
-			Muratura.muro(self, centro, misura, _tinta(m["tinta"]),
+			corpo = Muratura.muro(self, centro, misura, _tinta(m["tinta"]),
 					Vector3(0, float(m.get("giro", 0)), 0), _smusso_di(nome, misura))
+		corpo.add_to_group(GRUPPO_PARETI)
+		corpo.set_meta(&"muro", i)
 
 	for s in _pianta["sponde"]:
 		var faccia := Vector2(float(s["faccia"][0]), float(s["faccia"][1]))

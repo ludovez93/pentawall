@@ -31,6 +31,8 @@ Tutto libero, verificato all'origine il 12/09/2026 e il 03/10/2026 (i suoni). Ni
 | `audio/musica_*.ogg` | ingresso, partita, ultimo minuto: «Shooting Synth Hero» | (OpenGameArt «6 tracks — Shooting Synth Hero») | CC0 1.0 | opengameart.org/content/6-tracksshooting-synth-hero |
 | `materials/tuta.gdshader` | la tuta da gara sopra il corpo base | nostro | — | — |
 | `pwa/` | icone del gioco | nostre | — | — |
+| `cielo/cielo_giorno.jpg` | il cielo dell'arena-giocattolo: dal cielo vero si prende dove stanno le nuvole, i colori sono ridipinti | Greg Zaal e Jarod Guest (Poly Haven, «Kloofendal 48d Partly Cloudy (Pure Sky)»), ridipinto da noi | CC0 1.0 | polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky · `tools/prepara_cielo.py`, 05/10/2026 |
+| `giocattolo/tappeto.png`, `giocattolo/decalchi.png`, `giocattolo/decalco.gdshader` | i tappetini a incastro, le grafiche dei muri e lo shader che le incolla | nostri | — | `tools/prepara_tappeti.py`, `tools/prepara_decalchi.py` (col carattere Russo One), 05/10/2026 |
 
 CC0 non chiede nemmeno il credito: Kenney e ambientCG restano nominati qui per correttezza.
 L'OFL chiede che i caratteri restino sotto la stessa licenza se ridistribuiti da soli: dentro

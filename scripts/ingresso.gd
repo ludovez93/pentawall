@@ -72,6 +72,12 @@ func _ready() -> void:
 			for voce in (scelte as String).split(",", false):
 				if BancoScheda.VOCI.has(voce):
 					Arena.voci_banco.append(voce)
+		# La variante dell'aspetto dall'indirizzo (`?aspetto=4`): è il pulsante ASPETTO
+		# del banco di prova, per chi misura dal browser senza toccare lo schermo.
+		var aspetto: Variant = JavaScriptBridge.eval(
+				"String(new URLSearchParams(window.location.search).get('aspetto') || '')", true)
+		if aspetto is String and (aspetto as String).is_valid_int():
+			Aspetto.scegli(int(aspetto))
 	_gioca_chiesto = Arena.banco_scheda
 	add_child(Suoni.new())
 	Suoni.musica("musica_ingresso")

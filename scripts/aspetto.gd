@@ -17,11 +17,14 @@ extends RefCounted
 ## qualunque direzione, e si fanno una volta sola, su quella scelta.
 
 const FILE := "user://aspetto.cfg"
-const NOMI: Array[String] = ["OGGI", "PALAZZETTO", "ORA BLU", "SALA LASER"]
+const NOMI: Array[String] = ["OGGI", "PALAZZETTO", "ORA BLU", "SALA LASER", "GIOCATTOLO"]
 const OGGI := 0
 const PALAZZETTO := 1
 const ORA_BLU := 2
 const SALA_LASER := 3
+## L'arena-giocattolo come NERF Superblast (tappa 10, blocco D): non è una luce nuova,
+## è un'arena fatta d'altro. Sta in `Giocattolo`.
+const GIOCATTOLO := 4
 
 static var _scelta := -1
 static var _ombra: StandardMaterial3D = null
@@ -64,12 +67,23 @@ static func veste(arena: Node3D) -> void:
 			_ora_blu(arena)
 		SALA_LASER:
 			_sala_laser(arena)
+		GIOCATTOLO:
+			await Giocattolo.veste(arena as Arena)
+
+
+## L'arredo da palazzetto di `Vestizione.arreda_arena` — neon sui perimetri, cinghie dei
+## cassoni, striscioni appesi al soffitto, insegne al neon — sta in tutte le varianti
+## tranne l'arena-giocattolo, che è a cielo aperto e ha i suoi.
+static func arredo_palestra() -> bool:
+	return scelta() != GIOCATTOLO
 
 
 ## Dopo le luci: cielo, nebbia, lampade.
 static func illumina(arena: Node3D) -> void:
 	var ambiente := _ambiente(arena)
 	match scelta():
+		GIOCATTOLO:
+			Giocattolo.illumina(arena, ambiente)
 		PALAZZETTO:
 			ambiente.ambient_light_color = Color(0.56, 0.53, 0.60)
 			ambiente.ambient_light_energy = 0.95

@@ -19,6 +19,11 @@ const POSTI := [
 	{"nome": "ala_ocra", "dove": Vector3(9.0, 0.6, -20.0), "giro": 200.0, "pendenza": -4.0},
 	{"nome": "dalla_terrazza", "dove": Vector3(27.0, 4.1, -27.0), "giro": 135.0, "pendenza": -8.0},
 	{"nome": "tribuna", "dove": Vector3(-16.0, 0.6, 6.0), "giro": 105.0, "pendenza": 4.0},
+	# L'ala ocra larga (tappa 10, blocco D): lungo l'ala da est, e dall'alto della
+	# passerella. Quella del posto 4 sta addosso a un cassone e ne vede mezza.
+	{"nome": "ocra_da_est", "dove": Vector3(11.5, 0.6, -22.0), "giro": 90.0, "pendenza": -2.0},
+	{"nome": "ocra_dalla_passerella", "dove": Vector3(8.0, 4.1, -30.5), "giro": 205.0, "pendenza": -12.0},
+	{"nome": "portico", "dove": Vector3(4.0, 0.6, 14.5), "giro": 160.0, "pendenza": 2.0},
 ]
 
 

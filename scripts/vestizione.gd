@@ -150,6 +150,17 @@ static func materiale_di(nome: String) -> StandardMaterial3D:
 ##   classifica (lo aggiorna l'arena, `aggiorna_tabellone`).
 ## Tutto decoro: niente collisioni, niente su cui un dardo possa rimbalzare.
 static func arreda_arena(arena: Node3D, pianta: Dictionary) -> Node3D:
+	# L'arena-giocattolo (tappa 10, blocco D) è a cielo aperto e ha l'arredo suo
+	# (`Giocattolo`): di questo tiene solo le linee del campo e il tabellone.
+	if Aspetto.arredo_palestra():
+		_arredo_da_palestra(arena, pianta)
+	_campo_del_catino(arena)
+	return _tabellone(arena)
+
+
+## Quello che dice «palazzetto»: neon sui perimetri, cassoni con le cinghie, insegne al
+## neon, striscioni appesi al soffitto.
+static func _arredo_da_palestra(arena: Node3D, pianta: Dictionary) -> void:
 	# Zoccoli e fascia sui perimetri: le facce interne stanno a ±33 metri.
 	for lato in [
 		{"centro": Vector3(0, 0, -32.95), "misura": Vector3(66.0, LISTELLO, LISTELLO)},
@@ -173,8 +184,6 @@ static func arreda_arena(arena: Node3D, pianta: Dictionary) -> Node3D:
 		_insegna(arena, testo, dove, float(insegna["giro"]),
 				Vector2(float(testo.length()) * misura * 0.62 + misura * 0.9, misura * 1.35), misura)
 
-	_campo_del_catino(arena)
-
 	# Gli striscioni: due per ala, appesi al soffitto a otto metri, nei colori
 	# delle tute. Girati verso il centro dell'arena.
 	var colori := [Color(0.13, 0.36, 0.95), Color(0.84, 0.12, 0.20), Color(0.98, 0.80, 0.12),
@@ -186,8 +195,6 @@ static func arreda_arena(arena: Node3D, pianta: Dictionary) -> Node3D:
 	]
 	for i in posti.size():
 		_striscione(arena, posti[i][0], posti[i][1], colori[i % colori.size()])
-
-	return _tabellone(arena)
 
 
 ## Un cassone da palestra al posto di una scatola: l'imbottitura in cima, più chiara,
