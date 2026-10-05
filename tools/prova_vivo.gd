@@ -19,7 +19,9 @@ extends SceneTree
 ##   si addossa ai muri (dal 04/10/2026: la spalla finiva dentro il muro);
 ## - che i suoni si carichino e la musica cambi;
 ## - che un colpo faccia schizzare le particelle;
-## - che le palle colorate si prendano, facciano quello che dicono e ricompaiano.
+## - che le palle colorate si prendano, facciano quello che dicono e ricompaiano;
+## - (tappa 11, blocco B) che un colpo valga 25 diretto e 50 di sponda, e che i sei
+##   potenziamenti facciano il loro effetto e finiscano.
 ##
 ## Uso:  godot --headless --path . -s tools/prova_vivo.gd
 
@@ -33,6 +35,7 @@ func _initialize() -> void:
 
 func _lavora() -> void:
 	await _i_corpi()
+	await _i_punti_del_colpo()
 	_le_forme()
 	await _l_arena()
 	await _la_resa()
@@ -93,6 +96,46 @@ func _i_corpi() -> void:
 		corpo.aggiorna(Vector3.ZERO, false, 0.0, 1.0 / 60.0)
 	_conta("senza terra sotto i piedi si mescola il salto",
 			float(albero.get("parameters/aria/blend_amount")) > 0.9)
+	palco.queue_free()
+	await process_frame
+
+
+# --------------------------------------------------------- i punti del colpo
+
+## **Quanto vale un colpo** (tappa 11, blocco B, `DECISIONI.md` § 20): 25 il diretto,
+## 50 di sponda con uno, due, tre, quattro o cinque muri — per tutto quello che si può
+## colpire, perché il conto passa dall'`incassa` di ognuno. La controprova: la regola di
+## prima, col raddoppio a ogni muro, allo stesso controllo non passa.
+func _i_punti_del_colpo() -> void:
+	var palco := Node3D.new()
+	root.add_child(palco)
+	var bersaglio := Bersaglio.crea(palco, Vector3(0, 0, -40), Vector3(0, 0, -40), 0.0)
+	var bot := Avversario.crea(palco, Vector3(10, 0, -40))
+	bot.process_mode = Node.PROCESS_MODE_DISABLED
+	var giocatore := Giocatore.new()
+	palco.add_child(giocatore)
+	giocatore.global_position = Vector3(-10, 0, -40)
+	giocatore.process_mode = Node.PROCESS_MODE_DISABLED
+	var visti := {"il bersaglio": [], "l'avversario": [], "chi gioca": []}
+	bersaglio.centrato.connect(func(p: int, _m: int) -> void: visti["il bersaglio"].append(p))
+	bot.preso_da.connect(func(_c: Object, p: int, _m: int) -> void: visti["l'avversario"].append(p))
+	giocatore.preso_da.connect(func(_c: Object, p: int, _m: int) -> void: visti["chi gioca"].append(p))
+	for muri in 6:
+		bersaglio.set("_spento", 0.0)
+		bersaglio.incassa(muri)
+		bot.set("_immunita", 0.0)
+		bot.incassa(muri, giocatore)
+		giocatore.set("_immunita", 0.0)
+		giocatore.incassa(muri, bot)
+	var giusti := [25, 50, 50, 50, 50, 50]
+	for chi in visti:
+		_conta("%s vale 25 diretto e 50 con 1, 2, 3, 4 e 5 muri" % chi, visti[chi] == giusti,
+				str(visti[chi]))
+	var di_prima := []
+	for muri in 6:
+		di_prima.append(25 * int(pow(2, muri)))
+	_conta("la regola di prima, il raddoppio a ogni muro, non passa (controprova)",
+			di_prima != giusti, str(di_prima))
 	palco.queue_free()
 	await process_frame
 
@@ -301,8 +344,13 @@ func _l_arena() -> void:
 	var potenziamenti := arena.get_node("potenziamenti") as Potenziamenti
 	# E le palle rimesse tutte in campo: nei secondi prima, qualcuno può averne presa una.
 	potenziamenti.riparti()
-	_conta("ci sono tre palle colorate, tutte disponibili", potenziamenti.quante_disponibili() == 3,
+	_conta("ci sono sei palle colorate, tutte disponibili", potenziamenti.quante_disponibili() == 6,
 			str(potenziamenti.quante_disponibili()))
+	var tipi := {}
+	for p in potenziamenti.posti():
+		tipi[p["tipo"]] = true
+	_conta("una per tipo", tipi.size() == 6 and tipi.keys().all(
+			func(t: String) -> bool: return Potenziamenti.TIPI.has(t)), str(tipi.keys()))
 	potenziamenti.imposta_ricomparsa(0.6)
 	var posti: Array = potenziamenti.posti()
 	var turbo: Dictionary = posti.filter(func(p: Dictionary) -> bool: return p["tipo"] == "turbo")[0]
@@ -313,9 +361,10 @@ func _l_arena() -> void:
 	_conta("passandoci sopra si prende il turbo", potenziamenti.ha(giocatore, "turbo"))
 	_conta("e il turbo spinge", is_equal_approx(giocatore.spinta, Potenziamenti.SPINTA_TURBO),
 			"%.2f" % giocatore.spinta)
-	_conta("la palla presa sparisce", potenziamenti.quante_disponibili() == 2)
-	# Ci si sposta, o appena ricompare la si riprende subito.
-	giocatore.global_position = (turbo["dove"] as Vector3) + Vector3(4.0, 0.3, 0.0)
+	_conta("la palla presa sparisce", potenziamenti.quante_disponibili() == 5)
+	# Ci si sposta, o appena ricompare la si riprende subito: su un punto di rinascita,
+	# che è libero per costruzione.
+	giocatore.global_position = (arena.get("_rinascite") as Array)[8]["dove"]
 	await _aspetta(0.9)
 	var turbo_c_e := false
 	for p in Potenziamenti.disponibili:
@@ -342,6 +391,8 @@ func _l_arena() -> void:
 	var dopo := int((arena.call("punteggi") as Array)[0])
 	_conta("con i punti doppi un colpo diretto vale 50", dopo - prima == 50, "%d punti" % (dopo - prima))
 
+	await _i_potenziamenti_nuovi(arena, giocatore, bots, potenziamenti)
+
 	# Le particelle: un dardo che prende un corpo schizza gommapiuma.
 	var scintille: Scintille = Scintille.attivo
 	var prima_colpo := scintille.accese("colpo")
@@ -350,6 +401,168 @@ func _l_arena() -> void:
 
 	arena.queue_free()
 	await process_frame
+
+
+## **I quattro potenziamenti nuovi** (tappa 11, blocco B): ognuno si prende passandoci
+## sopra, fa il suo effetto e finisce. Gli avversari restano fermi sotto l'arena; quello
+## che serve a una prova si mette a mano dove la prova lo vuole, e la premessa si
+## controlla prima (LEARNED.md § 19). La fine di un effetto si avvicina a mano: quello
+## che si prova è che finisca, non quanto dura.
+func _i_potenziamenti_nuovi(arena: Node, giocatore: Giocatore, bots: Array,
+		potenziamenti: Potenziamenti) -> void:
+	await _scade_tutto(potenziamenti, giocatore)
+	# Le palle prese non ricompaiono durante le prove, e l'arena non cambia i bersagli da
+	# sola: chi punta chi lo decidono le prove.
+	potenziamenti.imposta_ricomparsa(Potenziamenti.RICOMPARSA)
+	arena.set("_prossima_riscelta", 1000.0)
+	var rinascite: Array = arena.get("_rinascite")
+	var vicino := bots[0] as Avversario
+
+	# FANTASMA.
+	vicino.punta_a(giocatore)
+	_conta("premessa: un avversario ti sta puntando", vicino.bersaglio == giocatore)
+	var preso: bool = await _prendi_la_palla(giocatore, potenziamenti, "fantasma")
+	_conta("passandoci sopra si prende il fantasma", preso)
+	_conta("chi ti stava puntando ti perde", vicino.bersaglio != giocatore)
+	_conta("il corpo è un velo", giocatore.corpo().e_fantasma())
+	giocatore.global_position = rinascite[6]["dove"]
+	_conta("premessa: un avversario a tre metri ti vede", await _a_tre_metri(arena, giocatore, vicino))
+	_conta("col fantasma nessun avversario ti sceglie",
+			arena.call("_chi_attaccare", vicino) != giocatore)
+	await _scade(potenziamenti, giocatore, "fantasma")
+	_conta("finito il fantasma, lo stesso avversario dallo stesso posto ti sceglie (controprova)",
+			arena.call("_chi_attaccare", vicino) == giocatore)
+	_conta("e il corpo torna com'era", not giocatore.corpo().e_fantasma())
+	vicino.global_position = Vector3(0.0, -50.0, 0.0)
+
+	# FULMINE.
+	var velocita := func() -> String:
+		return str(bots.map(func(b: Avversario) -> float: return b.spinta))
+	_conta("premessa: gli avversari vanno a velocità piena",
+			bots.all(func(b: Avversario) -> bool: return is_equal_approx(b.spinta, 1.0)), velocita.call())
+	preso = await _prendi_la_palla(giocatore, potenziamenti, "fulmine")
+	_conta("passandoci sopra si prende il fulmine", preso)
+	_conta("col fulmine gli avversari vanno a metà",
+			bots.all(func(b: Avversario) -> bool: return is_equal_approx(b.spinta, Potenziamenti.FRENO_FULMINE)),
+			velocita.call())
+	_conta("e tu no", giocatore.spinta >= 1.0, "%.2f" % giocatore.spinta)
+	await _scade(potenziamenti, giocatore, "fulmine")
+	_conta("finito il fulmine tornano a velocità piena",
+			bots.all(func(b: Avversario) -> bool: return is_equal_approx(b.spinta, 1.0)), velocita.call())
+
+	# RADAR.
+	_conta("premessa: senza radar nessuna sagoma",
+			bots.all(func(b: Avversario) -> bool: return not _ha_la_sagoma(b.corpo())))
+	preso = await _prendi_la_palla(giocatore, potenziamenti, "radar")
+	_conta("passandoci sopra si prende il radar", preso)
+	await process_frame
+	_conta("col radar ogni avversario ha la sua sagoma dietro i muri",
+			bots.all(func(b: Avversario) -> bool: return _ha_la_sagoma(b.corpo())))
+	# Su chi si vede la sagoma si spegne: sporcherebbe il corpo dove copre sé stesso.
+	var in_vista := (bots[2] as Avversario).corpo()
+	in_vista.aggiorna_la_sagoma(5.0, false)
+	_conta("su un avversario in vista la sagoma si spegne", not _ha_la_sagoma(in_vista))
+	in_vista.aggiorna_la_sagoma(5.0, true)
+	_conta("e torna appena è coperto", _ha_la_sagoma(in_vista))
+	await _scade(potenziamenti, giocatore, "radar")
+	await process_frame
+	_conta("finito il radar le sagome si spengono",
+			bots.all(func(b: Avversario) -> bool: return not _ha_la_sagoma(b.corpo())))
+
+	# LADRO.
+	var righe: Array = arena.get("_concorrenti")
+	var vittima := bots[1] as Avversario
+	var mia := -1
+	var sua := -1
+	for i in righe.size():
+		if righe[i]["corpo"] == giocatore:
+			mia = i
+		elif righe[i]["corpo"] == vittima:
+			sua = i
+	preso = await _prendi_la_palla(giocatore, potenziamenti, "ladro")
+	_conta("passandoci sopra si prende il ladro", preso)
+	righe[sua]["punti"] = 30
+	var miei := int(righe[mia]["punti"])
+	vittima.set("_immunita", 0.0)
+	vittima.incassa(0, giocatore)
+	_conta("col ladro il colpo toglie a chi lo incassa i punti che dà a te",
+			int(righe[sua]["punti"]) == 5 and int(righe[mia]["punti"]) == miei + 25,
+			"lui %d, tu +%d" % [int(righe[sua]["punti"]), int(righe[mia]["punti"]) - miei])
+	vittima.set("_immunita", 0.0)
+	vittima.incassa(0, giocatore)
+	_conta("e chi incassa non scende sotto zero",
+			int(righe[sua]["punti"]) == 0 and int(righe[mia]["punti"]) == miei + 50,
+			"lui %d, tu +%d" % [int(righe[sua]["punti"]), int(righe[mia]["punti"]) - miei])
+	await _scade(potenziamenti, giocatore, "ladro")
+	righe[sua]["punti"] = 30
+	vittima.set("_immunita", 0.0)
+	vittima.incassa(0, giocatore)
+	_conta("finito il ladro, chi incassa non perde niente (controprova)",
+			int(righe[sua]["punti"]) == 30, "lui %d" % int(righe[sua]["punti"]))
+	# E dall'altra parte: un avversario col ladro ti ruba, e l'annuncio lo dice.
+	var effetti: Dictionary = potenziamenti.get("_effetti")
+	effetti[vittima.get_instance_id()] = {"ladro": 5.0}
+	righe[mia]["punti"] = 40
+	giocatore.set("_immunita", 0.0)
+	giocatore.incassa(0, vittima)
+	var annuncio := (giocatore.comandi.get("_avviso") as Label).text
+	_conta("un avversario col ladro ti toglie i punti", int(righe[mia]["punti"]) == 15,
+			"%d" % int(righe[mia]["punti"]))
+	_conta("e l'annuncio lo dice", annuncio == "%s TI HA RUBATO 25" % vittima.personaggio, annuncio)
+	effetti.erase(vittima.get_instance_id())
+	arena.set("_prossima_riscelta", Arena.RISCELTA)
+
+
+## Chi gioca va sopra la palla di quel tipo: risponde se l'ha presa.
+func _prendi_la_palla(giocatore: Giocatore, potenziamenti: Potenziamenti, tipo: String) -> bool:
+	var posto: Dictionary = potenziamenti.posti().filter(
+			func(p: Dictionary) -> bool: return p["tipo"] == tipo)[0]
+	giocatore.global_position = (posto["dove"] as Vector3) + Vector3(0, 0.3, 0)
+	giocatore.velocity = Vector3.ZERO
+	await _aspetta(0.25)
+	return potenziamenti.ha(giocatore, tipo)
+
+
+## La fine di un effetto, avvicinata a mano.
+func _scade(potenziamenti: Potenziamenti, chi: Node3D, tipo: String) -> void:
+	var effetti: Dictionary = (potenziamenti.get("_effetti") as Dictionary).get(chi.get_instance_id(), {})
+	if effetti.has(tipo):
+		effetti[tipo] = 0.01
+	await _aspetta(0.15)
+
+
+func _scade_tutto(potenziamenti: Potenziamenti, chi: Node3D) -> void:
+	var effetti: Dictionary = (potenziamenti.get("_effetti") as Dictionary).get(chi.get_instance_id(), {})
+	for tipo in effetti:
+		effetti[tipo] = 0.01
+	await _aspetta(0.15)
+
+
+## Mette un avversario a tre metri da chi gioca, nella prima direzione da cui si vedono,
+## e risponde se l'ha trovata.
+func _a_tre_metri(arena: Node, giocatore: Giocatore, bot: Avversario) -> bool:
+	await _aspetta(0.2)
+	for k in 8:
+		var verso := Vector3.FORWARD.rotated(Vector3.UP, TAU * float(k) / 8.0)
+		bot.global_position = giocatore.global_position + verso * 3.0
+		await physics_frame
+		await physics_frame
+		if bool(arena.call("_si_vedono", giocatore, bot)):
+			return true
+	return false
+
+
+## Il corpo ha la sagoma del radar appesa a qualche pezzo: una passata disegnata solo
+## dietro le cose.
+func _ha_la_sagoma(corpo: Corpo) -> bool:
+	for nodo in corpo.find_children("*", "MeshInstance3D", true, false):
+		var materiale: Material = (nodo as MeshInstance3D).material_override
+		while materiale != null:
+			if materiale is BaseMaterial3D \
+					and (materiale as BaseMaterial3D).depth_test == BaseMaterial3D.DEPTH_TEST_INVERTED:
+				return true
+			materiale = materiale.next_pass
+	return false
 
 
 ## **I corpi costano poco** (04/10/2026). In Compatibility ogni corpo animato si

@@ -210,10 +210,15 @@ var _canna: Node3D
 var _scalino := 0.0
 ## Il corpo vero (tappa 8): chi è, e il nodo che corre, spara e accusa i colpi.
 var personaggio := "BRACE"
-## Il turbo dei potenziamenti (tappa 8, blocco H): lo accende `Potenziamenti`.
+## Il turbo dei potenziamenti (tappa 8, blocco H): lo accende `Potenziamenti`. Il
+## FULMINE di un altro la porta a metà (tappa 11, blocco B).
 var spinta := 1.0
+## Il RADAR (tappa 11, blocco B): finché dura sa sempre dov'è il suo bersaglio, anche
+## dietro un muro. Lo accende `Potenziamenti`; chi attaccare lo decide l'arena.
+var radar := false
 var _corpo: Corpo
 var _targhetta: Label3D
+var _fantasma := false
 
 
 static func crea(genitore: Node, dove: Vector3, livello: int = 1, chi := "BRACE") -> Avversario:
@@ -327,6 +332,19 @@ func immune() -> bool:
 	return _immunita > 0.0
 
 
+## Il corpo vero: serve all'arena, che ci accende la sagoma del radar.
+func corpo() -> Corpo:
+	return _corpo
+
+
+## Il FANTASMA (tappa 11, blocco B): il corpo diventa un velo e il nome sopra la testa
+## si spegne. Lo accende `Potenziamenti`.
+func fantasma(acceso: bool) -> void:
+	_fantasma = acceso
+	if _corpo != null:
+		_corpo.fantasma(acceso)
+
+
 ## Dove mira adesso: il punto **davanti** al bersaglio, non il bersaglio.
 ## È pubblica perché è la cosa che il collaudo deve poter guardare da fuori.
 func punto_di_mira() -> Vector3:
@@ -414,7 +432,11 @@ func _guarda_il_bersaglio(delta: float) -> void:
 		# spegne — non si anticipa un fantasma. La notizia intanto invecchia.
 		_vedeva = false
 		_velocita_vista = _velocita_vista.lerp(Vector3.ZERO, minf(delta * 4.0, 1.0))
-		if _eta_notizia >= 0.0:
+		if radar:
+			# Col RADAR la notizia è sempre fresca: sa dov'è anche dietro un muro.
+			_notizia = bersaglio.global_position
+			_eta_notizia = 0.0
+		elif _eta_notizia >= 0.0:
 			_eta_notizia += delta
 		return
 	if caccia:
@@ -538,7 +560,8 @@ func _muovi(delta: float) -> void:
 	var voluta := Vector3.ZERO
 	if _schivata > 0.0:
 		_schivata -= delta
-		voluta = _verso_schivata * VELOCITA_SCHIVATA
+		# Il turbo non allunga il balzo, come prima; il FULMINE lo accorcia.
+		voluta = _verso_schivata * VELOCITA_SCHIVATA * minf(spinta, 1.0)
 	elif bersaglio != null and is_instance_valid(bersaglio):
 		voluta = _direzione_tattica(delta) * Giocatore.VELOCITA * spinta
 	else:
@@ -1005,8 +1028,14 @@ func _aggiorna_i_contorni() -> void:
 	# Il contorno del corpo vero sono passate in più dei suoi materiali (`Corpo`).
 	if _corpo != null:
 		_corpo.accendi_contorni(quanto > 0.0)
+		# La sagoma del RADAR di chi gioca: solo finché dura, un raggio a fotogramma.
+		if _corpo.radar_acceso():
+			var petto := global_position + Vector3(0, ALTEZZA_PETTO, 0)
+			var domanda := PhysicsRayQueryParameters3D.create(camera.global_position, petto, Strati.SOLIDO)
+			_corpo.aggiorna_la_sagoma(distanza,
+					not get_world_3d().direct_space_state.intersect_ray(domanda).is_empty())
 	if _targhetta != null:
-		_targhetta.visible = quanto > 0.0
+		_targhetta.visible = quanto > 0.0 and not _fantasma
 		_targhetta.modulate.a = 0.95 * quanto
 		_targhetta.outline_modulate.a = 0.85 * quanto
 

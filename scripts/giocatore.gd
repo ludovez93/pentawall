@@ -245,6 +245,12 @@ func corpo() -> Corpo:
 	return _corpo
 
 
+## Il FANTASMA (tappa 11, blocco B): il corpo diventa un velo. Lo accende `Potenziamenti`.
+func fantasma(acceso: bool) -> void:
+	if _corpo != null:
+		_corpo.fantasma(acceso)
+
+
 ## L'hanno preso. Stesso conto di tutti: 25 punti, 50 se di sponda.
 ## Restituisce falso se era immune, così chi ha sparato sa se ha fatto punti.
 func incassa(muri: int, da: Object = null) -> bool:

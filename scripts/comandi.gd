@@ -594,8 +594,7 @@ var _podio_posizione: Label
 var _righe_podio: Array[Dictionary] = []
 var _fischio: Label
 var _tempo_fischio := 0.0
-var _pillola_potenziamento: PanelContainer
-var _testo_potenziamento: Label
+var _pillole: HBoxContainer
 
 
 static func carattere_testo() -> Font:
@@ -766,35 +765,50 @@ func podio(righe: Array, posizione: int) -> void:
 		_bottone_esci.visible = false
 
 
-## **La pillola del potenziamento** (tappa 8, blocco H): sotto il cronometro, nel
-## colore della palla presa, con i secondi che restano. Testo vuoto = spenta.
-func potenziamento(testo: String, colore: Color) -> void:
-	if testo == "":
-		if _pillola_potenziamento != null:
-			_pillola_potenziamento.visible = false
-		return
-	if _pillola_potenziamento == null:
-		_pillola_potenziamento = PanelContainer.new()
-		_pillola_potenziamento.set_anchors_preset(Control.PRESET_CENTER_TOP)
-		_pillola_potenziamento.grow_horizontal = Control.GROW_DIRECTION_BOTH
-		_pillola_potenziamento.offset_top = 86
-		_pillola_potenziamento.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var fondo := StyleBoxFlat.new()
-		fondo.set_corner_radius_all(16)
-		fondo.content_margin_left = 18
-		fondo.content_margin_right = 18
-		fondo.content_margin_top = 2
-		fondo.content_margin_bottom = 4
-		_pillola_potenziamento.add_theme_stylebox_override("panel", fondo)
-		_testo_potenziamento = _etichetta(24, Color(0.06, 0.04, 0.10, 1.0))
-		_testo_potenziamento.add_theme_font_override("font", carattere_titolo())
-		_testo_potenziamento.add_theme_constant_override("outline_size", 0)
-		_pillola_potenziamento.add_child(_testo_potenziamento)
-		add_child(_pillola_potenziamento)
-	var fondo_attuale := _pillola_potenziamento.get_theme_stylebox("panel") as StyleBoxFlat
-	fondo_attuale.bg_color = Color(colore.r, colore.g, colore.b, 0.92)
-	_testo_potenziamento.text = testo
-	_pillola_potenziamento.visible = true
+## **Le pillole dei potenziamenti** (tappa 8, blocco H; tutte insieme dalla tappa 11):
+## sotto il cronometro, una per potenziamento, nel colore della sua palla e con i
+## secondi che restano. `voci`: `[{"testo", "colore"}]`; vuoto = spente.
+func potenziamenti(voci: Array) -> void:
+	if _pillole == null:
+		if voci.is_empty():
+			return
+		# Larga quanto lo schermo e centrata dentro: con una pillola o con sei, la fila
+		# resta sotto il cronometro.
+		_pillole = HBoxContainer.new()
+		_pillole.set_anchors_preset(Control.PRESET_TOP_WIDE)
+		_pillole.offset_top = 86
+		_pillole.alignment = BoxContainer.ALIGNMENT_CENTER
+		_pillole.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_pillole.add_theme_constant_override("separation", 8)
+		add_child(_pillole)
+	while _pillole.get_child_count() < voci.size():
+		_pillole.add_child(_pillola())
+	for i in _pillole.get_child_count():
+		var pillola := _pillole.get_child(i) as PanelContainer
+		pillola.visible = i < voci.size()
+		if not pillola.visible:
+			continue
+		var colore: Color = voci[i]["colore"]
+		(pillola.get_theme_stylebox("panel") as StyleBoxFlat).bg_color = Color(colore.r, colore.g, colore.b, 0.92)
+		(pillola.get_child(0) as Label).text = String(voci[i]["testo"])
+	_pillole.visible = not voci.is_empty()
+
+
+func _pillola() -> PanelContainer:
+	var pillola := PanelContainer.new()
+	pillola.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var fondo := StyleBoxFlat.new()
+	fondo.set_corner_radius_all(16)
+	fondo.content_margin_left = 18
+	fondo.content_margin_right = 18
+	fondo.content_margin_top = 2
+	fondo.content_margin_bottom = 4
+	pillola.add_theme_stylebox_override("panel", fondo)
+	var testo := _etichetta(24, Color(0.06, 0.04, 0.10, 1.0))
+	testo.add_theme_font_override("font", carattere_titolo())
+	testo.add_theme_constant_override("outline_size", 0)
+	pillola.add_child(testo)
+	return pillola
 
 
 func spegni_il_podio() -> void:

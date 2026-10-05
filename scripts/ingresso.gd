@@ -465,6 +465,9 @@ func _scalda_l_arena(arena: Node) -> void:
 	arena.add_child(comparsa)
 	comparsa.contorni(Color(0.03, 0.03, 0.06), Color(Avversario.ALONI[0]["colore"]),
 			Avversario.SPESSORE_FILO)
+	# E la sagoma del RADAR (tappa 11, blocco B), l'unico shader nuovo dei potenziamenti:
+	# il velo del FANTASMA è lo shader del contorno, già qui sopra.
+	comparsa.radar(true, Potenziamenti.TIPI["radar"]["colore"])
 	var targhetta := Avversario.targhetta("QUARZO")
 	targhetta.position = Vector3(0.0, 2.1, 0.0)
 	comparsa.add_child(targhetta)

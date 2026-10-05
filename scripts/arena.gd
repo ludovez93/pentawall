@@ -225,6 +225,8 @@ var _tabellone: Node3D
 var _prossimo_tabellone := 0.0
 ## Le palle colorate (tappa 8, blocco H).
 var _potenziamenti: Potenziamenti
+## Le sagome del tuo RADAR sono accese (tappa 11, blocco B).
+var _radar_acceso := false
 
 
 func _ready() -> void:
@@ -922,7 +924,7 @@ func _process(delta: float) -> void:
 			_guarda_la_classifica(delta)
 	if _modo_partita and _sfida:
 		_comandi.modalita_partita(tempo_scritto(), maxi(posizione_mia(), 1), punteggi()[0])
-	_scrivi_il_potenziamento()
+	_segui_i_potenziamenti()
 	for tasto in SCORCIATOIE:
 		var giu := Input.is_physical_key_pressed(tasto)
 		if giu and not bool(_tasti.get(tasto, false)):
@@ -937,15 +939,27 @@ func _process(delta: float) -> void:
 		_tasti[tasto] = giu
 
 
-## **Dove stanno le palle colorate** (tappa 8, blocco H): una nel catino, al centro
-## di tutto e conteso; una sul ballatoio, che domina l'arena; una sulla terrazza
-## nord-est, in cima alla scala. Posti dove si incrociano le strade, mai su una
-## partenza. *Scelta di lavorazione del 03/10/2026.*
+## **Dove stanno le palle colorate**: sei, una per tipo (tappa 11, blocco B). Ognuna
+## dove passano più strade nella sua ala — misurato coi 276 percorsi della rete di
+## cammino fra tutti i punti di rinascita — a più di 6 m da partenze e rinascite, mai su
+## una rampa (`ricerca-grezza/stato-2026-10-05/sfere-sei.png`, approvata da Ludovico il
+## 05/10/2026). Ballatoio e terrazza nord-est sono i posti della tappa 8; chi va dove è
+## scelta mia: i punti doppi nel posto più scomodo, il radar in alto, il fulmine al
+## centro dove sono tutti, il turbo nel corridoio lungo.
 const POTENZIAMENTI := [
-	{"tipo": "turbo", "dove": Vector3(0.0, -2.0, 7.2)},
 	{"tipo": "doppio", "dove": Vector3(6.0, 7.0, 21.5)},
-	{"tipo": "turbo", "dove": Vector3(27.0, 3.5, -27.0)},
+	{"tipo": "radar", "dove": Vector3(27.0, 3.5, -27.0)},
+	{"tipo": "fulmine", "dove": Vector3(9.0, -2.0, 0.0)},
+	{"tipo": "turbo", "dove": Vector3(23.0, 0.0, 11.0)},
+	{"tipo": "fantasma", "dove": Vector3(-21.0, 0.0, 4.0)},
+	{"tipo": "ladro", "dove": Vector3(-3.0, 0.0, -21.0)},
 ]
+
+## Quando un avversario prende una palla si annuncia solo se ti tocca da vicino: i
+## punti doppi e il ladro pesano sui tuoi punti, il fulmine ti rallenta. Fantasma e
+## radar restano zitti: sono armi di nascosto.
+const ANNUNCI_ALTRUI := {"doppio": "%s HA I PUNTI DOPPI", "fulmine": "%s HA IL FULMINE",
+	"ladro": "%s HA IL LADRO"}
 
 
 ## Chi può raccogliere una palla colorata: tutti i corpi in campo durante la partita.
@@ -962,38 +976,50 @@ func _corpi_in_campo() -> Array:
 
 func _su_potenziamento_preso(chi: Node3D, tipo: String) -> void:
 	var dati: Dictionary = Potenziamenti.TIPI[tipo]
+	if tipo == "fantasma":
+		# Chi ti stava puntando ti perde adesso, non alla prossima riscelta.
+		for bot in avversari():
+			if bot.bersaglio == chi:
+				bot.punta_a(_chi_attaccare(bot))
 	if chi == _giocatore:
 		_comandi.annuncia(String(dati["nome"]) + "!")
 		Suoni.potenziamento(true)
-		if tipo == "doppio":
-			_giocatore.moltiplicatore_punti = 2
 	else:
 		Suoni.potenziamento(false)
-		# I punti doppi di un avversario sono una minaccia: si dice chi li ha.
-		if tipo == "doppio":
-			var riga := _riga_di(chi)
-			if riga >= 0:
-				_comandi.annuncia("%s HA I PUNTI DOPPI" % String(_concorrenti[riga]["nome"]))
+		var riga := _riga_di(chi)
+		if riga >= 0 and ANNUNCI_ALTRUI.has(tipo):
+			_comandi.annuncia(String(ANNUNCI_ALTRUI[tipo]) % String(_concorrenti[riga]["nome"]))
 
 
-func _su_potenziamento_finito(chi: Node3D, tipo: String) -> void:
+func _su_potenziamento_finito(chi: Node3D, _tipo: String) -> void:
 	if chi == _giocatore:
 		Suoni.potenziamento_finito()
-		if tipo == "doppio":
-			_giocatore.moltiplicatore_punti = 1
 
 
-## La pillola del potenziamento sotto il cronometro: cosa hai e quanto ti resta.
-func _scrivi_il_potenziamento() -> void:
-	if _potenziamenti == null or _giocatore == null:
+## Quello che dei tuoi potenziamenti vale per te: i punti doppi nell'etichetta del colpo
+## e, col RADAR, le sagome di tutti gli avversari attraverso i muri. Si guarda a ogni
+## fotogramma cosa hai, invece di accendere e spegnere: così a partita chiusa o rifatta
+## a metà non resta acceso niente (fino al 05/10/2026 i punti doppi restavano, se si
+## chiudeva la partita prima che scadessero).
+func _segui_i_potenziamenti() -> void:
+	if _potenziamenti == null or _giocatore == null or _comandi == null:
 		return
-	for tipo in ["doppio", "turbo"]:
+	_giocatore.moltiplicatore_punti = 2 if _potenziamenti.ha(_giocatore, "doppio") else 1
+	var radar := _sfida and not _finita and _potenziamenti.ha(_giocatore, "radar")
+	if radar != _radar_acceso:
+		_radar_acceso = radar
+		for bot in avversari():
+			if bot.corpo() != null:
+				bot.corpo().radar(radar, Potenziamenti.TIPI["radar"]["colore"])
+	# Le pillole sotto il cronometro: tutti quelli che hai, con quanto ti resta.
+	var voci: Array = []
+	for tipo in Potenziamenti.TIPI:
 		var resto := _potenziamenti.resto(_giocatore, tipo)
 		if resto > 0.0:
 			var dati: Dictionary = Potenziamenti.TIPI[tipo]
-			_comandi.potenziamento("%s · %d" % [String(dati["nome"]), int(ceil(resto))], dati["colore"])
-			return
-	_comandi.potenziamento("", Color.WHITE)
+			voci.append({"testo": "%s · %d" % [String(dati["nome"]), int(ceil(resto))],
+					"colore": dati["colore"]})
+	_comandi.potenziamenti(voci)
 
 
 ## Il tabellone sopra il catino: durante la partita il tempo e chi comanda, a
@@ -1345,11 +1371,16 @@ func _scegli_i_bersagli(delta: float) -> void:
 ##
 ## Si controllano col raggio solo i tre più vicini: il quarto, in un'arena da
 ## sessantasei metri, è dall'altra parte comunque.
+##
+## I potenziamenti (tappa 11, blocco B): **il FANTASMA non lo sceglie nessuno**, e chi
+## ha **il RADAR** sa dove sono tutti — prende il più vicino, che lo veda o no.
 func _chi_attaccare(bot: Avversario) -> Node3D:
 	var altri: Array = []
 	for riga in _concorrenti:
 		var corpo: Node3D = riga["corpo"]
 		if corpo == null or corpo == bot or not is_instance_valid(corpo):
+			continue
+		if _potenziamenti.ha(corpo, "fantasma"):
 			continue
 		altri.append({"corpo": corpo,
 				"quanto": bot.global_position.distance_to(corpo.global_position)})
@@ -1357,6 +1388,8 @@ func _chi_attaccare(bot: Avversario) -> Node3D:
 		return null
 	altri.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return float(a["quanto"]) < float(b["quanto"]))
+	if _potenziamenti.ha(bot, "radar"):
+		return altri[0]["corpo"] as Node3D
 
 	var scelto: Node3D = null
 	var quanto_scelto := 0.0
@@ -1372,7 +1405,8 @@ func _chi_attaccare(bot: Avversario) -> Node3D:
 	# Chi ce l'ha già davanti se lo tiene, se non è molto più lontano di quello
 	# nuovo: cambiare preda per mezzo metro vuol dire non attaccarne mai nessuno.
 	var attuale := bot.bersaglio
-	if attuale != null and is_instance_valid(attuale) and attuale != scelto:
+	if attuale != null and is_instance_valid(attuale) and attuale != scelto \
+			and not _potenziamenti.ha(attuale, "fantasma"):
 		var quanto := bot.global_position.distance_to(attuale.global_position)
 		if quanto <= quanto_scelto * AFFEZIONE and _si_vedono(bot, attuale):
 			return attuale
@@ -1401,7 +1435,6 @@ func _finisci_la_partita() -> void:
 	_tempo = 0.0
 	_sonda.fermati("traguardo")
 	_potenziamenti.riparti()
-	_giocatore.moltiplicatore_punti = 1
 	for bot in avversari():
 		bot.bersaglio = null
 	_aggiorna_la_classifica()
@@ -1445,6 +1478,13 @@ func _su_colpo_valido(chi_spara: Object, punti: int, muri: int, chi_incassa: Nod
 	# I punti doppi di chi spara (tappa 8, blocco H).
 	if _potenziamenti != null and _potenziamenti.ha(chi_spara, "doppio"):
 		punti *= 2
+	# Il LADRO di chi spara (tappa 11, blocco B): chi incassa perde i punti che il colpo
+	# dà a chi spara, mai sotto zero.
+	var rubati := 0
+	var vittima := _riga_di(chi_incassa)
+	if autore >= 0 and vittima >= 0 and _potenziamenti.ha(chi_spara, "ladro"):
+		rubati = mini(punti, int(_concorrenti[vittima]["punti"]))
+		_concorrenti[vittima]["punti"] = int(_concorrenti[vittima]["punti"]) - rubati
 	if autore >= 0:
 		_concorrenti[autore]["punti"] = int(_concorrenti[autore]["punti"]) + punti
 		if chi_spara == _giocatore:
@@ -1453,6 +1493,8 @@ func _su_colpo_valido(chi_spara: Object, punti: int, muri: int, chi_incassa: Nod
 			# alla gara: «SEI PRIMO», l'ultimo minuto.
 			if not _modo_partita:
 				_comandi.annuncia(Comandi.annuncio_del_colpo(punti, muri))
+		elif chi_incassa == _giocatore and rubati > 0:
+			_comandi.annuncia("%s TI HA RUBATO %d" % [String(_concorrenti[autore]["nome"]), rubati])
 		elif chi_incassa == _giocatore:
 			_comandi.annuncia("COLPITO DA %s" % String(_concorrenti[autore]["nome"]))
 		else:

@@ -126,10 +126,16 @@ var _lampeggio := false
 ## Si parte «in ritardo», così il primo fotogramma in scena ha già la sua posa.
 var _turno := 1 << 20
 var _accumulato := 0.0
-## Le passate del contorno: per ogni pezzo di pelle, il materiale e il primo guscio
-## da appendergli dietro (`contorni`).
-var _contorno: Array = []
+## Le passate in più di ogni pezzo di pelle: `{materiale del pezzo: [filo del contorno,
+## sagoma del radar]}`, ognuna null finché non serve. Il filo si porta dietro il contorno
+## acceso (`contorni`); la sagoma va in coda a tutto (`radar`).
+var _passate := {}
 var _contorno_acceso := false
+var _radar_acceso := false
+## Il corpo è coperto per chi guarda: la sagoma si disegna solo allora.
+var _coperto := true
+## Il FANTASMA: i materiali veri dei pezzi, messi da parte finché il corpo è un velo.
+var _materiali_veri := {}
 
 
 static func crea(nome: String) -> Corpo:
@@ -307,21 +313,11 @@ func bocca() -> Vector3:
 ## già deformato.
 func contorni(scuro: Color, acceso: Color, quota_filo: float) -> Array:
 	var fuori := []
-	_contorno.clear()
-	for nodo in _tutti(_modello):
-		if not (nodo is MeshInstance3D):
-			continue
-		var pezzo := nodo as MeshInstance3D
-		if pezzo.name.begins_with("Eye") or _e_blaster(pezzo):
-			continue
-		# La passata si appende al materiale del pezzo, che dev'essere solo suo: il
-		# corpo ha già la sua tuta, i capelli la loro tinta.
-		if pezzo.material_override == null:
-			pezzo.material_override = pezzo.get_active_material(0).duplicate()
+	for pezzo in _pezzi_di_pelle():
 		var filo := pelle_contorno(scuro)
 		var esterno := pelle_contorno(acceso)
 		filo.next_pass = esterno
-		_contorno.append([pezzo.material_override, filo])
+		_passate_di(pezzo)[0] = filo
 		fuori.append({"materiale": filo, "quota": quota_filo})
 		fuori.append({"materiale": esterno, "quota": 1.0})
 	_contorno_acceso = false
@@ -335,12 +331,136 @@ func accendi_contorni(acceso: bool) -> void:
 	if acceso == _contorno_acceso:
 		return
 	_contorno_acceso = acceso
-	for coppia in _contorno:
-		(coppia[0] as Material).next_pass = coppia[1] if acceso else null
+	_ricomponi_le_passate()
 
 
 func contorni_accesi() -> bool:
 	return _contorno_acceso
+
+
+## **La sagoma del RADAR** (tappa 11, blocco B): chi ha il radar vede questo corpo
+## attraverso i muri, nel colore del radar. È una passata in coda alle altre che si
+## disegna **solo dove il corpo è coperto** (profondità invertita: in Compatibility c'è,
+## `rasterizer_scene_gles3.cpp` di 4.7.2), così il corpo che si vede resta com'è.
+## È l'unico shader nuovo del blocco: l'ingresso lo scalda (`Ingresso._scalda_l_arena`).
+func radar(acceso: bool, colore: Color) -> void:
+	if acceso == _radar_acceso:
+		return
+	_radar_acceso = acceso
+	if acceso:
+		for pezzo in _pezzi_di_pelle():
+			var passate := _passate_di(pezzo)
+			if passate[1] == null:
+				passate[1] = pelle_sagoma(colore)
+	_ricomponi_le_passate()
+
+
+func radar_acceso() -> bool:
+	return _radar_acceso
+
+
+## Quanto si gonfia la sagoma, in metri per metro di distanza dalla camera. Senza, in
+## fondo all'arena un corpo è una figurina di dieci pixel e il radar non trova nessuno
+## (visto negli scatti del 05/10/2026): così il bordo resta di qualche pixel a ogni
+## distanza, come il contorno (`Avversario.SPESSORE_PER_METRO`). La sagoma si disegna
+## solo dove il corpo è coperto, quindi il gonfiore non sporca mai un corpo che si vede.
+const GONFIORE_SAGOMA := 0.015
+
+
+## La sagoma segue la distanza e si mostra solo su chi è coperto: la chiama chi porta il
+## corpo, a ogni fotogramma. Su un corpo in vista la profondità invertita la disegnerebbe
+## dove il corpo copre sé stesso — una gamba dietro l'altra — e il corpo prendeva
+## chiazze verdi (scatti del 05/10/2026).
+func aggiorna_la_sagoma(distanza: float, coperto: bool) -> void:
+	if not _radar_acceso:
+		return
+	var gonfiore := clampf(distanza * GONFIORE_SAGOMA, 0.03, 0.8)
+	for materiale in _passate:
+		var sagoma := _passate[materiale][1] as StandardMaterial3D
+		if sagoma != null:
+			sagoma.grow_amount = gonfiore
+	if coperto != _coperto:
+		_coperto = coperto
+		_ricomponi_le_passate()
+
+
+## **Il FANTASMA** (tappa 11, blocco B): il corpo diventa un velo. Ogni pezzo, blaster
+## compreso, prende la pelle del contorno senza crescita e quasi trasparente: lo
+## **stesso shader** del contorno, già scaldato, quindi sul telefono niente da compilare
+## (in Compatibility la trasparenza di un oggetto intero non c'è: la documentazione di
+## `GeometryInstance3D.transparency`, 4.7.2). Le passate restano appese ai materiali veri,
+## e il velo non ne ha: il fantasma non ha contorno e non compare nemmeno col radar.
+func fantasma(acceso: bool) -> void:
+	if acceso == e_fantasma():
+		return
+	if acceso:
+		# I pezzi di pelle col loro materiale proprio, prima di metterlo da parte: è a
+		# quello che il radar appende la sagoma, anche mentre il corpo è un velo.
+		_pezzi_di_pelle()
+	for nodo in _tutti(_modello):
+		if not (nodo is MeshInstance3D):
+			continue
+		var pezzo := nodo as MeshInstance3D
+		if acceso:
+			_materiali_veri[pezzo] = pezzo.material_override
+			pezzo.material_override = velo()
+		else:
+			pezzo.material_override = _materiali_veri.get(pezzo)
+	if not acceso:
+		_materiali_veri.clear()
+
+
+func e_fantasma() -> bool:
+	return not _materiali_veri.is_empty()
+
+
+static var _velo: StandardMaterial3D = null
+
+
+static func velo() -> StandardMaterial3D:
+	if _velo == null:
+		_velo = pelle_contorno(Color(0.80, 0.88, 1.0, 0.16))
+		_velo.grow_amount = 0.0
+	return _velo
+
+
+## I pezzi che si vedono da fuori: corpo e capelli. Occhi e sopracciglia stanno dentro
+## la testa, e il blaster è un'altra cosa. Il materiale di ognuno dev'essere solo suo,
+## perché le passate gli si appendono dietro: il corpo ha già la sua tuta, i capelli
+## la loro tinta, gli altri si duplicano.
+func _pezzi_di_pelle() -> Array[MeshInstance3D]:
+	var pezzi: Array[MeshInstance3D] = []
+	for nodo in _tutti(_modello):
+		if not (nodo is MeshInstance3D):
+			continue
+		var pezzo := nodo as MeshInstance3D
+		if pezzo.name.begins_with("Eye") or _e_blaster(pezzo):
+			continue
+		if pezzo.material_override == null:
+			pezzo.material_override = pezzo.get_active_material(0).duplicate()
+		pezzi.append(pezzo)
+	return pezzi
+
+
+func _passate_di(pezzo: MeshInstance3D) -> Array:
+	# Da fantasma il materiale del pezzo è il velo: le passate sono di quello vero.
+	var materiale: Material = _materiali_veri.get(pezzo, pezzo.material_override)
+	if not _passate.has(materiale):
+		_passate[materiale] = [null, null]
+	return _passate[materiale]
+
+
+## Il pezzo, poi il contorno se è acceso (filo e poi acceso), poi la sagoma se c'è il
+## radar e il corpo è coperto.
+func _ricomponi_le_passate() -> void:
+	for materiale: Material in _passate:
+		var filo: Material = _passate[materiale][0]
+		var sagoma: Material = _passate[materiale][1]
+		var coda := materiale
+		if _contorno_acceso and filo != null:
+			materiale.next_pass = filo
+			coda = filo.next_pass
+		coda.next_pass = sagoma if _radar_acceso and _coperto else null
 
 
 ## **Il blaster dritto sulla mira.** La mano della posa di mira è girata come la
@@ -677,6 +797,20 @@ static func pelle_contorno(colore: Color) -> StandardMaterial3D:
 	materiale.grow = true
 	materiale.grow_amount = 0.055
 	materiale.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	materiale.disable_receive_shadows = true
+	return materiale
+
+
+## La pelle della sagoma del radar: senza luci, quasi piena, gonfiabile, e disegnata
+## solo dietro le cose (`radar`).
+static func pelle_sagoma(colore: Color) -> StandardMaterial3D:
+	var materiale := StandardMaterial3D.new()
+	materiale.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	materiale.albedo_color = Color(colore.r, colore.g, colore.b, 0.8)
+	materiale.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	materiale.depth_test = BaseMaterial3D.DEPTH_TEST_INVERTED
+	materiale.grow = true
+	materiale.grow_amount = 0.03
 	materiale.disable_receive_shadows = true
 	return materiale
 
