@@ -45,6 +45,17 @@ const GRUPPO := &"giocattolo"
 ## Di quanto sporgono dalla scatola del muro cappello, zoccolo e montanti, in metri.
 const SPORGE := 0.04
 
+## **Nessuna faccia in pari con un'altra** (`tools/facce_doppie.gd`). Due facce nello
+## stesso piano lampeggiano a ogni movimento della camera: dal telefono, il 05/10/2026,
+## *«le parti superiori di alcune forme lampeggiavano veloci»* — corpo, cappello e
+## montanti finivano alla stessa quota. Il corpo rientra dentro zoccolo e cappello, i
+## montanti dentro il cappello, il cappello sporge più dei montanti, e zoccolo e montanti
+## si staccano di `STACCO` dal pavimento.
+const STACCO := 0.01
+## Dove una terrazza passa sopra un muro alla quota della sua cima (i muri che la reggono),
+## il modulo finisce di tanto sotto il pavimento: in pari, i due piani lampeggiavano.
+const SOTTO_IL_PIANO := 0.03
+
 const ARANCIO := Color(0.98, 0.50, 0.08)
 const BLU := Color(0.12, 0.27, 0.82)
 const ROSSO := Color(0.90, 0.19, 0.22)
@@ -177,10 +188,29 @@ static func _muri(arena: Arena, pianta: Dictionary, materiale: Material) -> void
 	for chiave in per_settore:
 		var getto := Getto.new()
 		for corpo: StaticBody3D in per_settore[chiave]:
-			_modulo(getto, muri[int(corpo.get_meta(&"muro"))], corpo.transform, pannelli)
+			var m: Dictionary = muri[int(corpo.get_meta(&"muro"))]
+			_modulo(getto, m, corpo.transform, pannelli, _sotto_un_piano(arena, pianta, m, corpo.transform))
 		_posa(arena, getto.mesh(), materiale, "muri %s" % chiave)
 		await arena._respiro()
 	_decalchi(arena, pianta, pannelli)
+
+
+## Se un pavimento passa sopra il muro alla quota della sua cima: si guarda in quindici
+## punti dell'impronta, sui pezzi dei pavimenti già ritagliati dalle rampe.
+static func _sotto_un_piano(arena: Arena, pianta: Dictionary, m: Dictionary, posto: Transform3D) -> bool:
+	var cima := float(m["quota"]) + float(m["alto"])
+	var meta := Vector3(float(m["misura"][0]) * 0.5 - 0.05, 0.0, float(m["misura"][1]) * 0.5 - 0.05)
+	var zone: Array = pianta["zone"]
+	for z in zone.size():
+		if absf(float(zone[z]["quota"]) - cima) > 0.01:
+			continue
+		for pezzo: PackedVector2Array in arena.pezzi_della_zona(z):
+			for fx in [-1.0, -0.5, 0.0, 0.5, 1.0]:
+				for fz in [-1.0, 0.0, 1.0]:
+					var punto := posto * Vector3(meta.x * fx, 0.0, meta.z * fz)
+					if Geometry2D.is_point_in_polygon(Vector2(punto.x, punto.z), pezzo):
+						return true
+	return false
 
 
 static func _pareti(arena: Node3D) -> Array[StaticBody3D]:
@@ -206,7 +236,7 @@ static func _settore(dove: Vector3, nome: String) -> String:
 ## fuori dalla scatola. Un blocco (cassone, cassa, box, gradinata) ha i montanti sugli
 ## angoli e i cuscini sulle quattro facce. Colonne e piloni sono tondi, a anelli.
 static func _modulo(getto: Getto, m: Dictionary, posto: Transform3D,
-		pannelli: Array[Dictionary]) -> void:
+		pannelli: Array[Dictionary], coperto: bool) -> void:
 	var nome := String(m.get("nome", ""))
 	var coppia: Array = COPPIE.get(String(m.get("tinta", "")), COPPIE["ocra"])
 	var corpo: Color = coppia[0]
@@ -215,20 +245,44 @@ static func _modulo(getto: Getto, m: Dictionary, posto: Transform3D,
 	var lz := float(m["misura"][1])
 	var alto := float(m["alto"])
 	var quota := float(m["quota"])
+	var abbassa := SOTTO_IL_PIANO if coperto else 0.0
 	if Arena._e_tondo(nome) and absf(lx - lz) < 0.01:
-		_pilone(getto, lx * 0.5, alto, quota, corpo, bordo, posto)
+		_pilone(getto, lx * 0.5, alto, quota, corpo, bordo, posto, abbassa)
 		return
 	var spessore := minf(lx, lz)
-	var sotto := -alto * 0.5
-	var sopra := alto * 0.5
-	getto.scatola(Vector3(lx, alto, lz), clampf(spessore * 0.3, 0.06, 0.3), corpo, posto, 2,
-			minf(0.22, 0.05 * alto))
+	var muro := spessore < 1.3
+	# Dove due muri si incrociano (gli angoli del perimetro) i cappelli e gli zoccoli dei
+	# due stavano in pari: quello che corre più verso nord-sud (fra 45 e 135 gradi) cede di
+	# due centimetri, in cima e al piede. Con un centimetro solo, il cappello del parapetto
+	# della finestra sud-ovest stava a due millimetri e mezzo dalla cornice della sponda
+	# accanto.
+	var corre := posto.basis * (Vector3.RIGHT if lx >= lz else Vector3.BACK)
+	var angolo := fposmod(atan2(corre.z, corre.x), PI)
+	var cede := 0.02 if angolo > PI * 0.25 - 0.01 and angolo < PI * 0.75 - 0.01 else 0.0
+	var sotto := -alto * 0.5 + cede
+	var sopra := alto * 0.5 - abbassa - cede
 	var zoccolo := minf(0.40, alto * 0.2)
-	getto.scatola(Vector3(lx + SPORGE * 1.5, zoccolo, lz + SPORGE * 1.5), minf(0.12, zoccolo * 0.45),
-			bordo, posto * _su(sotto + zoccolo * 0.5))
 	var cappello := minf(0.36, alto * 0.22)
-	getto.scatola(Vector3(lx + SPORGE * 2.0, cappello, lz + SPORGE * 2.0), cappello * 0.48,
+	# Il corpo finisce dentro zoccolo e cappello; su un muro le teste rientrano di un
+	# centimetro dietro i montanti di testa.
+	var rientro := minf(0.05, minf(zoccolo, cappello) * 0.3)
+	var misura := Vector3(lx, sopra - sotto - 2.0 * rientro, lz)
+	if muro and lx >= lz:
+		misura.x -= 0.02
+	elif muro:
+		misura.z -= 0.02
+	getto.scatola(misura, clampf(spessore * 0.3, 0.06, 0.3), corpo,
+			posto * _su((sopra + sotto) * 0.5), 2, minf(0.22, 0.05 * alto))
+	getto.scatola(Vector3(lx + SPORGE * 1.5, zoccolo - STACCO, lz + SPORGE * 1.5),
+			minf(0.12, zoccolo * 0.45), bordo, posto * _su(sotto + (zoccolo + STACCO) * 0.5))
+	# Il cappello sporge cinque centimetri e mezzo: più dei montanti, e fuori dai multipli di
+	# cinque della pianta (a cinque stava in pari col parapetto da mezzo metro che lo tocca).
+	getto.scatola(Vector3(lx + 0.11, cappello, lz + 0.11), cappello * 0.48,
 			bordo, posto * _su(sopra - cappello * 0.5))
+	# I montanti vanno dal pavimento, staccati di `STACCO`, a dentro il cappello: a metà fra
+	# la cima del corpo e quella del cappello.
+	var piede := sotto + STACCO
+	var cima := sopra - rientro * 0.5
 	# Le righe dei pannelli: dallo zoccolo al cappello, spezzate dalle fasce.
 	var tagli: Array[float] = [sotto + zoccolo]
 	for piano in [3.5, 7.0]:
@@ -240,19 +294,23 @@ static func _modulo(getto: Getto, m: Dictionary, posto: Transform3D,
 	tagli.append(sopra - cappello)
 	var imbottitura := corpo.lightened(0.07)
 	var dentro := -Vector3(posto.origin.x, 0.0, posto.origin.z)
-	if spessore < 1.3:
-		# Un muro: montanti a ogni capo e in mezzo, a pannelli larghi sui muri alti.
+	if muro:
+		# Un muro: montanti a ogni capo e in mezzo, a pannelli larghi sui muri alti. Quelli
+		# di testa sporgono di un centimetro oltre il capo del muro, davanti alla testa del
+		# corpo (con quattro stavano a due millimetri e mezzo dalla cornice di una sponda
+		# che finisce sul capo).
 		var lungo := Vector3.RIGHT if lx >= lz else Vector3.BACK
 		var attraverso := Vector3.BACK if lx >= lz else Vector3.RIGHT
 		var lunghezza := maxf(lx, lz)
+		var tratto := lunghezza + 0.02
 		var quanti := _pannelli(lunghezza, alto)
 		var largo := 0.34
 		var montanti: Array[float] = []
 		for k in quanti + 1:
-			var t := -lunghezza * 0.5 + largo * 0.5 + (lunghezza - largo) * float(k) / float(quanti)
+			var t := -tratto * 0.5 + largo * 0.5 + (tratto - largo) * float(k) / float(quanti)
 			montanti.append(t)
-			getto.scatola(lungo * largo + attraverso * (spessore + SPORGE * 2.0) + Vector3.UP * alto,
-					0.13, bordo, posto * Transform3D(Basis(), lungo * t))
+			getto.scatola(lungo * largo + attraverso * (spessore + SPORGE * 2.0) + Vector3.UP * (cima - piede),
+					0.13, bordo, posto * Transform3D(Basis(), lungo * t + Vector3.UP * ((cima + piede) * 0.5)))
 		for lato in [-1.0, 1.0]:
 			var fuori: Vector3 = attraverso * lato
 			# Del perimetro si vede solo la faccia di dentro.
@@ -269,8 +327,8 @@ static func _modulo(getto: Getto, m: Dictionary, posto: Transform3D,
 		for sx in [-1.0, 1.0]:
 			for sz in [-1.0, 1.0]:
 				var dove := Vector3(sx * (lx * 0.5 - lato * 0.5 + SPORGE),
-						0.0, sz * (lz * 0.5 - lato * 0.5 + SPORGE))
-				getto.scatola(Vector3(lato, alto, lato), 0.16, bordo, posto * Transform3D(Basis(), dove))
+						(cima + piede) * 0.5, sz * (lz * 0.5 - lato * 0.5 + SPORGE))
+				getto.scatola(Vector3(lato, cima - piede, lato), 0.16, bordo, posto * Transform3D(Basis(), dove))
 		for asse in [Vector3.RIGHT, Vector3.BACK]:
 			var lungo := Vector3.BACK if asse == Vector3.RIGHT else Vector3.RIGHT
 			var lunghezza := lz if asse == Vector3.RIGHT else lx
@@ -294,7 +352,10 @@ static func _cuscini(getto: Getto, pannelli: Array[Dictionary], m: Dictionary,
 	for r in righe:
 		if tagli[2 * r + 1] - tagli[2 * r] > tagli[2 * principale + 1] - tagli[2 * principale]:
 			principale = r
-	var gonfio := 0.16
+	# Quattordici centimetri, di cui dieci dentro il muro: con sedici il retro del cuscino
+	# stava in pari con quello del paraurti (dodici dentro), con quindici a due millimetri
+	# e mezzo da quello della cornice delle sponde (undici e un quarto).
+	var gonfio := 0.14
 	for r in righe:
 		var y0 := tagli[2 * r]
 		var y1 := tagli[2 * r + 1]
@@ -314,13 +375,15 @@ static func _cuscini(getto: Getto, pannelli: Array[Dictionary], m: Dictionary,
 
 
 ## Un pilone, una colonna, un pilastro: il fusto tondo coi bordi morbidi, l'anello in
-## basso e quello in cima nel colore dei bordi, e le fasce alle quote dei piani.
+## basso e quello in cima nel colore dei bordi, e le fasce alle quote dei piani. Il fusto
+## finisce dentro i due anelli, e l'anello in basso si stacca dal pavimento.
 static func _pilone(getto: Getto, raggio: float, alto: float, quota: float, corpo: Color,
-		bordo: Color, posto: Transform3D) -> void:
+		bordo: Color, posto: Transform3D, abbassa: float) -> void:
 	var base := posto * _su(-alto * 0.5)
-	getto.tondo(raggio, alto, 0.16, corpo, base)
-	getto.tondo(raggio + SPORGE, 0.40, 0.12, bordo, base)
-	getto.tondo(raggio + SPORGE * 1.2, 0.36, 0.15, bordo, base * _su(alto - 0.36))
+	var cima := alto - abbassa
+	getto.tondo(raggio, cima - 0.10, 0.16, corpo, base * _su(0.05))
+	getto.tondo(raggio + SPORGE, 0.40 - STACCO, 0.12, bordo, base * _su(STACCO))
+	getto.tondo(raggio + SPORGE * 1.2, 0.36, 0.15, bordo, base * _su(cima - 0.36))
 	for piano in [3.5, 7.0]:
 		var y: float = piano - quota
 		if y > 0.9 and y < alto - 0.9:
@@ -436,11 +499,15 @@ static func _rampe(arena: Node3D, materiale: Material) -> void:
 			elif pezzo is MeshInstance3D:
 				corpo.remove_child(pezzo)
 				pezzo.queue_free()
-		getto.scatola(misura, 0.1, RAMPA, corpo.transform)
+		# Lo scivolo è un centimetro più stretto della scatola per lato, e i bordi blu
+		# cominciano due centimetri sopra il suo fondo e finiscono due oltre i suoi capi: i
+		# fianchi dello scivolo stavano in pari con quelli delle piattaforme, e il fondo dei
+		# bordi col fondo dello scivolo.
+		getto.scatola(misura - Vector3(0.02, 0.0, 0.0), 0.1, RAMPA, corpo.transform)
 		for lato in [-1.0, 1.0]:
-			getto.scatola(Vector3(0.26, misura.y + 0.08, misura.z + 0.02), 0.1, BLU,
+			getto.scatola(Vector3(0.26, misura.y + 0.06, misura.z + 0.04), 0.1, BLU,
 					corpo.transform * Transform3D(Basis(),
-							Vector3(lato * (misura.x * 0.5 - 0.11), 0.04, 0.0)))
+							Vector3(lato * (misura.x * 0.5 - 0.11), 0.05, 0.0)))
 		# Le frecce in salita: una V bianca a terra ogni due metri. La rampa va da `da` ad
 		# `a`, che è il suo -Z, e non sempre `a` sta più in alto: se scende, la V si gira.
 		var salita := Basis() if (-corpo.transform.basis.z).y > 0.0 else Basis(Vector3.UP, PI)
@@ -530,7 +597,9 @@ static func _paraurti(getto: Getto, da: Vector2, a: Vector2, quota: float) -> vo
 		return
 	var mezzo := (da + a) * 0.5
 	var giro := Basis(Vector3.UP, atan2(-(a - da).y, (a - da).x))
-	getto.scatola(Vector3(lungo, 0.66, 0.24), 0.1, BLU,
+	# Il paraurti sporge un centimetro oltre i capi del tratto, e la riga gialla resta
+	# dentro: in pari, i capi lampeggiavano contro il fianco della lastra.
+	getto.scatola(Vector3(lungo + 0.02, 0.66, 0.24), 0.1, BLU,
 			Transform3D(giro, Vector3(mezzo.x, quota - 0.30, mezzo.y)))
 	getto.scatola(Vector3(lungo, 0.06, 0.2), 0.02, CORDOLO,
 			Transform3D(giro, Vector3(mezzo.x, quota + 0.03, mezzo.y)), 1)
@@ -644,7 +713,7 @@ static func _roccia(getto: Getto, centro: Vector2, raggio: float, alto: float, l
 static func _palo(getto: Getto, dove: Vector2) -> void:
 	var base := Transform3D(Basis(), Vector3(dove.x, -0.5, dove.y))
 	getto.tondo(0.9, 1.6, 0.3, BLU, base)
-	getto.tondo(0.36, 25.0, 0.12, ARANCIO, base)
+	getto.tondo(0.36, 24.95, 0.12, ARANCIO, base * _su(0.05))
 	var verso := -dove.normalized()
 	var testa := Transform3D(Basis(Vector3.UP, atan2(verso.x, verso.y)), Vector3(dove.x, 24.0, dove.y))
 	getto.scatola(Vector3(4.2, 0.5, 0.5), 0.2, ARANCIO, testa * _su(-1.6))
@@ -678,8 +747,13 @@ static func _dardi_a_terra(arena: Node3D, pianta: Dictionary, materiale: Materia
 				var dove := centro + Vector2(rng.randf_range(-1.1, 1.1), rng.randf_range(-1.1, 1.1))
 				if not Geometry2D.is_point_in_polygon(dove, contorno) or _dentro_un_muro(dove, pianta, 0.4):
 					continue
-				# Disteso a terra: l'asse del dardo (che nasce in piedi) va in orizzontale.
-				var giro := Basis(Vector3.UP, rng.randf() * TAU) * Basis(Vector3.RIGHT, PI * 0.5)
+				# Disteso a terra: l'asse del dardo (che nasce in piedi) va in orizzontale. E
+				# girato su se stesso, ognuno a modo suo (dal posto, senza toccare la sequenza
+				# dei numeri a caso): a sei facce, due dardi che si incrociano avevano le
+				# facce di sopra in pari.
+				var su_se := fmod(absf(dove.x * 7.3 + dove.y * 3.1), PI / 3.0)
+				var giro := Basis(Vector3.UP, rng.randf() * TAU) * Basis(Vector3.RIGHT, PI * 0.5) \
+						* Basis(Vector3.UP, su_se)
 				getto.tornio(dardo[0], dardo[1], BLU, Transform3D(giro,
 						Vector3(dove.x, quota + 0.07, dove.y)), 6, ARANCIO, 4)
 	_posa(arena, getto.mesh(), materiale, "dardi a terra")

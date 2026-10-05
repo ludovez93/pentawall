@@ -11,8 +11,12 @@ extends SceneTree
 ## Per l'arena-giocattolo c'è in più il criterio del blocco D: **ogni modulo copre la sua
 ## scatola**. Quello che si vede e quello che ferma il dardo devono coincidere entro
 ## pochi centimetri, o un dardo si ferma nel vuoto davanti a un muro, o ci entra dentro.
+## E **niente facce doppie** (`tools/facce_doppie.gd`): due facce nello stesso piano, di
+## colori diversi, lampeggiano.
 ##
 ## Uso:  godot --headless --path . -s tools/prova_aspetto.gd
+
+const FacceDoppie := preload("res://tools/facce_doppie.gd")
 
 ## Di quanto il pezzo che si vede può stare davanti alla scatola (cuscini, montanti e
 ## cappelli sporgono di `Giocattolo.SPORGE`) e dietro (niente: un dardo che si ferma
@@ -43,6 +47,7 @@ func _lavora() -> void:
 		_guarda(arena, variante)
 		if variante == Aspetto.GIOCATTOLO:
 			_copre_le_scatole(arena)
+			_niente_facce_doppie(arena)
 		arena.queue_free()
 		await process_frame
 	Aspetto.scegli(di_prima)
@@ -172,6 +177,43 @@ func _copre_le_scatole(arena: Node3D) -> void:
 	spostato.position -= Vector3(0.3, 0.0, 0.3)
 	_conta("GIOCATTOLO, controprova: un settore spostato di 30 cm non passa",
 			int(storto[1]) > 0, "%d raggi, %d fuori misura" % [int(storto[0]), int(storto[1])])
+
+
+## **Niente facce doppie.** Dal telefono, il 05/10/2026: *«le parti superiori di alcune
+## forme lampeggiavano veloci»* — sulle cime dei moduli corpo, cappello e montanti
+## finivano alla stessa quota. Si contano le coppie fra colori diversi con dentro un pezzo
+## dell'arena-giocattolo, che si vedono (senza un solido subito davanti). La controprova
+## mette un settore di muri accanto a una sua copia spostata di venti centimetri e tinta
+## di rosso: le cime delle due stanno in pari, e il controllo deve accorgersene.
+func _niente_facce_doppie(arena: Node3D) -> void:
+	var esito: Dictionary = FacceDoppie.cerca(arena)
+	_conta("GIOCATTOLO: niente facce doppie fra colori diversi (stesso piano, stesso verso, si coprono)",
+			int(esito["da_correggere"]) == 0, "%d coppie" % int(esito["da_correggere"]))
+	print("         %d triangoli, %d coppie fra pezzi dello stesso colore o dell'arena di prima"
+			% [int(esito["triangoli"]), int(esito["coppie"]) - int(esito["da_correggere"])])
+	var settore: MeshInstance3D = null
+	for figlio in arena.get_children():
+		if figlio is MeshInstance3D and String(figlio.name).begins_with("muri"):
+			settore = figlio
+			break
+	var prova := Node3D.new()
+	arena.add_child(prova)
+	for spostamento in [Vector3.ZERO, Vector3(0.2, 0.0, 0.2)]:
+		var copia := MeshInstance3D.new()
+		copia.mesh = settore.mesh
+		copia.material_override = settore.material_override
+		copia.position = settore.position + spostamento
+		copia.add_to_group(Giocattolo.GRUPPO)
+		prova.add_child(copia)
+	var rosso := StandardMaterial3D.new()
+	rosso.albedo_color = Color(1.0, 0.0, 0.0)
+	rosso.vertex_color_use_as_albedo = true
+	(prova.get_child(1) as MeshInstance3D).material_override = rosso
+	var storto: Dictionary = FacceDoppie.cerca(prova)
+	_conta("GIOCATTOLO, controprova: un settore e la sua copia spostata di 20 cm non passano",
+			int(storto["da_correggere"]) > 0, "%d coppie" % int(storto["da_correggere"]))
+	arena.remove_child(prova)
+	prova.queue_free()
 
 
 func _confronta(arena: Node3D, visibili: Array) -> Array:
