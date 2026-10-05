@@ -48,6 +48,7 @@ func _lavora() -> void:
 	await _lavversario_ti_raggiunge(pianta)
 	await _la_partita()
 	await _la_partita_a_sei()
+	await _la_rinascita_sicura()
 	await _il_cronometro_chiude()
 	await _la_caccia()
 	await _la_sonda_parla()
@@ -702,6 +703,149 @@ func _la_caccia() -> void:
 	bot.bersaglio = null
 	bot.queue_free()
 	await process_frame
+
+
+## **La rinascita sicura** (tappa 11, blocco A). Dal telefono, il 05/10/2026: *«quando
+## muori non devi rinascere vicino ad altri avversari, ti uccidono subito»*. I posti
+## stanno su più quote, ci sta un corpo e la rete di cammino ci arriva. Con i sei
+## concorrenti sparsi a caso, il posto scelto non è mai in vista di nessuno quando un
+## posto libero c'è. La controprova rifà le stesse prove con la regola di prima (le
+## sei partenze, guardando solo chi ha sparato), che deve sbagliare almeno una volta;
+## e chi rinasce resta intoccabile per `Arena.PROTEZIONE` secondi, poi no.
+func _la_rinascita_sicura() -> void:
+	var posti: Array = _arena.get("_rinascite")
+	var spazio: PhysicsDirectSpaceState3D = _arena.get_world_3d().direct_space_state
+	var mappa: RID = _arena.get_world_3d().navigation_map
+	var capsula := CapsuleShape3D.new()
+	capsula.radius = 0.42
+	capsula.height = 1.8
+	var quote := {}
+	var stretti := 0
+	var fuori_rete := 0
+	for p in posti:
+		var dove: Vector3 = p["dove"]
+		quote[snappedf(dove.y, 0.5)] = true
+		# Il corpo in piedi, cinque centimetri sopra il pavimento: `dove` è il piede più
+		# quaranta centimetri, come le partenze.
+		var domanda := PhysicsShapeQueryParameters3D.new()
+		domanda.shape = capsula
+		domanda.transform = Transform3D(Basis(), dove + Vector3(0, 0.55, 0))
+		domanda.collision_mask = Strati.SOLIDO
+		if not spazio.intersect_shape(domanda, 1).is_empty():
+			stretti += 1
+		if NavigationServer3D.map_get_closest_point(mappa, dove).distance_to(dove) > 1.0:
+			fuori_rete += 1
+	_conta("i posti per rinascere sono almeno diciotto, su almeno tre quote",
+			posti.size() >= 18 and quote.size() >= 3,
+			"%d posti, %d quote" % [posti.size(), quote.size()])
+	_conta("in ogni posto per rinascere ci sta un corpo", stretti == 0, "%d posti stretti" % stretti)
+	_conta("la rete di cammino arriva a ogni posto", fuori_rete == 0,
+			"%d posti fuori rete" % fuori_rete)
+
+	var giocatore: Giocatore = _arena.call("giocatore")
+	_arena.call("avvia_sfida")
+	await _entrano_tutti(5)
+	await _il_via()
+	# Fermi tutti: i corpi si mettono a mano, e nessuno deve spostarsi o sparare
+	# mentre si sceglie (LEARNED.md § 19).
+	var corpi: Array[Node3D] = [giocatore]
+	for uno in _arena.call("avversari"):
+		(uno as Avversario).bersaglio = null
+		(uno as Node3D).process_mode = Node.PROCESS_MODE_DISABLED
+		corpi.append(uno as Node3D)
+	giocatore.process_mode = Node.PROCESS_MODE_DISABLED
+	var caso := RandomNumberGenerator.new()
+	caso.seed = 2026
+	var prove := 40
+	var in_vista := 0
+	var vicino := 0
+	var in_vista_prima := 0
+	for t in prove:
+		for corpo in corpi:
+			var p: Dictionary = posti[caso.randi_range(0, posti.size() - 1)]
+			corpo.global_position = (p["dove"] as Vector3) \
+					+ Vector3(caso.randf_range(-1.0, 1.0), 0.0, caso.randf_range(-1.0, 1.0))
+		var chi := corpi[caso.randi_range(0, corpi.size() - 1)]
+		var altri: Array[Node3D] = []
+		for corpo in corpi:
+			if corpo != chi:
+				altri.append(corpo)
+		var scelto: Dictionary = _arena.call("_dove_ricomparire", chi)
+		var dove: Vector3 = scelto["dove"]
+		if dove.distance_to(chi.global_position) < Arena.SCARTO_MINIMO:
+			vicino += 1
+		if _visto_da(dove, altri) and _c_e_un_posto_libero(posti, chi, altri, Arena.SCARTO_MINIMO):
+			in_vista += 1
+		var tiratore := altri[caso.randi_range(0, altri.size() - 1)]
+		var prima := _rinascita_come_prima(posti, chi, tiratore, altri)
+		if _visto_da(prima, altri) and _c_e_un_posto_libero(posti.slice(0, 6), chi, altri, 3.0):
+			in_vista_prima += 1
+	_conta("chi rinasce non è in vista di nessuno, se un posto libero c'è (%d prove)" % prove,
+			in_vista == 0, "%d volte in vista" % in_vista)
+	_conta("e rinasce da un'altra parte, ad almeno %d metri" % int(Arena.SCARTO_MINIMO),
+			vicino == 0, "%d volte più vicino" % vicino)
+	_conta("controprova: la regola di prima rinasceva in vista di qualcuno",
+			in_vista_prima > 0, "mai, in %d prove" % prove)
+	print("         regola di prima: in vista %d volte su %d" % [in_vista_prima, prove])
+
+	# La protezione: un colpo vero fa rinascere, e per due secondi i colpi non valgono.
+	giocatore.process_mode = Node.PROCESS_MODE_INHERIT
+	var bot := corpi[1]
+	var attesa := Time.get_ticks_msec()
+	while giocatore.immune() and Time.get_ticks_msec() - attesa < 3000:
+		await physics_frame
+	var colpito := giocatore.incassa(0, bot)
+	var un_secondo := Time.get_ticks_msec() + 1000
+	while Time.get_ticks_msec() < un_secondo:
+		await physics_frame
+	var protetto := giocatore.immune() and not giocatore.incassa(0, bot)
+	var scade := Time.get_ticks_msec() + int((Arena.PROTEZIONE - 1.0) * 1000.0) + 500
+	while Time.get_ticks_msec() < scade:
+		await physics_frame
+	_conta("chi rinasce è intoccabile per %d secondi, poi no" % int(Arena.PROTEZIONE),
+			colpito and protetto and not giocatore.immune(),
+			"colpito %s, protetto dopo un secondo %s, immune dopo due e mezzo %s"
+			% [colpito, protetto, giocatore.immune()])
+	_arena.call("chiudi_sfida")
+	await process_frame
+
+
+func _visto_da(dove: Vector3, altri: Array[Node3D]) -> bool:
+	for altro in altri:
+		if _arena.call("_in_vista", dove, altro):
+			return true
+	return false
+
+
+func _c_e_un_posto_libero(posti: Array, chi: Node3D, altri: Array[Node3D], scarto: float) -> bool:
+	for p in posti:
+		var dove: Vector3 = p["dove"]
+		if dove.distance_to(chi.global_position) >= scarto and not _visto_da(dove, altri):
+			return true
+	return false
+
+
+## La regola di prima (fino al 05/10/2026), per la controprova: le sei partenze (i
+## primi sei posti), lontano da chi ha sparato e fuori dalla **sua** vista; gli altri
+## pesavano solo a meno di sei metri.
+func _rinascita_come_prima(posti: Array, chi: Node3D, tiratore: Node3D,
+		altri: Array[Node3D]) -> Vector3:
+	var migliore := Vector3.ZERO
+	var punteggio := -INF
+	for i in 6:
+		var dove: Vector3 = posti[i]["dove"]
+		if dove.distance_to(chi.global_position) < 3.0:
+			continue
+		var quanto := dove.distance_to(tiratore.global_position)
+		if _arena.call("_in_vista", dove, tiratore):
+			quanto -= 60.0
+		for altro in altri:
+			if dove.distance_to(altro.global_position) < 6.0:
+				quanto -= 30.0
+		if quanto > punteggio:
+			punteggio = quanto
+			migliore = dove
+	return migliore
 
 
 ## Aspetta il fischio d'inizio: 3 · 2 · 1 · VIA sono tre secondi veri, e la

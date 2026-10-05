@@ -109,24 +109,38 @@ const CANDIDATI_VISTA := 3
 ## rimpallerebbero — e da fuori si vedrebbe uno che gira su se stesso.
 const AFFEZIONE := 1.4
 
-## La ricomparsa: quanto conta trovare qualcun altro già lì. Le sei partenze sono
-## tutte assegnate a inizio partita, quindi «libera» non esiste: esiste **meno
-## occupata**.
-const RAGGIO_LIBERO := 6.0
-const PENALITA_OCCUPATA := 30.0
+## **Dove si rinasce** (tappa 11, blocco A). Dal telefono, il 05/10/2026: *«quando
+## muori non devi rinascere vicino ad altri avversari, ti uccidono subito»*. Si
+## sceglieva fra le sei partenze guardando solo chi aveva sparato; adesso vale la
+## regola del 1999 (`RICERCA-ORIGINALE.md` § 2): pesano i posti vicini o in vista di
+## **qualunque** concorrente in campo. I posti sono le partenze più i punti presi
+## dai pavimenti della pianta (`_prepara_le_rinascite`): in tutto `RINASCITE`, cercati
+## ogni `PASSO_RINASCITE` metri.
+const RINASCITE := 24
+const PASSO_RINASCITE := 4.0
+## Un punto di rinascita sta ad almeno tanto da ogni muro alla sua altezza, e almeno
+## tanto dentro il suo pavimento e lontano dalle rampe: mai a filo di un cassone o
+## sull'orlo di una terrazza.
+const MARGINE_MURI := 1.2
+const MARGINE_BORDO := 1.0
 
-## E la ricomparsa deve **spostare**: la partenza in cui si sta già non è
-## candidata. Senza, chi viene colpito appena nato resta esattamente dov'è — la
-## sua partenza è lontana da chi ha sparato e non è occupata da nessun altro,
-## quindi vince il confronto e la ricomparsa non si vede (trovato dal collaudo
-## dell'arena, 27/08/2026).
-const SCARTO_MINIMO := 3.0
+## Oltre questa distanza dal concorrente più vicino un posto vale l'altro: senza un
+## tetto si rinascerebbe sempre nello stesso angolo, il più lontano di tutti.
+const LONTANO_ABBASTANZA := 25.0
 
-## Quanto pesa, nella scelta di dove ricomparire, l'essere in vista dell'altro:
-## sessanta metri su un'arena la cui diagonale ne misura novantatré. Non azzera la
-## distanza, la sovrasta — una partenza in faccia all'avversario perde sempre
-## contro una coperta, per lontana che sia.
-const PENALITA_IN_VISTA := 60.0
+## E la rinascita deve **spostare**: almeno tanti metri da dove si è stati presi.
+## Con le sole sei partenze, lontane fra loro, bastava escludere quella in cui si
+## stava (collaudo dell'arena, 27/08/2026); fra ventiquattro posti un punto a due
+## passi vincerebbe, e chi viene centrato ricompare da un'altra parte dell'arena.
+const SCARTO_MINIMO := 15.0
+
+## Quanto pesa ogni concorrente che vede il posto: più del tetto della distanza, così
+## un posto in vista perde sempre contro uno coperto, per vicino che sia.
+const PENALITA_IN_VISTA := 100.0
+
+## *Nostro*: per tanti secondi chi è appena rinato non si può colpire, e lampeggia
+## come dopo un colpo (`Giocatore.proteggi`, `Avversario.proteggi`).
+const PROTEZIONE := 2.0
 
 ## La tavolozza della palestra, la stessa dell'angolo della tappa 3: nessuna di
 ## queste tinte è il bianco-arancio del dardo, e nessuna è il ciano delle sponde.
@@ -162,6 +176,9 @@ var _pianta: Dictionary = {}
 ## I pezzi di ogni zona dopo il ritaglio delle rampe che le passano sotto, nello
 ## stesso ordine della pianta (`_ritaglia_le_rampe`).
 var _pezzi: Array = []
+## I posti in cui si rinasce: `{"dove", "giro"}`, con `giro` NAN dove il verso si
+## sceglie al momento (`_prepara_le_rinascite`).
+var _rinascite: Array[Dictionary] = []
 var _giocatore: Giocatore
 var _comandi: Comandi
 var _bersagli: Array[Bersaglio] = []
@@ -218,6 +235,8 @@ func _ready() -> void:
 	_pianta = carica_pianta()
 	_ambiente()
 	_costruisci()
+	await _respiro()
+	_prepara_le_rinascite()
 	await _respiro()
 	# Le superfici vere al posto delle tinte piatte (tappa 8, blocco E): moquette,
 	# intonaco, mattoni e lamiera PBR, ognuna con il colore della sua tinta. Fino al
@@ -1479,13 +1498,11 @@ func _annuncia_il_colpo(punti: int, muri: int) -> void:
 ## l'altro lo tiene sotto tiro fino a 500, e le altre cinque partenze non servono a
 ## niente. Con la ricomparsa la caccia ricomincia a ogni colpo, e l'arena serve
 ## tutta.
-func _ricompari(chi: Node3D, da: Object) -> void:
+func _ricompari(chi: Node3D, _da: Object) -> void:
 	if not _sfida or _finita or chi == null or not is_instance_valid(chi):
 		return
-	var lontano_da := chi
-	if da is Node3D and is_instance_valid(da as Node3D):
-		lontano_da = da as Node3D
-	var dove := _dove_ricomparire(lontano_da, chi)
+	var posto := _dove_ricomparire(chi)
+	var dove: Vector3 = posto["dove"]
 	# Chi sparisce lascia uno sbuffo, e dove riappare sale una colonna di luce nel
 	# suo colore (tappa 8, blocco G): senza, chi ricompare dall'altra parte
 	# dell'arena compare e basta, e non si capisce che cosa è successo.
@@ -1493,52 +1510,164 @@ func _ricompari(chi: Node3D, da: Object) -> void:
 	var riga := _riga_di(chi)
 	var colore := Corpo.colore_di(String(_concorrenti[riga]["nome"]) if riga >= 0 else "TU")
 	if chi == _giocatore:
-		_mettiti_alla_partenza(dove)
+		_giocatore.global_position = dove
+		_giocatore.velocity = Vector3.ZERO
+		var giro: float = posto["giro"]
+		_giocatore.punta(_verso_libero(dove) if is_nan(giro) else giro, -4.0)
 		Suoni.ricomparsa()
 	elif chi is Avversario:
-		_porta_alla_partenza(chi as CharacterBody3D, dove)
+		(chi as Avversario).global_position = dove
+		(chi as Avversario).velocity = Vector3.ZERO
 		(chi as Avversario).ricomincia_il_cammino()
-	Scintille.ricomparsa(_dove_partenza(dove) - Vector3(0, 0.4, 0), colore)
+	if chi.has_method("proteggi"):
+		chi.call("proteggi", PROTEZIONE)
+	Scintille.ricomparsa(dove - Vector3(0, 0.4, 0), colore)
 
 
-func _porta_alla_partenza(chi: CharacterBody3D, quale: int) -> void:
-	chi.global_position = _dove_partenza(quale)
-	chi.velocity = Vector3.ZERO
-
-
-## Dove ricomparire: lontano da chi ti ha appena preso, **fuori dalla sua vista**,
-## e possibilmente non in braccio a un terzo.
-##
-## Il criterio è quello del 1999: fra i candidati il gioco penalizzava pesantemente
-## quelli vicini o in linea di vista di un giocatore vivo (`RICERCA-ORIGINALE.md`
-## § 2). Nascere davanti a chi ti ha appena preso è la cosa che rende irrespirabile
-## un'arena.
-##
-## In sei c'è una penalità in più che nel duello non serviva: a inizio partita le
-## sei partenze sono **tutte** assegnate, quindi non ne esiste una libera — esiste
-## la meno occupata, e quella basta, perché dopo tre secondi nessuno è più dove è
-## nato.
-func _dove_ricomparire(lontano_da: Node3D, chi_torna: Node3D) -> int:
-	var quante := int(_pianta["partenze"].size())
-	var migliore := 0
-	var punteggio := -INF
-	for i in quante:
-		var dove := _dove_partenza(i)
+## Dove ricomparire: lontano da **tutti** e fuori dalla vista di **tutti**, non solo
+## di chi ti ha appena preso. Il criterio è quello del 1999: fra i candidati il gioco
+## penalizzava pesantemente quelli vicini o in linea di vista di un giocatore vivo
+## (`RICERCA-ORIGINALE.md` § 2). Si guardano i posti dal più lontano dal concorrente
+## più vicino (col tetto `LONTANO_ABBASTANZA` e due metri di caso, per non rinascere
+## sempre nello stesso angolo), e il primo che nessuno vede è quello giusto: dopo di
+## lui nessuno può batterlo. Se tutti sono in vista di qualcuno, vince quello visto
+## da meno concorrenti.
+func _dove_ricomparire(chi_torna: Node3D) -> Dictionary:
+	var altri: Array[Node3D] = []
+	for riga in _concorrenti:
+		var altro: Node3D = riga["corpo"]
+		if altro != null and altro != chi_torna and is_instance_valid(altro):
+			altri.append(altro)
+	var posti := []
+	for r in _rinascite:
+		var dove: Vector3 = r["dove"]
 		if dove.distance_to(chi_torna.global_position) < SCARTO_MINIMO:
 			continue
-		var quanto := dove.distance_to(lontano_da.global_position)
-		if _in_vista(dove, lontano_da):
-			quanto -= PENALITA_IN_VISTA
-		for riga in _concorrenti:
-			var altro: Node3D = riga["corpo"]
-			if altro == chi_torna or altro == null or not is_instance_valid(altro):
-				continue
-			if dove.distance_to(altro.global_position) < RAGGIO_LIBERO:
-				quanto -= PENALITA_OCCUPATA
+		var vicino := LONTANO_ABBASTANZA
+		for altro in altri:
+			vicino = minf(vicino, dove.distance_to(altro.global_position))
+		posti.append([vicino + randf() * 2.0, r])
+	posti.sort_custom(func(a: Array, b: Array) -> bool: return a[0] > b[0])
+	var migliore: Dictionary = _rinascite[0]
+	var punteggio := -INF
+	for posto in posti:
+		var r: Dictionary = posto[1]
+		var visti := 0
+		for altro in altri:
+			if _in_vista(r["dove"], altro):
+				visti += 1
+		var quanto: float = float(posto[0]) - PENALITA_IN_VISTA * float(visti)
 		if quanto > punteggio:
 			punteggio = quanto
-			migliore = i
+			migliore = r
+		if visti == 0:
+			break
 	return migliore
+
+
+## **I posti in cui si rinasce**: le sei partenze, più i punti dei pavimenti lontani
+## dai muri, dagli orli e dalle rampe, presi uno alla volta come il più lontano da
+## quelli già presi — così coprono tutte le quote e tutte le ali. Si legge la pianta,
+## non la scena (che qui non è ancora finita): una pianta che cambia cambia i posti da
+## sola.
+func _prepara_le_rinascite() -> void:
+	_rinascite.clear()
+	var partenze: Array = _pianta["partenze"]
+	for i in partenze.size():
+		_rinascite.append({"dove": _dove_partenza(i), "giro": float(partenze[i]["giro"])})
+	# Muri e rampe letti una volta sola, e per ogni pavimento solo quelli alla sua
+	# altezza: sul PC la prima stesura costava 50-68 ms in un fotogramma.
+	var muri: Array = []
+	for m in _pianta["muri"]:
+		muri.append([Vector2(float(m["centro"][0]), float(m["centro"][1])),
+				Vector2(float(m["misura"][0]), float(m["misura"][1])) * 0.5,
+				deg_to_rad(float(m.get("giro", 0.0))), float(m["quota"]),
+				float(m["quota"]) + float(m["alto"])])
+	var rampe: Array = []
+	for r in _pianta["rampe"]:
+		rampe.append([_punto(r["da"]), _punto(r["a"]), float(r["larghezza"]) * 0.5,
+				minf(float(r["quota_da"]), float(r["quota_a"])),
+				maxf(float(r["quota_da"]), float(r["quota_a"]))])
+	var candidati: Array[Vector3] = []
+	var zone: Array = _pianta["zone"]
+	for z in zone.size():
+		var quota := float(zone[z]["quota"])
+		# Conta un muro che sta all'altezza del corpo (quelli che reggono il pavimento
+		# finiscono sotto i piedi), e una rampa che passa da quella quota.
+		var muri_qui := muri.filter(func(m: Array) -> bool:
+				return m[3] < quota + Giocatore.ALTEZZA_CORPO + 0.2 and m[4] > quota + 0.05)
+		var rampe_qui := rampe.filter(func(r: Array) -> bool:
+				return r[4] > quota - 0.5 and r[3] < quota + Giocatore.ALTEZZA_CORPO + 0.5)
+		for pezzo: PackedVector2Array in _pezzi[z]:
+			var minimo := pezzo[0]
+			var massimo := pezzo[0]
+			for p in pezzo:
+				minimo = minimo.min(p)
+				massimo = massimo.max(p)
+			var x := minimo.x + PASSO_RINASCITE * 0.5
+			while x < massimo.x:
+				var y := minimo.y + PASSO_RINASCITE * 0.5
+				while y < massimo.y:
+					if _buon_posto_per_rinascere(Vector2(x, y), pezzo, muri_qui, rampe_qui):
+						candidati.append(Vector3(x, quota + 0.4, y))
+					y += PASSO_RINASCITE
+				x += PASSO_RINASCITE
+	var lontananza: Array[float] = []
+	for c in candidati:
+		var vicino := INF
+		for r in _rinascite:
+			vicino = minf(vicino, c.distance_to(r["dove"]))
+		lontananza.append(vicino)
+	while _rinascite.size() < RINASCITE and not candidati.is_empty():
+		var migliore := 0
+		for i in candidati.size():
+			if lontananza[i] > lontananza[migliore]:
+				migliore = i
+		var preso := candidati[migliore]
+		_rinascite.append({"dove": preso, "giro": NAN})
+		candidati.remove_at(migliore)
+		lontananza.remove_at(migliore)
+		for i in candidati.size():
+			lontananza[i] = minf(lontananza[i], candidati[i].distance_to(preso))
+
+
+## `muri`: `[centro, mezze misure, giro, quota, cima]`; `rampe`: `[da, a, mezza
+## larghezza, quota bassa, quota alta]` — già scelti per la quota del pavimento.
+func _buon_posto_per_rinascere(punto: Vector2, pezzo: PackedVector2Array, muri: Array,
+		rampe: Array) -> bool:
+	if not Geometry2D.is_point_in_polygon(punto, pezzo):
+		return false
+	for i in pezzo.size():
+		var orlo := Geometry2D.get_closest_point_to_segment(punto, pezzo[i], pezzo[(i + 1) % pezzo.size()])
+		if punto.distance_to(orlo) < MARGINE_BORDO:
+			return false
+	for m: Array in muri:
+		var locale: Vector2 = (punto - (m[0] as Vector2)).rotated(m[2])
+		if (locale.abs() - (m[1] as Vector2)).max(Vector2.ZERO).length() < MARGINE_MURI:
+			return false
+	for r: Array in rampe:
+		var asse := Geometry2D.get_closest_point_to_segment(punto, r[0], r[1])
+		if punto.distance_to(asse) < float(r[2]) + MARGINE_BORDO:
+			return false
+	return true
+
+
+## Verso dove guarda chi rinasce in un punto senza un verso suo: dove si vede più
+## lontano, fra otto direzioni, all'altezza degli occhi.
+func _verso_libero(dove: Vector3) -> float:
+	var occhi := dove + Vector3(0, Giocatore.ALTEZZA_OCCHI - 0.4, 0)
+	var spazio := get_world_3d().direct_space_state
+	var migliore := Vector3.FORWARD
+	var piu_lontano := -1.0
+	for k in 8:
+		var verso := Vector3.FORWARD.rotated(Vector3.UP, TAU * float(k) / 8.0)
+		var colpo := spazio.intersect_ray(PhysicsRayQueryParameters3D.create(occhi,
+				occhi + verso * 40.0, Strati.SOLIDO))
+		var quanto := 40.0 if colpo.is_empty() else occhi.distance_to(colpo["position"])
+		if quanto > piu_lontano:
+			piu_lontano = quanto
+			migliore = verso
+	return rad_to_deg(atan2(-migliore.x, -migliore.z))
 
 
 ## Da quel punto si vede quel corpo? Lo stesso raggio con cui l'avversario decide

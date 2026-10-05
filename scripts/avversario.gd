@@ -318,6 +318,16 @@ func incassa(muri: int, da: Object = null) -> bool:
 	return true
 
 
+## Chi è appena rinato non si può colpire per qualche secondo, e lampeggia come
+## dopo un colpo (tappa 11, blocco A: `Arena.PROTEZIONE`).
+func proteggi(secondi: float) -> void:
+	_immunita = maxf(_immunita, secondi)
+
+
+func immune() -> bool:
+	return _immunita > 0.0
+
+
 ## Dove mira adesso: il punto **davanti** al bersaglio, non il bersaglio.
 ## È pubblica perché è la cosa che il collaudo deve poter guardare da fuori.
 func punto_di_mira() -> Vector3:

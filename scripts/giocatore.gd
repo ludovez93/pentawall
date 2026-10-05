@@ -294,6 +294,12 @@ func immune() -> bool:
 	return _immunita > 0.0
 
 
+## Chi è appena rinato non si può colpire per qualche secondo, e lampeggia come
+## dopo un colpo (tappa 11, blocco A: `Arena.PROTEZIONE`).
+func proteggi(secondi: float) -> void:
+	_immunita = maxf(_immunita, secondi)
+
+
 ## Tutto ciò che si può colpire sa incassare, e risponde se il colpo è valso
 ## punti: chi spara non ha bisogno di sapere cosa ha colpito.
 func _su_colpo(corpo: Object, punto: Vector3, _normale: Vector3, muri: int) -> void:
