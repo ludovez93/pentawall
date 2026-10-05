@@ -95,9 +95,9 @@ func _lavora() -> void:
 	_conta("il dardo ha colpito il bersaglio e ha fatto punti", _punti > 0, str(_punti))
 	_conta("il punteggio è quello del rimbalzo, non del colpo diretto",
 			_muri_del_colpo >= 1, "muri %d" % _muri_del_colpo)
-	# 25 punti raddoppiati a ogni muro.
-	var atteso := 25 * int(pow(2, maxi(_muri_del_colpo, 0)))
-	_conta("i punti tornano col numero di muri", _punti == atteso,
+	# 25 il diretto, 50 di sponda (DECISIONI.md § 20).
+	var atteso := 25 if _muri_del_colpo <= 0 else 50
+	_conta("i punti sono quelli del colpo di sponda", _punti == atteso,
 			"%d invece di %d" % [_punti, atteso])
 
 	_chiudi()

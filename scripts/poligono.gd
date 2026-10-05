@@ -31,9 +31,8 @@ const CANDIDATI := [
 	{"nome": "magenta-bianco", "colore": Color(1.0, 0.36, 0.78)},
 ]
 
-## Si vince a 500. Tu ne fai 25 con un colpo diretto e raddoppi a ogni muro; lui
-## spara solo dritto, quindi vale sempre 25. Il conto dice da solo qual è il
-## gioco: giocando dritto siete pari, e si vince di sponda.
+## Si vince a 500. Tu ne fai 25 con un colpo diretto e 50 di sponda; lui spara solo
+## dritto, quindi vale sempre 25.
 const TRAGUARDO := 500
 const PARTENZA_GIOCATORE := Vector3(-9.0, 0.2, 6.5)
 const PARTENZA_AVVERSARIO := Vector3(10.0, 0.2, 2.0)
@@ -158,12 +157,7 @@ func _su_bersaglio_centrato(punti: int, muri: int) -> void:
 	if punti > _migliore:
 		_migliore = punti
 		_migliore_muri = muri
-	if muri == 0:
-		_comandi.annuncia("DIRETTO · %d" % punti)
-	elif muri == 1:
-		_comandi.annuncia("1 MURO · %d" % punti)
-	else:
-		_comandi.annuncia("%d MURI · %d" % [muri, punti])
+	_comandi.annuncia(Comandi.annuncio_del_colpo(punti, muri))
 
 
 ## L'interruttore. Acceso: entra l'avversario, i bersagli si fanno da parte e i
@@ -251,12 +245,7 @@ func _su_avversario_centrato(punti: int, muri: int) -> void:
 	if _finita:
 		return
 	_punti_tu += punti
-	if muri == 0:
-		_comandi.annuncia("DIRETTO · %d" % punti)
-	elif muri == 1:
-		_comandi.annuncia("1 MURO · %d" % punti)
-	else:
-		_comandi.annuncia("%d MURI · %d" % [muri, punti])
+	_comandi.annuncia(Comandi.annuncio_del_colpo(punti, muri))
 
 
 func _su_avversario_ha_centrato(punti: int, _muri: int) -> void:

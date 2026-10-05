@@ -10,9 +10,20 @@ extends RefCounted
 ## Se è sbagliata qui, è sbagliato tutto il gioco (PLAN.md, rischio numero 2).
 ## I casi limite sono verificati da `tools/prova_balistica.gd`.
 
-## Cinque muri. È un pilastro, non un parametro di bilanciamento: il gioco si
-## chiama PENTAWALL e questo numero è il suo nome (DECISIONI.md, 10 e D).
+## Cinque muri. Dal 05/10/2026 è un parametro come gli altri, non più un pilastro: il
+## rimbalzo resta, ma non è il soggetto del gioco (DECISIONI.md § 20).
 const MURI_MASSIMI := 5
+
+## **Quanto vale un colpo** (tappa 11, blocco B): 25 il diretto, 50 di sponda, quanti
+## che siano i muri (DECISIONI.md § 20). Fino al 05/10/2026 raddoppiava a ogni muro, fino
+## a 800 con cinque. È il conto di tutti — bersagli, avversari, chi gioca — e sta qui
+## sola, perché prima era scritto in cinque posti.
+const PUNTI_DIRETTO := 25
+const PUNTI_DI_SPONDA := 50
+
+
+static func punti_del_colpo(muri: int) -> int:
+	return PUNTI_DIRETTO if muri <= 0 else PUNTI_DI_SPONDA
 
 ## Stacco dalla superficie appena colpita, per non ricolpire quella.
 const SCOSTAMENTO := 0.02

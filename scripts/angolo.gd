@@ -285,12 +285,7 @@ func _su_bersaglio_centrato(punti: int, muri: int) -> void:
 	if punti > _migliore:
 		_migliore = punti
 		_migliore_muri = muri
-	if muri == 0:
-		_comandi.annuncia("DIRETTO · %d" % punti)
-	elif muri == 1:
-		_comandi.annuncia("1 MURO · %d" % punti)
-	else:
-		_comandi.annuncia("%d MURI · %d" % [muri, punti])
+	_comandi.annuncia(Comandi.annuncio_del_colpo(punti, muri))
 
 
 func _su_nodo_nuovo(nodo: Node) -> void:

@@ -63,7 +63,6 @@ const ALTEZZA_SPALLE := 1.55
 const RAGGIO_CORPO := 0.42
 const ALTEZZA_CORPO := 1.8
 
-const PUNTI_BASE := 25          ## come i bersagli: 25, e raddoppia a ogni muro
 const IMMUNITA := 0.8           ## secondi di pace dopo un colpo incassato
 const CONTRACCOLPO := 3.4       ## m/s di spinta all'indietro quando incassa
 
@@ -294,16 +293,16 @@ func passa_al_livello_seguente() -> void:
 	imposta_livello((_livello + 1) % TARATURE.size())
 
 
-## L'hanno preso. Stesso conto dei bersagli: 25 punti, raddoppiati a ogni muro —
-## un colpo a cinque sponde ne vale 800. Restituisce falso se era immune, così
-## chi ha sparato sa se ha fatto punti davvero.
+## L'hanno preso. Stesso conto dei bersagli: 25 punti, 50 se di sponda.
+## Restituisce falso se era immune, così chi ha sparato sa se ha fatto punti
+## davvero.
 func incassa(muri: int, da: Object = null) -> bool:
 	if _immunita > 0.0:
 		return false
 	_immunita = IMMUNITA
 	if _corpo != null:
 		_corpo.colpito()
-	var valgono := PUNTI_BASE * int(pow(2, muri))
+	var valgono := Balistica.punti_del_colpo(muri)
 	centrato.emit(valgono, muri)
 	preso_da.emit(da, valgono, muri)
 	if caccia and da is Node3D and da == bersaglio:
@@ -898,7 +897,7 @@ func _su_colpo(corpo: Object, _punto: Vector3, _normale: Vector3, muri: int) -> 
 		return
 	var valido: bool = corpo.call("incassa", muri, self)
 	if valido and corpo == bersaglio:
-		ha_centrato.emit(PUNTI_BASE * int(pow(2, muri)), muri)
+		ha_centrato.emit(Balistica.punti_del_colpo(muri), muri)
 
 
 ## Il lampo del colpo (blocco B) e il lampeggio dell'immunità: li fa la divisa

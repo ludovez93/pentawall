@@ -47,9 +47,8 @@ const TEMPO_CAMBIO := 0.16
 const CADENZA := 0.42           ## fuoco manuale: un tocco, un colpo (DECISIONI.md 6)
 const PENDENZA_MASSIMA := 1.4   ## radianti di inclinazione della testa (~80°)
 
-## Quando si viene colpiti: 25 punti a chi ha sparato, raddoppiati a ogni muro,
-## come per i bersagli e per gli avversari — il conto del gioco è uno solo.
-const PUNTI_BASE := 25
+## Quando si viene colpiti: 25 punti a chi ha sparato, 50 se di sponda, come per i
+## bersagli e per gli avversari — il conto del gioco è uno solo (`Balistica`).
 const IMMUNITA := 0.8           ## secondi di pace dopo un colpo incassato
 const CONTRACCOLPO := 3.4       ## m/s di spinta all'indietro
 
@@ -246,7 +245,7 @@ func corpo() -> Corpo:
 	return _corpo
 
 
-## L'hanno preso. Stesso conto di tutti: 25 punti, raddoppiati a ogni muro.
+## L'hanno preso. Stesso conto di tutti: 25 punti, 50 se di sponda.
 ## Restituisce falso se era immune, così chi ha sparato sa se ha fatto punti.
 func incassa(muri: int, da: Object = null) -> bool:
 	if _immunita > 0.0:
@@ -254,7 +253,7 @@ func incassa(muri: int, da: Object = null) -> bool:
 	_immunita = IMMUNITA
 	if _corpo != null:
 		_corpo.colpito()
-	var valgono := PUNTI_BASE * int(pow(2, muri))
+	var valgono := Balistica.punti_del_colpo(muri)
 	incassato.emit(valgono, muri)
 	preso_da.emit(da, valgono, muri)
 	# Il colpo incassato si **sente** (sordo) e si **vede dal lato da cui arriva**:
@@ -310,7 +309,7 @@ func _su_colpo(corpo: Object, punto: Vector3, _normale: Vector3, muri: int) -> v
 		return
 	# **Il colpo a segno si vede dove succede** (blocco B): il numero che sale dal
 	# punto d'impatto, il marcatore sul mirino, un decimo di tremito della camera e
-	# il suono pieno. Il conto dei punti è quello di tutti: 25, raddoppiati a muro.
+	# il suono pieno. Il conto dei punti è quello di tutti: 25, 50 se di sponda.
 	Suoni.colpo_a_segno(muri)
 	_scossa = SCOSSA
 	# Il colpo si sente anche in mano: un tocco breve. Sull'app nativa del telefono
@@ -320,7 +319,7 @@ func _su_colpo(corpo: Object, punto: Vector3, _normale: Vector3, muri: int) -> v
 	if comandi != null and comandi.has_method("punti_dal_mondo"):
 		comandi.call("segna_il_colpo")
 		comandi.call("punti_dal_mondo", punto,
-				PUNTI_BASE * int(pow(2, muri)) * moltiplicatore_punti, muri)
+				Balistica.punti_del_colpo(muri) * moltiplicatore_punti, muri)
 
 
 func _leggi_comandi(delta: float) -> void:

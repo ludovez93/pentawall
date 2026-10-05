@@ -14,11 +14,6 @@ const RAGGIO := 0.35
 const ALTEZZA := 1.7
 const RIPOSO := 2.0  ## secondi di assenza dopo un colpo
 
-## 25 punti il colpo diretto, poi raddoppia a ogni muro: 25, 50, 100, 200, 400, 800.
-## I 25 sono quelli dell'originale (RICERCA-ORIGINALE.md § 5); il raddoppio è
-## nostro, e dice in una riga qual è il gioco che stiamo facendo.
-const PUNTI_BASE := 25
-
 var _da := Vector3.ZERO
 var _a := Vector3.ZERO
 var _velocita := 0.0
@@ -72,14 +67,16 @@ func _process(delta: float) -> void:
 
 
 ## Chiamata da chi ha sparato quando il dardo arriva. `muri` sono quelli
-## consumati prima di arrivare qui: è tutto il punteggio del gioco.
+## consumati prima di arrivare qui: dicono se il colpo è diretto o di sponda
+## (`Balistica.punti_del_colpo`; i 25 del diretto sono quelli dell'originale,
+## RICERCA-ORIGINALE.md § 5).
 ##
 ## Firma uguale a quella dell'avversario, e risposta uguale — vero se il colpo
 ## è valso punti. Così chi spara non ha bisogno di sapere cosa ha colpito.
 func incassa(muri: int, _da: Object = null) -> bool:
 	if _spento > 0.0 or _in_pausa:
 		return false
-	var punti := PUNTI_BASE * int(pow(2, muri))
+	var punti := Balistica.punti_del_colpo(muri)
 	centrato.emit(punti, muri)
 	_spegni()
 	return true

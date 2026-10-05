@@ -419,16 +419,15 @@ func _la_partita() -> void:
 			"si è spostato di %.1f m" % spostato)
 	_conta("e non ricompare in faccia a chi l'ha preso", not _si_vedono(giocatore, bot))
 
-	# Un colpo a cinque muri vale 800: sopra il traguardo, quindi la partita
-	# finisce. Il segno visibile è che l'avversario smette di giocare.
-	# Gli si ridà un bersaglio: la prova qui sotto è che **la partita finita** lo
-	# spegne, e su un avversario già fermo passerebbe senza dimostrare niente.
+	# Un colpo a cinque muri vale 50, come uno a un muro (DECISIONI.md § 20), e non
+	# chiude la partita. Gli si ridà un bersaglio: su un avversario già fermo la prova
+	# qui sotto passerebbe senza dimostrare niente.
 	bot.punta_a(giocatore)
 	bot.incassa(5, giocatore)
 	await process_frame
 	await process_frame
 	var punti: Array = _arena.call("punteggi")
-	_conta("un colpo a cinque muri vale 800 punti", int(punti[0]) == 800, str(punti))
+	_conta("un colpo a cinque muri vale 50 punti", int(punti[0]) == 50, str(punti))
 	_conta("ma non finisce la partita: si gioca a tempo (decisione 19)",
 			bot.bersaglio != null, "l'avversario ha gia' smesso")
 
@@ -553,10 +552,14 @@ func _il_colpo_si_sente() -> void:
 
 	_conta("il testo del colpo diretto", Comandi.testo_del_colpo(25, 0) == "+25 · DIRETTO",
 			Comandi.testo_del_colpo(25, 0))
-	_conta("il testo del colpo a una sponda", Comandi.testo_del_colpo(50, 1) == "+50 · 1 SPONDA",
+	_conta("il testo del colpo a una sponda", Comandi.testo_del_colpo(50, 1) == "+50 · DI SPONDA",
 			Comandi.testo_del_colpo(50, 1))
-	_conta("il testo del colpo a due sponde", Comandi.testo_del_colpo(100, 2) == "+100 · 2 SPONDE",
-			Comandi.testo_del_colpo(100, 2))
+	_conta("il testo del colpo a cinque sponde", Comandi.testo_del_colpo(50, 5) == "+50 · DI SPONDA",
+			Comandi.testo_del_colpo(50, 5))
+	_conta("l'annuncio del colpo diretto", Comandi.annuncio_del_colpo(25, 0) == "DIRETTO · 25",
+			Comandi.annuncio_del_colpo(25, 0))
+	_conta("l'annuncio del colpo di sponda", Comandi.annuncio_del_colpo(50, 3) == "DI SPONDA · 50",
+			Comandi.annuncio_del_colpo(50, 3))
 
 	_conta("il dardo parte a 24 m/s", is_equal_approx(Proiettile.velocita, 24.0))
 	_arena.call("commuta_dardo")
@@ -568,13 +571,13 @@ func _il_colpo_si_sente() -> void:
 	var comandi: Comandi = giocatore.comandi
 	var camera := giocatore.camera()
 	var davanti := camera.global_position - camera.global_transform.basis.z * 6.0
-	comandi.punti_dal_mondo(davanti, 100, 2)
+	comandi.punti_dal_mondo(davanti, 50, 2)
 	await process_frame
 	await process_frame
 	var etichetta: Label = comandi._etichette_volanti[0]["etichetta"]
 	var tela: Vector2 = comandi._disegno.size
 	var centro := etichetta.position + etichetta.size * 0.5
-	_conta("l'etichetta dei punti si vede", etichetta.visible and etichetta.text == "+100 · 2 SPONDE",
+	_conta("l'etichetta dei punti si vede", etichetta.visible and etichetta.text == "+50 · DI SPONDA",
 			etichetta.text)
 	_conta("l'etichetta sta dentro lo schermo, vicino al centro",
 			centro.x > tela.x * 0.3 and centro.x < tela.x * 0.7

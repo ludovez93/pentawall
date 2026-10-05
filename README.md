@@ -34,13 +34,13 @@ C'è una stanza sola, con due mestieri.
 
 Da **poligono**: un dardo che rimbalza fino a cinque muri, la linea che mostra dove batterà il
 colpo, cinque bersagli — due dei quali si prendono **solo** di sponda, perché stanno dietro un
-angolo — le due visuali e i comandi per il pollice. Il punteggio parte da 25 e raddoppia a ogni
-muro: 25, 50, 100, 200, 400, 800.
+angolo — le due visuali e i comandi per il pollice. Un colpo diretto vale 25, uno di sponda 50,
+con uno o con cinque muri.
 
 Da **sfida** (pulsante SFIDA): entra un avversario e i bersagli si fanno da parte. Lui anticipa,
 schiva, e **schiva anche i rimbalzi** — legge le traiettorie con la stessa funzione che disegna a
-te la linea di mira. Si vince a 500 punti: tu raddoppi a ogni muro, lui spara dritto e vale sempre
-25. Giocando dritto siete pari, e si vince di sponda. Tre livelli, che cambiano solo reazione,
+te la linea di mira. Si vince a 500 punti: tu fai 25 dritto e 50 di sponda, lui spara dritto e vale
+sempre 25. Tre livelli, che cambiano solo reazione,
 precisione e cadenza: **nessuno spegne mai una capacità**.
 
 Quello che questa stanza deve dimostrare sono due cose: **che mirare un rimbalzo col pollice sia

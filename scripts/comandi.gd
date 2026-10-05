@@ -112,7 +112,7 @@ func colpo_incassato_da(verso: Vector2) -> void:
 	_verso_vignetta = verso if verso.length_squared() > 0.01 else Vector2(0, 1)
 
 
-## I punti che salgono dal punto d'impatto: «+100 · 2 SPONDE». Le etichette sono
+## I punti che salgono dal punto d'impatto: «+50 · DI SPONDA». Le etichette sono
 ## sei, in riserva; la settima riusa la più vecchia.
 func punti_dal_mondo(dove: Vector3, punti: int, muri: int) -> void:
 	if _etichette_volanti.is_empty():
@@ -127,13 +127,15 @@ func punti_dal_mondo(dove: Vector3, punti: int, muri: int) -> void:
 	etichetta.modulate.a = 1.0
 
 
-## Il testo del colpo. Dice **sponde**, non muri: nel gioco si rimbalza su quelle.
+## Il testo del colpo. Dice **di sponda**, non quanti muri: dal 05/10/2026 un colpo di
+## sponda vale uguale con una o con cinque (DECISIONI.md § 20).
 static func testo_del_colpo(punti: int, muri: int) -> String:
-	if muri == 0:
-		return "+%d · DIRETTO" % punti
-	if muri == 1:
-		return "+%d · 1 SPONDA" % punti
-	return "+%d · %d SPONDE" % [punti, muri]
+	return ("+%d · DIRETTO" if muri <= 0 else "+%d · DI SPONDA") % punti
+
+
+## L'annuncio grosso del colpo, al centro: «DIRETTO · 25», «DI SPONDA · 50».
+static func annuncio_del_colpo(punti: int, muri: int) -> String:
+	return ("DIRETTO · %d" if muri <= 0 else "DI SPONDA · %d") % punti
 
 
 ## Le etichette seguono il punto del mondo fotogramma per fotogramma, salendo e

@@ -1452,7 +1452,7 @@ func _su_colpo_valido(chi_spara: Object, punti: int, muri: int, chi_incassa: Nod
 			# dal punto d'impatto, blocco B — e l'annuncio grande al centro serve
 			# alla gara: «SEI PRIMO», l'ultimo minuto.
 			if not _modo_partita:
-				_annuncia_il_colpo(punti, muri)
+				_comandi.annuncia(Comandi.annuncio_del_colpo(punti, muri))
 		elif chi_incassa == _giocatore:
 			_comandi.annuncia("COLPITO DA %s" % String(_concorrenti[autore]["nome"]))
 		else:
@@ -1478,17 +1478,8 @@ func _riga_di(corpo: Object) -> int:
 	return -1
 
 
-func _annuncia_il_colpo(punti: int, muri: int) -> void:
-	if muri == 0:
-		_comandi.annuncia("DIRETTO · %d" % punti)
-	elif muri == 1:
-		_comandi.annuncia("1 MURO · %d" % punti)
-	else:
-		_comandi.annuncia("%d MURI · %d" % [muri, punti])
-
-
 ## **La ricomparsa.** Nel nostro gioco un colpo non toglie la vita — dà venticinque
-## punti a chi lo tira, raddoppiati a ogni muro — ma **sposta**: chi è stato
+## punti a chi lo tira, cinquanta se di sponda — ma **sposta**: chi è stato
 ## centrato ricompare da un'altra parte dell'arena.
 ##
 ## È una regola nostra, del 26/08/2026, e discende dal 1999 in un punto solo: là
@@ -1729,12 +1720,7 @@ func _su_bersaglio_centrato(punti: int, muri: int) -> void:
 	if punti > _migliore:
 		_migliore = punti
 		_migliore_muri = muri
-	if muri == 0:
-		_comandi.annuncia("DIRETTO · %d" % punti)
-	elif muri == 1:
-		_comandi.annuncia("1 MURO · %d" % punti)
-	else:
-		_comandi.annuncia("%d MURI · %d" % [muri, punti])
+	_comandi.annuncia(Comandi.annuncio_del_colpo(punti, muri))
 
 
 func _su_nodo_nuovo(nodo: Node) -> void:
