@@ -39,6 +39,9 @@ const SPALLA_TERZA := 0.85
 ## 20 no: a salto pieno la testa arriva a 2,68 m e sotto le terrazze il soffitto sta a
 ## 2,90.
 const RAGGIO_CAMERA := 0.2
+## Quanto la spalla resta più lontana dagli ostacoli del raggio della camera (`_spalla_libera`).
+const MARGINE_SPALLA := 0.05
+var _sfera_spalla := SphereShape3D.new()
 const CAMPO_TERZA := 75.0
 const CAMPO_PRIMA := 62.0
 const LENTEZZA_PRIMA := 0.82    ## in prima si mira meglio e ci si muove peggio
@@ -324,8 +327,13 @@ func _su_colpo(corpo: Object, punto: Vector3, _normale: Vector3, muri: int) -> v
 	Input.vibrate_handheld(VIBRA_COLPO)
 	if comandi != null and comandi.has_method("punti_dal_mondo"):
 		comandi.call("segna_il_colpo")
-		comandi.call("punti_dal_mondo", punto,
-				Balistica.punti_del_colpo(muri) * moltiplicatore_punti, muri)
+		# Un bersaglio bonus vale il suo numero, dritto o di sponda (tappa 11, blocco F).
+		if corpo is BersaglioBonus:
+			comandi.call("punti_dal_mondo", punto,
+					(corpo as BersaglioBonus).valore * moltiplicatore_punti, muri, true)
+		else:
+			comandi.call("punti_dal_mondo", punto,
+					Balistica.punti_del_colpo(muri) * moltiplicatore_punti, muri)
 
 
 func _leggi_comandi(delta: float) -> void:
@@ -472,13 +480,16 @@ func _aggiorna_camera(delta: float) -> void:
 ## cerca gli ostacoli **partendo dalla spalla**, e il motore ignora l'ostacolo in cui
 ## si parte — così la camera usciva dall'arena, fino a 2,8 m (`tools/scatti_bordo.gd`).
 ## Adesso la spalla si cerca dalla testa, che sta sempre dentro il corpo, facendo
-## scorrere la stessa sfera del braccio: dove la sfera si ferma, si ferma la spalla.
+## scorrere una sfera: dove la sfera si ferma, si ferma la spalla. **Un dito più grande
+## di quella del braccio** (`MARGINE_SPALLA`, 06/10/2026): della stessa misura, la spalla
+## restava a contatto dell'ostacolo, la sfera del braccio ci nasceva dentro e il motore la
+## ignorava — addossati a una sponda la camera finiva dietro la sponda (collaudo `vivo`).
 func _spalla_libera(spalla: Vector3) -> Vector3:
 	if spalla.length_squared() < 0.0001:
 		return spalla
 	var testa := _testa.global_position
 	var domanda := PhysicsShapeQueryParameters3D.new()
-	domanda.shape = _braccio.shape
+	domanda.shape = _sfera_spalla
 	domanda.transform = Transform3D(Basis.IDENTITY, testa)
 	domanda.motion = _testa.global_transform * spalla - testa
 	domanda.collision_mask = Strati.SOLIDO
@@ -578,13 +589,16 @@ func _costruisci() -> void:
 	# fuori. Con la sfera la camera resta sempre lontana da tutto quanto il suo raggio.
 	var sfera := SphereShape3D.new()
 	sfera.radius = RAGGIO_CAMERA
+	_sfera_spalla.radius = RAGGIO_CAMERA + MARGINE_SPALLA
 	_braccio.shape = sfera
 	_testa.add_child(_braccio)
 
 	_camera = Camera3D.new()
 	_camera.fov = CAMPO_TERZA
 	_camera.near = 0.05
-	_camera.far = 220.0
+	# 270 dal 06/10/2026: con l'arena a 80 metri il secondo anello del canyon arriva
+	# a 250 dall'angolo opposto, e oltre 220 spariva a pezzi.
+	_camera.far = 270.0
 	_camera.current = true
 	_braccio.add_child(_camera)
 

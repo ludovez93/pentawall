@@ -34,7 +34,7 @@ func _ready() -> void:
 	_potenziamenti.name = "potenziamenti"
 	add_child(_potenziamenti)
 	_potenziamenti.concorrenti = _corpi_in_campo
-	_potenziamenti.prepara(POTENZIAMENTI)
+	_potenziamenti.prepara(sfere_della_pianta())
 	_potenziamenti.preso.connect(_su_potenziamento_preso)
 	_potenziamenti.finito.connect(_su_potenziamento_finito)
 	_passo("rete, luci, scintille, palle")

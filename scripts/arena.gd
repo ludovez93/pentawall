@@ -3,8 +3,10 @@ extends Node3D
 
 ## L'arena intera: la tappa 5.
 ##
-## Non è più un angolo. È la palestra completa — 66 × 66 metri, quattro quote,
-## traversata in dodici secondi — dentro cui si gioca una partita vera.
+## Non è più un angolo. È la palestra completa — 80 × 80 metri, quattro quote,
+## traversata in quindici secondi — dentro cui si gioca una partita vera. Era
+## 66 × 66 fino al 06/10/2026: dal telefono «arena piccola», ed è tornata alla misura
+## di Amateur del 1999 (tappa 11, blocco E, `tools/scala_pianta.py`).
 ##
 ## **La pianta non sta in questo file.** Sta in `arene/palestra.json`, che è la
 ## sorgente unica: da lì si disegna la planimetria (`planimetrie/pianta_nostra.py`,
@@ -101,7 +103,7 @@ const RISCELTA := 0.6
 
 ## Quanti dei più vicini si controllano davvero con un raggio. Guardarli tutti
 ## costerebbe cinque volte tanto per cambiare idea quasi mai: chi è il quarto più
-## vicino, in un'arena da sessantasei metri, è lontano comunque.
+## vicino, in un'arena da ottanta metri, è lontano comunque.
 const CANDIDATI_VISTA := 3
 
 ## Quanto tiene il bersaglio che si ha già. Senza questo margine un avversario
@@ -126,13 +128,14 @@ const MARGINE_BORDO := 1.0
 
 ## Oltre questa distanza dal concorrente più vicino un posto vale l'altro: senza un
 ## tetto si rinascerebbe sempre nello stesso angolo, il più lontano di tutti.
-const LONTANO_ABBASTANZA := 25.0
+## Questa e lo scarto qui sotto crescono con l'arena: erano 25 e 15 a 66 metri.
+const LONTANO_ABBASTANZA := 30.0
 
 ## E la rinascita deve **spostare**: almeno tanti metri da dove si è stati presi.
 ## Con le sole sei partenze, lontane fra loro, bastava escludere quella in cui si
 ## stava (collaudo dell'arena, 27/08/2026); fra ventiquattro posti un punto a due
 ## passi vincerebbe, e chi viene centrato ricompare da un'altra parte dell'arena.
-const SCARTO_MINIMO := 15.0
+const SCARTO_MINIMO := 18.0
 
 ## Quanto pesa ogni concorrente che vede il posto: più del tetto della distanza, così
 ## un posto in vista perde sempre contro uno coperto, per vicino che sia.
@@ -182,6 +185,8 @@ var _rinascite: Array[Dictionary] = []
 var _giocatore: Giocatore
 var _comandi: Comandi
 var _bersagli: Array[Bersaglio] = []
+## I bersagli bonus della pianta (tappa 11, blocco F): restano anche in partita.
+var _bonus: Array[BersaglioBonus] = []
 var _punteggio := 0
 var _migliore := 0
 var _migliore_muri := 0
@@ -263,7 +268,7 @@ func _ready() -> void:
 	_potenziamenti.name = "potenziamenti"
 	add_child(_potenziamenti)
 	_potenziamenti.concorrenti = _corpi_in_campo
-	_potenziamenti.prepara(POTENZIAMENTI)
+	_potenziamenti.prepara(sfere_della_pianta())
 	_potenziamenti.preso.connect(_su_potenziamento_preso)
 	_potenziamenti.finito.connect(_su_potenziamento_finito)
 	await _respiro()
@@ -429,6 +434,15 @@ func _costruisci() -> void:
 		var dove := Vector3(float(b["dove"][0]), float(b["quota"]), float(b["dove"][1]))
 		_aggiungi_bersaglio(dove, Color(0.32, 0.92, 0.56) if b["solo_di_sponda"]
 				else Color(0.26, 0.74, 1.0))
+
+	# I bersagli bonus: dove, quanto valgono e quanto restano spenti lo dice la pianta,
+	# come nel 1999 lo diceva chi disegnava la mappa.
+	for b in _pianta.get("bonus", []):
+		var bonus := BersaglioBonus.crea(self, Vector3(float(b["dove"][0]), float(b["quota"]),
+				float(b["dove"][1])), float(b["giro"]), int(b["valore"]), float(b["spento"]))
+		bonus.conta = _si_puo_segnare
+		bonus.preso.connect(_su_bonus_preso.bind(bonus))
+		_bonus.append(bonus)
 
 	# Il soffitto: senza, l'arena e' a cielo aperto e la palestra del 1999 non lo
 	# era. E' anche il secondo modo in cui si capisce dove si e': alto sul cuore,
@@ -807,12 +821,13 @@ func _luci() -> void:
 
 	# Le tre lampade di colore: sono quelle che danno un'aria a ogni zona, ed e'
 	# cosi' che un'ala si riconosce da lontano prima di leggerne l'insegna.
-	_lampada(Vector3(0, 5.0, -22), Color(0.98, 0.78, 0.42), 3.4, 26.0)
-	_lampada(Vector3(26, 4.2, 0), Color(1.0, 0.52, 0.46), 3.2, 24.0)
+	# Posti e portate cresciuti con l'arena (× 80/66, blocco E).
+	_lampada(Vector3(0, 5.0, -26.7), Color(0.98, 0.78, 0.42), 3.4, 31.5)
+	_lampada(Vector3(31.5, 4.2, 0), Color(1.0, 0.52, 0.46), 3.2, 29.0)
 	# Viola, il colore del neon: non ambra (una lampada arancione tingerebbe le
 	# pareti del colore del dardo) e non piu' lime, che dalla tappa 4 e' il colore
 	# riservato al contorno degli avversari (decisione 15).
-	_lampada(Vector3(-24, 4.0, -24), Vestizione.NEON, 2.6, 22.0)
+	_lampada(Vector3(-29.1, 4.0, -29.1), Vestizione.NEON, 2.6, 26.7)
 
 
 func _lampada(dove: Vector3, colore: Color, forza: float, portata: float) -> OmniLight3D:
@@ -946,14 +961,15 @@ func _process(delta: float) -> void:
 ## 05/10/2026). Ballatoio e terrazza nord-est sono i posti della tappa 8; chi va dove è
 ## scelta mia: i punti doppi nel posto più scomodo, il radar in alto, il fulmine al
 ## centro dove sono tutti, il turbo nel corridoio lungo.
-const POTENZIAMENTI := [
-	{"tipo": "doppio", "dove": Vector3(6.0, 7.0, 21.5)},
-	{"tipo": "radar", "dove": Vector3(27.0, 3.5, -27.0)},
-	{"tipo": "fulmine", "dove": Vector3(9.0, -2.0, 0.0)},
-	{"tipo": "turbo", "dove": Vector3(23.0, 0.0, 11.0)},
-	{"tipo": "fantasma", "dove": Vector3(-21.0, 0.0, 4.0)},
-	{"tipo": "ladro", "dove": Vector3(-3.0, 0.0, -21.0)},
-]
+##
+## I posti stanno nella pianta (`sfere`) dal 06/10/2026: quando l'arena è cresciuta a
+## 80 × 80 (blocco E) sono cresciuti con lei, come tutto il resto.
+func sfere_della_pianta() -> Array:
+	var posti := []
+	for s in _pianta["sfere"]:
+		posti.append({"tipo": String(s["tipo"]), "dove": Vector3(float(s["dove"][0]),
+				float(s["quota"]), float(s["dove"][1]))})
+	return posti
 
 ## Quando un avversario prende una palla si annuncia solo se ti tocca da vicino: i
 ## punti doppi e il ladro pesano sui tuoi punti, il fulmine ti rallenta. Fantasma e
@@ -1157,6 +1173,8 @@ func avvia_sfida() -> void:
 	_svuota_il_campo()
 	_mettiti_alla_partenza(_partenza)
 	_potenziamenti.riparti()
+	for bonus in _bonus:
+		bonus.riparti()
 	_concorrenti.append({"nome": "TU", "corpo": _giocatore, "punti": 0})
 
 	# **Entrano uno per fotogramma.** Costruire un corpo — mesh, materiali, i due
@@ -1363,6 +1381,7 @@ func _scegli_i_bersagli(delta: float) -> void:
 	if corpo is Avversario and is_instance_valid(corpo):
 		var bot := corpo as Avversario
 		bot.punta_a(_chi_attaccare(bot))
+		bot.bonus = _bonus_a_tiro(bot)
 
 
 ## Chi attaccare: **il più vicino che si vede**, e in mancanza di meglio il più
@@ -1370,7 +1389,7 @@ func _scegli_i_bersagli(delta: float) -> void:
 ## nessuno da cercare resterebbe fermo.
 ##
 ## Si controllano col raggio solo i tre più vicini: il quarto, in un'arena da
-## sessantasei metri, è dall'altra parte comunque.
+## ottanta metri, è dall'altra parte comunque.
 ##
 ## I potenziamenti (tappa 11, blocco B): **il FANTASMA non lo sceglie nessuno**, e chi
 ## ha **il RADAR** sa dove sono tutti — prende il più vicino, che lo veda o no.
@@ -1437,6 +1456,7 @@ func _finisci_la_partita() -> void:
 	_potenziamenti.riparti()
 	for bot in avversari():
 		bot.bersaglio = null
+		bot.bonus = null
 	_aggiorna_la_classifica()
 	_comandi.scrivi_sfida("ANCORA")
 	var righe := classifica()
@@ -1520,13 +1540,73 @@ func _riga_di(corpo: Object) -> int:
 	return -1
 
 
+## **I bersagli bonus** (tappa 11, blocco F). Un colpo conta quando conterebbe un colpo
+## a un concorrente: in partita dopo il via e prima della fine; nel banco di prova sempre.
+func _si_puo_segnare() -> bool:
+	return not _sfida or (not _finita and _conto <= 0.0)
+
+
+## Entro questa distanza un avversario vede un bersaglio bonus e ci tira: oltre, un disco
+## di un metro è un francobollo e il colpo sarebbe a caso.
+const PORTATA_BONUS := 30.0
+## Da questo valore in su si annuncia quando lo prende un avversario: il più ricco si
+## accende una volta sola, ed è una notizia.
+const BONUS_ANNUNCIATO := 400
+
+
+## Preso: i punti a chi ha sparato, doppi se ha i PUNTI DOPPI. Il LADRO non c'entra: un
+## bersaglio non ha punti da farsi rubare. Nessuno ricompare.
+func _su_bonus_preso(chi: Object, punti: int, bersaglio: BersaglioBonus) -> void:
+	if _potenziamenti != null and _potenziamenti.ha(chi, "doppio"):
+		punti *= 2
+	if not _sfida:
+		_punteggio += punti
+		return
+	var autore := _riga_di(chi)
+	if autore < 0:
+		return
+	_concorrenti[autore]["punti"] = int(_concorrenti[autore]["punti"]) + punti
+	if chi != _giocatore and bersaglio.valore >= BONUS_ANNUNCIATO:
+		_comandi.annuncia("%s HA PRESO IL %d" % [String(_concorrenti[autore]["nome"]),
+				bersaglio.valore])
+	_aggiorna_la_classifica()
+
+
+## Il bersaglio bonus a cui un avversario può tirare adesso: acceso, entro la portata, di
+## faccia (un disco si prende davanti) e senza niente in mezzo; il più vicino. Un raggio
+## per bersaglio buono, nello stesso turno in cui l'avversario sceglie chi attaccare.
+func _bonus_a_tiro(bot: Avversario) -> BersaglioBonus:
+	var occhi := bot.global_position + Vector3(0, Avversario.ALTEZZA_OCCHI, 0)
+	var spazio := get_world_3d().direct_space_state
+	var migliore: BersaglioBonus = null
+	var vicino := PORTATA_BONUS
+	for bonus in _bonus:
+		if not bonus.acceso():
+			continue
+		var distanza := occhi.distance_to(bonus.centro())
+		if distanza >= vicino:
+			continue
+		if bonus.global_transform.basis.z.dot((occhi - bonus.centro()) / distanza) < 0.2:
+			continue
+		var domanda := PhysicsRayQueryParameters3D.create(occhi, bonus.centro(), Strati.SOLIDO,
+				[bot.get_rid()])
+		if spazio.intersect_ray(domanda).is_empty():
+			migliore = bonus
+			vicino = distanza
+	return migliore
+
+
+func bersagli_bonus() -> Array[BersaglioBonus]:
+	return _bonus
+
+
 ## **La ricomparsa.** Nel nostro gioco un colpo non toglie la vita — dà venticinque
 ## punti a chi lo tira, cinquanta se di sponda — ma **sposta**: chi è stato
 ## centrato ricompare da un'altra parte dell'arena.
 ##
 ## È una regola nostra, del 26/08/2026, e discende dal 1999 in un punto solo: là
 ## chi veniva eliminato riappariva subito e mai vicino a chi lo aveva preso
-## (`RICERCA-ORIGINALE.md` § 2). Senza, in un posto da sessantasei metri la partita
+## (`RICERCA-ORIGINALE.md` § 2). Senza, in un posto da ottanta metri la partita
 ## si deciderebbe nei primi trenta secondi dentro un angolo: chi trova per primo
 ## l'altro lo tiene sotto tiro fino a 500, e le altre cinque partenze non servono a
 ## niente. Con la ricomparsa la caccia ricomincia a ogni colpo, e l'arena serve

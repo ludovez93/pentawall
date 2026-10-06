@@ -114,7 +114,7 @@ func colpo_incassato_da(verso: Vector2) -> void:
 
 ## I punti che salgono dal punto d'impatto: «+50 · DI SPONDA». Le etichette sono
 ## sei, in riserva; la settima riusa la più vecchia.
-func punti_dal_mondo(dove: Vector3, punti: int, muri: int) -> void:
+func punti_dal_mondo(dove: Vector3, punti: int, muri: int, bonus := false) -> void:
 	if _etichette_volanti.is_empty():
 		return
 	var voce: Dictionary = _etichette_volanti[_prossima_etichetta]
@@ -122,14 +122,17 @@ func punti_dal_mondo(dove: Vector3, punti: int, muri: int) -> void:
 	voce["punto"] = dove
 	voce["vita"] = VITA_ETICHETTA
 	var etichetta: Label = voce["etichetta"]
-	etichetta.text = testo_del_colpo(punti, muri)
+	etichetta.text = testo_del_colpo(punti, muri, bonus)
 	etichetta.visible = true
 	etichetta.modulate.a = 1.0
 
 
 ## Il testo del colpo. Dice **di sponda**, non quanti muri: dal 05/10/2026 un colpo di
-## sponda vale uguale con una o con cinque (DECISIONI.md § 20).
-static func testo_del_colpo(punti: int, muri: int) -> String:
+## sponda vale uguale con una o con cinque (DECISIONI.md § 20). Un bersaglio bonus vale il
+## suo numero comunque lo si prenda, e dice solo quello (tappa 11, blocco F).
+static func testo_del_colpo(punti: int, muri: int, bonus := false) -> String:
+	if bonus:
+		return "+%d · BERSAGLIO" % punti
 	return ("+%d · DIRETTO" if muri <= 0 else "+%d · DI SPONDA") % punti
 
 

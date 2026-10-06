@@ -115,9 +115,9 @@ const GRUPPO := &"avversari"
 ## a 7,62 m/s in sei secondi si attraversano quarantacinque metri.
 const MEMORIA := 6.0
 
-## Quanto lontano si sente uno sparo. L'arena è larga sessantasei metri: a
-## ventotto se ne sente mezza, non tutta.
-const ORECCHIO := 28.0
+## Quanto lontano si sente uno sparo. L'arena è larga ottanta metri: a
+## trentaquattro se ne sente mezza, non tutta (erano 28 su 66, fino al 06/10/2026).
+const ORECCHIO := 34.0
 
 ## Quanto vicino si arriva a un punto di ronda perché valga «ci sono stato», e
 ## quanto si insiste prima di cambiarlo comunque (un punto dietro una porta
@@ -161,6 +161,12 @@ const TARATURE := [
 ## Chi insegue e a chi spara. Senza, resta dov'è — ma continua a schivare: è così
 ## che i collaudi possono sparargli addosso senza rincorrerlo.
 var bersaglio: Node3D = null
+
+## **Un bersaglio bonus a tiro** (tappa 11, blocco F). Lo assegna l'arena, nel turno in cui
+## l'avversario si guarda intorno, quando ne vede uno acceso. Ci spara solo se intanto non
+## ha un concorrente davanti: i punti di un bersaglio non valgono un avversario che ti
+## spara addosso. Non cambia dove va: lo prende passando, come chiunque.
+var bonus: BersaglioBonus = null
 
 ## **L'interruttore della caccia** (tappa 7, blocco C). Spento — poligono,
 ## angolo, i collaudi delle tappe 1-3 — l'avversario sa sempre dove sei, che è
@@ -348,6 +354,9 @@ func fantasma(acceso: bool) -> void:
 ## Dove mira adesso: il punto **davanti** al bersaglio, non il bersaglio.
 ## È pubblica perché è la cosa che il collaudo deve poter guardare da fuori.
 func punto_di_mira() -> Vector3:
+	# Un bersaglio bonus sta fermo: niente anticipo.
+	if _al_bonus():
+		return bonus.centro()
 	if bersaglio == null or not is_instance_valid(bersaglio):
 		return global_position - global_transform.basis.z * 10.0
 	# In caccia, se non lo vede, guarda dove sta andando — l'ultima notizia o il
@@ -616,8 +625,8 @@ func _meta() -> Vector3:
 	return _ronda
 
 
-## Quanto lontano si va a prendere una palla colorata.
-const RAGGIO_SFERE := 11.0
+## Quanto lontano si va a prendere una palla colorata: cresciuto con l'arena (era 11).
+const RAGGIO_SFERE := 13.0
 
 
 func _sfera_vicina() -> Vector3:
@@ -864,6 +873,11 @@ func _lo_vede() -> bool:
 	return _vede
 
 
+## Se adesso tira al bersaglio bonus: ce n'è uno acceso, e nessun concorrente davanti.
+func _al_bonus() -> bool:
+	return bonus != null and is_instance_valid(bonus) and bonus.acceso() and not _vede
+
+
 func _guarda_se_lo_vede() -> bool:
 	if bersaglio == null or not is_instance_valid(bersaglio):
 		return false
@@ -879,10 +893,11 @@ func _guarda_se_lo_vede() -> bool:
 ## Il colpo. Anticipa sempre — a ogni livello, dal primo minuto di gioco: un
 ## avversario che non anticipa insegna al giocatore che l'anticipo non serve.
 func _mira_e_spara() -> void:
-	if bersaglio == null or not is_instance_valid(bersaglio) or _ricarica > 0.0:
+	if _ricarica > 0.0:
 		return
-	if not _lo_vede():
-		return
+	if not _al_bonus():
+		if bersaglio == null or not is_instance_valid(bersaglio) or not _lo_vede():
+			return
 	_ricarica = Giocatore.CADENZA * float(TARATURE[_livello]["ricarica"])
 
 	var partenza := _bocca()

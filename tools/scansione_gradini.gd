@@ -17,7 +17,7 @@ extends SceneTree
 ## Uso:  godot --headless --path . -s tools/scansione_gradini.gd
 
 const PASSO := 0.1
-const MEZZA := 33.5
+const MEZZA := 40.5
 ## Sotto questa differenza due colonne vicine sono lo stesso piano, anche in salita:
 ## la rampa più ripida, 35°, sale di 7 cm ogni 10.
 const CONTINUO := 0.08

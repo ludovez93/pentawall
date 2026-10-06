@@ -454,7 +454,7 @@ func _prepara_l_arena() -> void:
 func _scalda_l_arena(arena: Node) -> void:
 	var occhio := Camera3D.new()
 	occhio.projection = Camera3D.PROJECTION_ORTHOGONAL
-	occhio.size = 90.0
+	occhio.size = 110.0  # l'arena intera, 80 × 80 dal 06/10/2026, col suo bordo
 	occhio.far = 200.0
 	arena.add_child(occhio)
 	occhio.global_transform = Transform3D(Basis.looking_at(Vector3.DOWN, Vector3.FORWARD),

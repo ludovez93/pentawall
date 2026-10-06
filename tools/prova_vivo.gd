@@ -658,8 +658,10 @@ func _i_pavimenti(arena: Node) -> void:
 					facce[quota] = []
 				(facce[quota] as Array).append([Vector2(a.x, a.z), Vector2(b.x, b.z), Vector2(c.x, c.z)])
 
-	# Un metro di passo, spostato di un quarto e di sei decimi: così nessun punto cade
-	# su un bordo, né dritto né in diagonale.
+	# Un metro di passo, spostato di 27 e di 63 centimetri: così nessun punto cade su un
+	# bordo, né dritto né in diagonale. Erano un quarto e sei decimi finché la pianta
+	# stava sui metri interi; a 80 × 80 (06/10/2026) i bordi stanno sui 5 cm, e un quarto
+	# ci cadeva sopra.
 	var doppi := 0
 	var buchi := 0
 	var punti := 0
@@ -669,10 +671,10 @@ func _i_pavimenti(arena: Node) -> void:
 		# un pavimento, lì il pavimento non c'è apposta.
 		var pezzi: Array = arena.call("pezzi_della_zona", indice)
 		var triangoli: Array = facce.get(quota, [])
-		var x := -33.0 + 0.25
-		while x < 33.0:
-			var z := -33.0 + 0.6
-			while z < 33.0:
+		var x := -40.0 + 0.27
+		while x < 40.0:
+			var z := -40.0 + 0.63
+			while z < 40.0:
 				var p := Vector2(x, z)
 				if pezzi.any(func(pezzo: PackedVector2Array) -> bool:
 						return Geometry2D.is_point_in_polygon(p, pezzo)):
@@ -712,12 +714,15 @@ func _la_camera(arena: Node) -> void:
 	var nel_muro := 0
 	var fuori := 0
 	var attraversa := 0
+	var dove_attraversa := ""
 	# Contro i muri, dove ci si può stare davvero: a ovest e a sud, lungo il muro, corre
 	# una sponda bassa a mezzo metro dalla parete, e un punto messo lì nasce dentro la
 	# sponda (la fisica lo spinge nell'intercapedine, dove nessuno può stare).
-	for dove in [Vector3(32.5, 0.4, 2.0), Vector3(-32.0, 0.4, 1.0), Vector3(2.0, 0.4, -32.5),
-			Vector3(-3.0, 0.4, 32.1), Vector3(32.5, 0.4, -32.5), Vector3(-32.5, 0.4, -32.5),
-			Vector3(32.5, 0.4, 32.5), Vector3(-32.5, 0.4, 32.5)]:
+	# I perimetri hanno la faccia a ±40 dal 06/10/2026: i punti stanno alla stessa
+	# distanza dal muro di prima.
+	for dove in [Vector3(39.5, 0.4, 2.0), Vector3(-38.9, 0.4, 1.0), Vector3(2.0, 0.4, -39.5),
+			Vector3(-3.0, 0.4, 39.1), Vector3(39.5, 0.4, -39.5), Vector3(-39.5, 0.4, -39.5),
+			Vector3(39.5, 0.4, 39.5), Vector3(-39.5, 0.4, 39.5)]:
 		for giro in range(0, 360, 45):
 			giocatore.global_position = dove
 			giocatore.velocity = Vector3.ZERO
@@ -733,10 +738,10 @@ func _la_camera(arena: Node) -> void:
 			if Vector2(scarto.x, scarto.z).length() > 0.1:
 				spostati += 1
 			var spalla := testa.global_transform * Vector3(Giocatore.SPALLA_TERZA, 0.22, 0.0)
-			if absf(spalla.x) > 33.0 or absf(spalla.z) > 33.0:
+			if absf(spalla.x) > 40.0 or absf(spalla.z) > 40.0:
 				nel_muro += 1
 			var c := giocatore.camera().global_position
-			if absf(c.x) > 33.0 - VICINO or absf(c.z) > 33.0 - VICINO:
+			if absf(c.x) > 40.0 - VICINO or absf(c.z) > 40.0 - VICINO:
 				fuori += 1
 			for tratto in [[testa.global_position, braccio.global_position],
 					[braccio.global_position, c]]:
@@ -744,6 +749,8 @@ func _la_camera(arena: Node) -> void:
 						Strati.SOLIDO, [giocatore.get_rid()])
 				if not spazio.intersect_ray(domanda).is_empty():
 					attraversa += 1
+					dove_attraversa = "(da %s giro %d, tocca in %s)" % [dove, giro,
+							spazio.intersect_ray(domanda)["position"]]
 	_conta("il giocatore sta dove la prova lo mette (la premessa)", spostati == 0,
 			"%d volte spostato su %d" % [spostati, prove])
 	_conta("la prova mette davvero la spalla oltre il muro (la premessa)", nel_muro >= 8,
@@ -751,7 +758,7 @@ func _la_camera(arena: Node) -> void:
 	_conta("addossati ai muri, la camera resta dentro e il piano vicino non tocca il muro",
 			fuori == 0, "%d volte troppo vicina su %d" % [fuori, prove])
 	_conta("e dalla testa alla spalla alla camera non si attraversa niente", attraversa == 0,
-			"%d tratti su %d" % [attraversa, prove * 2])
+			"%d tratti su %d %s" % [attraversa, prove * 2, dove_attraversa])
 
 
 func _poligono(zona: Dictionary) -> PackedVector2Array:

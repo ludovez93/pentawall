@@ -82,10 +82,10 @@ func _ready() -> void:
 
 	for i in VOCI_NEL_MONDO:
 		var voce := AudioStreamPlayer3D.new()
-		# L'arena è larga sessantasei metri: un rimbalzo dall'altra parte si deve
+		# L'arena è larga ottanta metri: un rimbalzo dall'altra parte si deve
 		# sentire lontano, non sparire.
 		voce.unit_size = 12.0
-		voce.max_distance = 80.0
+		voce.max_distance = 97.0
 		voce.max_db = 3.0
 		voce.attenuation_filter_cutoff_hz = 8000.0
 		add_child(voce)
@@ -275,6 +275,20 @@ static func potenziamento_finito() -> void:
 	if attivo == null:
 		return
 	attivo._mia("potenziamento_fine", -7.0, 1.0)
+
+
+## I bersagli bonus (tappa 11, blocco F): preso e riacceso si sentono da dove stanno, con
+## la voce delle palle colorate, più acuta. Chi l'ha preso sente anche il suo colpo a segno.
+static func bersaglio_preso(dove: Vector3) -> void:
+	if attivo == null:
+		return
+	attivo._nel_mondo("potenziamento", dove, -2.0, 1.35)
+
+
+static func bersaglio_acceso(dove: Vector3) -> void:
+	if attivo == null:
+		return
+	attivo._nel_mondo("potenziamento_fine", dove, -6.0, 1.5)
 
 
 static func tocco() -> void:

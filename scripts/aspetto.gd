@@ -197,16 +197,17 @@ static func _palazzetto(arena: Node3D) -> void:
 	# Le pareti imbottite: materassini alti due metri lungo i quattro perimetri, nel
 	# colore dell'ala, con un dito d'aria fra l'uno e l'altro. Dove sul perimetro c'è
 	# una sponda non si mettono: il ciano deve restare l'unica cosa che rimbalza.
+	# Le facce interne dei perimetri stanno a ±40 dal 06/10/2026 (blocco E).
 	var lati := [
-		{"asse": "x", "fisso": -32.94, "colore": Color(0.86, 0.58, 0.16)},
-		{"asse": "x", "fisso": 32.94, "colore": Color(0.48, 0.30, 0.82)},
-		{"asse": "z", "fisso": 32.94, "colore": Color(0.82, 0.24, 0.26)},
-		{"asse": "z", "fisso": -32.94, "colore": Color(0.30, 0.34, 0.80)},
+		{"asse": "x", "fisso": -39.94, "colore": Color(0.86, 0.58, 0.16)},
+		{"asse": "x", "fisso": 39.94, "colore": Color(0.48, 0.30, 0.82)},
+		{"asse": "z", "fisso": 39.94, "colore": Color(0.82, 0.24, 0.26)},
+		{"asse": "z", "fisso": -39.94, "colore": Color(0.30, 0.34, 0.80)},
 	]
 	for lato in lati:
 		var posti: Array[Transform3D] = []
-		var lungo := -32.0
-		while lungo < 32.0:
+		var lungo := -39.0
+		while lungo < 39.0:
 			if not _sponda_sul_perimetro(pianta, String(lato["asse"]), float(lato["fisso"]), lungo):
 				var dove := Vector3(lungo + 0.95, 1.0, float(lato["fisso"])) \
 						if lato["asse"] == "x" else Vector3(float(lato["fisso"]), 1.0, lungo + 0.95)
@@ -236,8 +237,8 @@ static func _ora_blu(arena: Node3D) -> void:
 	# Fuori dai perimetri, come in uno stadio: spuntano sopra i muri di dodici metri.
 	# Dentro gli angoli la camera di chi parte da lì finiva nel palo (scatto del
 	# 04/10/2026, partenza nord-ovest: mezzo schermo blu).
-	for angolo in [Vector2(-35.5, -35.5), Vector2(35.5, -35.5), Vector2(35.5, 35.5),
-			Vector2(-35.5, 35.5)]:
+	for angolo in [Vector2(-43.0, -43.0), Vector2(43.0, -43.0), Vector2(43.0, 43.0),
+			Vector2(-43.0, 43.0)]:
 		var testa := Vector3(angolo.x, 19.0, angolo.y)
 		var palo := MeshInstance3D.new()
 		var forma := BoxMesh.new()
@@ -265,7 +266,7 @@ static func _ora_blu(arena: Node3D) -> void:
 		var lampada := OmniLight3D.new()
 		lampada.light_color = Color(0.92, 0.95, 1.0)
 		lampada.light_energy = 2.2
-		lampada.omni_range = 70.0
+		lampada.omni_range = 85.0
 		lampada.position = testa + verso_il_centro * 1.5
 		arena.add_child(lampada)
 		# Il fascio: un cono additivo appeso alla testa, che spazza avanti e indietro.
@@ -277,7 +278,7 @@ static func _ora_blu(arena: Node3D) -> void:
 		var cilindro := CylinderMesh.new()
 		cilindro.top_radius = 0.6
 		cilindro.bottom_radius = 5.5
-		cilindro.height = 36.0
+		cilindro.height = 44.0
 		cilindro.radial_segments = 14
 		cilindro.cap_top = false
 		cilindro.cap_bottom = false
@@ -287,7 +288,7 @@ static func _ora_blu(arena: Node3D) -> void:
 		# Il cilindro sta lungo +Y, col lato stretto in cima: girato così la cima guarda
 		# la torre e il lato largo va verso il campo.
 		cono.rotation_degrees = Vector3(90, 0, 0)
-		cono.position = Vector3(0, 0, -18.0)
+		cono.position = Vector3(0, 0, -22.0)
 		perno.add_child(cono)
 		var giro := arena.create_tween().set_loops()
 		var base := perno.rotation_degrees.y

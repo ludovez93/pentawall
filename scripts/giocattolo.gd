@@ -86,8 +86,10 @@ const ROCCE := [Color(0.86, 0.42, 0.22), Color(0.93, 0.54, 0.28), Color(0.80, 0.
 const CIMA_ROCCIA := Color(0.97, 0.68, 0.42)
 const FOSCHIA := Color(0.72, 0.86, 1.0)
 
-## I settori dei moduli: tre per tre sulla pianta, più i perimetri.
-const SETTORE := 22.0
+## I settori dei moduli: tre per tre sulla pianta, più i perimetri. La pianta è di
+## 80 × 80 dal 06/10/2026 (era 66: settori da 22).
+const MEZZA_PIANTA := 40.0
+const SETTORE := MEZZA_PIANTA * 2.0 / 3.0
 
 
 # ------------------------------------------------------------------ gli agganci
@@ -224,8 +226,8 @@ static func _pareti(arena: Node3D) -> Array[StaticBody3D]:
 static func _settore(dove: Vector3, nome: String) -> String:
 	if nome.begins_with("perimetro"):
 		return nome
-	var x := clampi(int(floor((dove.x + 33.0) / SETTORE)), 0, 2)
-	var z := clampi(int(floor((dove.z + 33.0) / SETTORE)), 0, 2)
+	var x := clampi(int(floor((dove.x + MEZZA_PIANTA) / SETTORE)), 0, 2)
+	var z := clampi(int(floor((dove.z + MEZZA_PIANTA) / SETTORE)), 0, 2)
 	return "%d-%d" % [x, z]
 
 
@@ -637,27 +639,28 @@ static func _fuori(arena: Node3D, materiale: Material) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 2026
 	var getti: Array[Getto] = [Getto.new(), Getto.new(), Getto.new(), Getto.new()]
-	# Le rocce: un anello di formazioni larghe e stratificate fra 54 e 72 metri dal
+	# Le rocce: un anello di formazioni larghe e stratificate fra 68 e 87 metri dal
 	# centro, che si toccano e fanno la parete del canyon; alte abbastanza da spuntare
-	# sopra il perimetro anche guardando dall'altra parte dell'arena.
+	# sopra il perimetro anche guardando dall'altra parte dell'arena. Tutto il fuori è
+	# cresciuto con l'arena (× 80/66, 06/10/2026): stessi tiri a caso, stessa figura.
 	var quante := 14
 	for k in quante:
 		var angolo := TAU * float(k) / float(quante) + rng.randf_range(-0.08, 0.08)
-		var distanza := rng.randf_range(56.0, 72.0)
+		var distanza := rng.randf_range(68.0, 87.0)
 		var centro := Vector2(cos(angolo), sin(angolo)) * distanza
-		var lontano := clampf((distanza - 56.0) / 30.0, 0.0, 1.0) * 0.2
-		_roccia(getti[_quadrante(centro)], centro, rng.randf_range(12.0, 17.0),
-				rng.randf_range(22.0, 34.0), lontano, rng)
+		var lontano := clampf((distanza - 68.0) / 36.0, 0.0, 1.0) * 0.2
+		_roccia(getti[_quadrante(centro)], centro, rng.randf_range(14.5, 20.6),
+				rng.randf_range(26.7, 41.2), lontano, rng)
 	# Un secondo anello, più lontano e più chiaro: la profondità.
 	for k in 12:
 		var angolo := TAU * (float(k) + 0.5) / 12.0 + rng.randf_range(-0.1, 0.1)
-		var distanza := rng.randf_range(105.0, 135.0)
+		var distanza := rng.randf_range(127.0, 164.0)
 		var centro := Vector2(cos(angolo), sin(angolo)) * distanza
-		_roccia(getti[_quadrante(centro)], centro, rng.randf_range(18.0, 26.0),
-				rng.randf_range(30.0, 46.0), 0.45, rng)
+		_roccia(getti[_quadrante(centro)], centro, rng.randf_range(21.8, 31.5),
+				rng.randf_range(36.4, 55.8), 0.45, rng)
 	# I pali della luce: sugli angoli e a metà dei lati, appena fuori dal perimetro.
-	for dove in [Vector2(-39, -39), Vector2(39, -39), Vector2(39, 39), Vector2(-39, 39),
-			Vector2(0, -40), Vector2(40, 0), Vector2(0, 40), Vector2(-40, 0)]:
+	for dove in [Vector2(-47, -47), Vector2(47, -47), Vector2(47, 47), Vector2(-47, 47),
+			Vector2(0, -48.5), Vector2(48.5, 0), Vector2(0, 48.5), Vector2(-48.5, 0)]:
 		_palo(getti[_quadrante(dove)], dove)
 	for k in getti.size():
 		_posa(arena, getti[k].mesh(), materiale, "fuori %d" % k)
@@ -821,8 +824,8 @@ static func _palloni(arena: Node3D, materiale: Material) -> void:
 		profilo.append(Vector2(cos(t), sin(t)))
 		normali.append(Vector2(cos(t), sin(t)))
 	var spicchi := [ARANCIO, BIANCO, BLU, ARANCIO, BIANCO, BLU]
-	for posto in [Vector3(-15.0, 19.0, -16.0), Vector3(22.0, 18.0, 4.0), Vector3(-21.0, 20.5, 20.0)]:
-		var raggio := 3.2
+	for posto in [Vector3(-18.2, 19.0, -19.4), Vector3(26.7, 18.0, 4.85), Vector3(-25.4, 20.5, 24.2)]:
+		var raggio := 3.9
 		var palla := Transform3D(Basis.from_scale(Vector3.ONE * raggio), posto)
 		for k in spicchi.size():
 			getto.tornio(profilo, normali, spicchi[k], palla, 4, Color.BLACK, 0,

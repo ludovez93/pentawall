@@ -1,5 +1,5 @@
 {
-  "cotta_il": "2026-10-04",
+  "cotta_il": "2026-10-06",
   "cotta_per": {
     "altezza": 1.8,
     "cella": 0.25,
@@ -7,8 +7,8 @@
     "raggio": 0.5,
     "scalino": 0.4
   },
-  "impronta": "9016e020709878ad7f1b07fb2bfe3e3f87d8127c6868df6c0397d4a135416f85",
+  "impronta": "b991d7c67ce0de5c2beea8cd0b06a314e7b8d59eb0505c6683a49cddb7d6d1bd",
   "pianta": "res://arene/palestra.json",
-  "poligoni": 649,
-  "vertici": 655
+  "poligoni": 698,
+  "vertici": 711
 }

@@ -18,11 +18,11 @@ const IMPRONTA := "res://arene/palestra_cammino.json"
 ## direbbe sempre di sì (LEARNED.md § 19).
 const ARRIVO := 2.5
 
-## Quanto si aspetta un avversario che deve attraversare l'arena. La diagonale è 93
-## metri e si percorre in 12,2 secondi in linea retta: a piedi, fra rampe e giri,
-## il doppio abbondante. Si aspetta **un esito**, non un numero di fotogrammi
-## (LEARNED.md § 17), e il tetto serve solo a non restare appesi.
-const PAZIENZA_MS := 30000
+## Quanto si aspetta un avversario che deve attraversare l'arena. La diagonale è 113
+## metri (80 × 80 dal 06/10/2026) e si percorre in 14,8 secondi in linea retta: a
+## piedi, fra rampe e giri, il doppio abbondante. Si aspetta **un esito**, non un
+## numero di fotogrammi (LEARNED.md § 17), e il tetto serve solo a non restare appesi.
+const PAZIENZA_MS := 40000
 
 var _errori := 0
 var _prove := 0
@@ -53,6 +53,7 @@ func _lavora() -> void:
 	await _la_caccia()
 	await _la_sonda_parla()
 	await _il_colpo_si_sente()
+	await _i_bersagli_bonus(pianta)
 
 	_chiudi()
 
@@ -62,10 +63,12 @@ func _lavora() -> void:
 func _la_pianta_ha_senso(pianta: Dictionary) -> void:
 	var mis: Dictionary = pianta["misura"]
 	var diagonale := Vector2(float(mis["larghezza"]), float(mis["profondita"])).length()
-	_conta("la diagonale sta fra 90 e 100 metri (decisione 12)",
-			diagonale > 90.0 and diagonale < 100.0, "%.1f m" % diagonale)
-	_conta("la traversata dura fra 11 e 13 secondi a 7,62 m/s",
-			diagonale / 7.62 > 11.0 and diagonale / 7.62 < 13.0, "%.1f s" % (diagonale / 7.62))
+	# La misura di Amateur del 1999 (tappa 11, blocco E): la decisione 12 l'aveva
+	# stretta a 93 metri, dal telefono «arena piccola».
+	_conta("la diagonale sta fra 108 e 118 metri (Amateur, 80 × 80)",
+			diagonale > 108.0 and diagonale < 118.0, "%.1f m" % diagonale)
+	_conta("la traversata dura fra 14 e 15,5 secondi a 7,62 m/s",
+			diagonale / 7.62 > 14.0 and diagonale / 7.62 < 15.5, "%.1f s" % (diagonale / 7.62))
 	_conta("ci sono almeno sei partenze", pianta["partenze"].size() >= 6,
 			"%d" % pianta["partenze"].size())
 	_sponde_dappertutto(pianta)
@@ -81,7 +84,7 @@ func _sponde_dappertutto(pianta: Dictionary) -> void:
 	for s in pianta["sponde"]:
 		var x := float(s["centro"][0])
 		var z := float(s["centro"][1])
-		if absf(x) <= 13.0 and absf(z) <= 13.0:
+		if absf(x) <= 15.75 and absf(z) <= 15.75:
 			conti["cuore"] += 1
 		elif absf(z) > absf(x):
 			conti["nord" if z < 0.0 else "sud"] += 1
@@ -148,7 +151,7 @@ func _la_scena_dice_la_stessa_cosa(pianta: Dictionary) -> void:
 
 	var giocatore: Giocatore = _arena.call("giocatore")
 	_conta("il giocatore parte dentro l'arena",
-			absf(giocatore.global_position.x) < 33.0 and absf(giocatore.global_position.z) < 33.0,
+			absf(giocatore.global_position.x) < 40.0 and absf(giocatore.global_position.z) < 40.0,
 			str(giocatore.global_position))
 	_conta("si comincia con la regola nuova", bool(_arena.call("solo_sponde")),
 			"si comincia da «rimbalza tutto»")
@@ -518,6 +521,147 @@ func _la_partita_a_sei() -> void:
 	await process_frame
 	_conta("chiusa la partita non resta nessuno in campo",
 			(_arena.call("avversari") as Array).is_empty())
+
+
+## **I bersagli bonus** (tappa 11, blocco F). Il valore scritto, dritto o di sponda;
+## doppio con i PUNTI DOPPI; spento non dà niente e si riaccende al suo tempo; prima del
+## via non conta. E un avversario ci tira solo se non ha un concorrente davanti: la
+## controprova è lo stesso avversario, nello stesso posto, con qualcuno in vista.
+func _i_bersagli_bonus(pianta: Dictionary) -> void:
+	var bonus: Array = _arena.call("bersagli_bonus")
+	_conta("ci sono i bersagli bonus della pianta", bonus.size() >= 3
+			and bonus.size() == (pianta.get("bonus", []) as Array).size(), "%d" % bonus.size())
+	var da_100: BersaglioBonus = null
+	var da_200: BersaglioBonus = null
+	for b in bonus:
+		if (b as BersaglioBonus).valore == 100 and da_100 == null:
+			da_100 = b
+		elif (b as BersaglioBonus).valore == 200 and da_200 == null:
+			da_200 = b
+	if da_100 == null or da_200 == null:
+		_conta("ci sono un bersaglio da 100 e uno da 200", false)
+		return
+	var giocatore: Giocatore = _arena.call("giocatore")
+	_arena.call("avvia_sfida")
+	await _entrano_tutti(5)
+	_conta("prima del via un colpo al bersaglio non conta, e resta acceso",
+			da_100.incassa(0, giocatore) == false and da_100.acceso())
+	await _il_via()
+	# Fermi tutti: da qui i colpi sono solo quelli della prova (LEARNED.md § 19).
+	var bot: Array = _arena.call("avversari")
+	for uno in bot:
+		(uno as Avversario).bersaglio = null
+		(uno as Avversario).bonus = null
+		(uno as Node).process_mode = Node.PROCESS_MODE_DISABLED
+	_arena.set("_prossima_riscelta", 9999.0)
+
+	var prima := int((_arena.call("punteggi") as Array)[0])
+	var valido := da_100.incassa(0, giocatore)
+	var dopo := int((_arena.call("punteggi") as Array)[0])
+	_conta("un colpo dritto vale il numero scritto (100)", valido and dopo - prima == 100,
+			"%d punti" % (dopo - prima))
+	_conta("preso si spegne, e spento non dà niente", not da_100.acceso()
+			and da_100.incassa(0, giocatore) == false
+			and int((_arena.call("punteggi") as Array)[0]) == dopo)
+	prima = dopo
+	valido = da_200.incassa(3, giocatore)
+	dopo = int((_arena.call("punteggi") as Array)[0])
+	_conta("di sponda vale lo stesso numero, non il doppio (200)", valido and dopo - prima == 200,
+			"%d punti" % (dopo - prima))
+
+	# Il tempo da spento: lo si accorcia per non aspettare un minuto.
+	da_100.spento_per = 0.4
+	da_100.riparti()
+	da_100.incassa(0, giocatore)
+	var spento_subito := not da_100.acceso()
+	var attesa := Time.get_ticks_msec()
+	while not da_100.acceso() and Time.get_ticks_msec() - attesa < 2000:
+		await process_frame
+	_conta("si riaccende da solo al suo tempo", spento_subito and da_100.acceso(),
+			"%d ms" % (Time.get_ticks_msec() - attesa))
+
+	# I PUNTI DOPPI: si va sulla loro palla, e lo stesso bersaglio vale il doppio.
+	var potenziamenti: Node = _arena.get_node("potenziamenti")
+	for p in potenziamenti.call("posti"):
+		if p["tipo"] == "doppio":
+			giocatore.global_position = (p["dove"] as Vector3) + Vector3(0, 0.3, 0)
+			giocatore.velocity = Vector3.ZERO
+	attesa = Time.get_ticks_msec()
+	while not potenziamenti.call("ha", giocatore, "doppio") and Time.get_ticks_msec() - attesa < 1000:
+		await physics_frame
+	prima = int((_arena.call("punteggi") as Array)[0])
+	da_100.riparti()
+	valido = da_100.incassa(0, giocatore)
+	dopo = int((_arena.call("punteggi") as Array)[0])
+	_conta("con i PUNTI DOPPI vale il doppio (200)", valido and dopo - prima == 200,
+			"%d punti, doppi: %s" % [dopo - prima, potenziamenti.call("ha", giocatore, "doppio")])
+	da_100.spento_per = 60.0
+	da_100.riparti()
+
+	# **Gli avversari.** Uno solo torna a muoversi, su un punto di rinascita da cui
+	# l'arena gli darebbe il bersaglio da 100.
+	var tiratore := bot[0] as Avversario
+	var posto := Vector3.INF
+	for r in _arena.get("_rinascite"):
+		tiratore.global_position = r["dove"]
+		await physics_frame
+		if _arena.call("_bonus_a_tiro", tiratore) == da_100:
+			posto = r["dove"]
+			break
+	_conta("da qualche punto di rinascita l'arena dà il bersaglio da 100 a un avversario",
+			posto != Vector3.INF)
+	if posto == Vector3.INF:
+		_arena.call("chiudi_sfida")
+		return
+	# Il giocatore lontano e fuori vista, fermo a quaranta metri sotto il pavimento.
+	giocatore.process_mode = Node.PROCESS_MODE_DISABLED
+	giocatore.global_position = Vector3(0, -40, 0)
+	tiratore.process_mode = Node.PROCESS_MODE_INHERIT
+	tiratore.global_position = posto
+	tiratore.velocity = Vector3.ZERO
+	tiratore.bersaglio = null
+	tiratore.bonus = da_100
+	await physics_frame
+	await physics_frame
+	var mira_al_bonus: Vector3 = tiratore.call("punto_di_mira")
+	_conta("senza nessuno davanti mira al bersaglio", mira_al_bonus.distance_to(da_100.centro()) < 0.01)
+	# La controprova, nello stesso posto: un concorrente in vista, davanti a lui.
+	var altro := bot[1] as Avversario
+	# Fermo, ma dentro la fisica: un corpo con l'elaborazione spenta esce dallo spazio
+	# (`disable_mode` predefinito), e il raggio di chi guarda lo attraverserebbe.
+	altro.disable_mode = CollisionObject3D.DISABLE_MODE_KEEP_ACTIVE
+	altro.global_position = posto + (da_100.centro() - posto).normalized() * Vector3(1, 0, 1) * 4.0
+	# Con `punta_a`, come fa l'arena: aggiorna anche dove l'ha visto l'ultima volta.
+	tiratore.punta_a(altro)
+	await physics_frame
+	await physics_frame
+	var vede: bool = tiratore.get("_vede")
+	var mira_all_altro: Vector3 = tiratore.call("punto_di_mira")
+	_conta("con un concorrente in vista non mira al bersaglio (controprova)",
+			vede and mira_all_altro.distance_to(da_100.centro()) > 1.0,
+			"lo vede: %s" % vede)
+	altro.global_position = Vector3(0, -60, 0)
+	tiratore.punta_a(null)
+	var punti_prima := _punti_di(tiratore)
+	attesa = Time.get_ticks_msec()
+	while da_100.acceso() and Time.get_ticks_msec() - attesa < 10000:
+		await physics_frame
+	var punti_dopo := _punti_di(tiratore)
+	_conta("senza nessuno davanti, l'avversario prende il bersaglio e i 100 sono suoi",
+			not da_100.acceso() and punti_dopo - punti_prima == 100,
+			"in %d ms, %d punti" % [Time.get_ticks_msec() - attesa, punti_dopo - punti_prima])
+	giocatore.process_mode = Node.PROCESS_MODE_INHERIT
+	_arena.call("chiudi_sfida")
+	await process_frame
+	for b in bonus:
+		(b as BersaglioBonus).riparti()
+
+
+func _punti_di(corpo: Node3D) -> int:
+	for riga in _arena.get("_concorrenti"):
+		if riga["corpo"] == corpo:
+			return int(riga["punti"])
+	return -1
 
 
 ## La sonda dei fotogrammi (tappa 7, blocco 0): la riga che manda al Server 2 deve

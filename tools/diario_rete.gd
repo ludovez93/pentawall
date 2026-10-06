@@ -14,7 +14,7 @@ extends SceneTree
 ## Uso:  godot --path . -s tools/diario_rete.gd
 
 const PASSO := 2.0
-const META := 33.0
+const META := 40.0
 const VICINO := 1.4
 const ARRIVO := 2.6
 const LETTERE := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"

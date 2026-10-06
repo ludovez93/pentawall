@@ -59,11 +59,12 @@ const PESA := 40
 ## Fotogrammi dopo aver riacceso, prima della misura seguente.
 const RIPOSA := 10
 ## Dove si ferma chi gioca: sul ballatoio, che guarda il cuore dell'arena.
-const DOVE_GIOCATORE := Vector3(0.0, 7.05, 20.0)
+const DOVE_GIOCATORE := Vector3(0.0, 7.05, 24.25)
 ## Dove si fermano gli avversari: due sul ballatoio, dentro i quindici metri del
-## contorno; tre nel catino e nell'ala ocra, lontani.
-const POSTI := [Vector3(-5.0, 7.0, 16.5), Vector3(5.0, 7.0, 17.0), Vector3(-4.0, -2.0, 0.0),
-		Vector3(4.0, -2.0, -3.0), Vector3(0.0, 0.0, -19.0)]
+## contorno; tre nel catino e nell'ala ocra, lontani. Posti cresciuti con l'arena
+## (× 80/66, 06/10/2026).
+const POSTI := [Vector3(-6.05, 7.0, 20.0), Vector3(6.05, 7.0, 20.6), Vector3(-4.85, -2.0, 0.0),
+		Vector3(4.85, -2.0, -3.65), Vector3(0.0, 0.0, -23.0)]
 
 ## La pesa, in JavaScript. Prima di ogni fotogramma si aspetta che la scheda abbia
 ## finito il precedente; alla fine si aspetta che abbia finito questo. Si aspetta

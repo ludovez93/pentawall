@@ -116,8 +116,8 @@ func _guarda_il_giocattolo(arena: Node3D, pezzi: Dictionary, soffitti: int, luce
 	# fermarsi nel vuoto a otto metri), niente lucernari né lampade, il cielo.
 	var tetto_fisico := 0
 	var spazio := arena.get_world_3d().direct_space_state
-	for dove in [Vector3(-24, 8.3, -24), Vector3(0, 12.3, 0), Vector3(24, 8.3, 0), Vector3(-24, 8.3, 0),
-			Vector3(0, 12.3, 24), Vector3(-15, 10.0, 0)]:
+	for dove in [Vector3(-29.1, 8.3, -29.1), Vector3(0, 12.3, 0), Vector3(29.1, 8.3, 0),
+			Vector3(-29.1, 8.3, 0), Vector3(0, 12.3, 29.1), Vector3(-18.2, 10.0, 0)]:
 		var domanda := PhysicsPointQueryParameters3D.new()
 		domanda.position = dove
 		domanda.collision_mask = Strati.TIRO

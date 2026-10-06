@@ -161,12 +161,17 @@ static func arreda_arena(arena: Node3D, pianta: Dictionary) -> Node3D:
 ## Quello che dice «palazzetto»: neon sui perimetri, cassoni con le cinghie, insegne al
 ## neon, striscioni appesi al soffitto.
 static func _arredo_da_palestra(arena: Node3D, pianta: Dictionary) -> void:
-	# Zoccoli e fascia sui perimetri: le facce interne stanno a ±33 metri.
+	# Zoccoli e fascia sui perimetri: le facce interne stanno a metà della misura della
+	# pianta (±40 metri dal 06/10/2026), le strisce 5 cm dentro.
+	var lato_x := float(pianta["misura"]["larghezza"])
+	var lato_z := float(pianta["misura"]["profondita"])
+	var dentro_x := lato_x * 0.5 - 0.05
+	var dentro_z := lato_z * 0.5 - 0.05
 	for lato in [
-		{"centro": Vector3(0, 0, -32.95), "misura": Vector3(66.0, LISTELLO, LISTELLO)},
-		{"centro": Vector3(0, 0, 32.95), "misura": Vector3(66.0, LISTELLO, LISTELLO)},
-		{"centro": Vector3(32.95, 0, 0), "misura": Vector3(LISTELLO, LISTELLO, 66.0)},
-		{"centro": Vector3(-32.95, 0, 0), "misura": Vector3(LISTELLO, LISTELLO, 66.0)},
+		{"centro": Vector3(0, 0, -dentro_z), "misura": Vector3(lato_x, LISTELLO, LISTELLO)},
+		{"centro": Vector3(0, 0, dentro_z), "misura": Vector3(lato_x, LISTELLO, LISTELLO)},
+		{"centro": Vector3(dentro_x, 0, 0), "misura": Vector3(LISTELLO, LISTELLO, lato_z)},
+		{"centro": Vector3(-dentro_x, 0, 0), "misura": Vector3(LISTELLO, LISTELLO, lato_z)},
 	]:
 		for quota in [0.10, 3.2, 7.6]:
 			_striscia(arena, (lato["centro"] as Vector3) + Vector3(0, quota, 0), lato["misura"])
@@ -185,13 +190,13 @@ static func _arredo_da_palestra(arena: Node3D, pianta: Dictionary) -> void:
 				Vector2(float(testo.length()) * misura * 0.62 + misura * 0.9, misura * 1.35), misura)
 
 	# Gli striscioni: due per ala, appesi al soffitto a otto metri, nei colori
-	# delle tute. Girati verso il centro dell'arena.
+	# delle tute. Girati verso il centro dell'arena. Posti cresciuti con l'arena (× 80/66).
 	var colori := [Color(0.13, 0.36, 0.95), Color(0.84, 0.12, 0.20), Color(0.98, 0.80, 0.12),
 			Color(0.90, 0.30, 0.64), Color(0.90, 0.91, 0.95), Color(0.15, 0.15, 0.18)]
 	var posti := [
-		[Vector3(-8.0, 7.9, -31.0), 180.0], [Vector3(14.0, 7.9, -31.0), 180.0],
-		[Vector3(31.0, 7.9, -6.0), 270.0], [Vector3(31.0, 7.9, 6.0), 270.0],
-		[Vector3(-31.0, 7.9, -14.0), 90.0], [Vector3(-31.0, 7.9, 14.0), 90.0],
+		[Vector3(-9.7, 7.9, -37.6), 180.0], [Vector3(17.0, 7.9, -37.6), 180.0],
+		[Vector3(37.6, 7.9, -7.3), 270.0], [Vector3(37.6, 7.9, 7.3), 270.0],
+		[Vector3(-37.6, 7.9, -17.0), 90.0], [Vector3(-37.6, 7.9, 17.0), 90.0],
 	]
 	for i in posti.size():
 		_striscione(arena, posti[i][0], posti[i][1], colori[i % colori.size()])
@@ -234,7 +239,8 @@ static func _cassone_da_palestra(arena: Node3D, muro: Dictionary) -> void:
 
 ## Le linee del campo nel catino: un cerchio attorno al box, le due linee di metà
 ## campo spezzate dal box, e il nome del gioco dipinto a terra, che si legge dal
-## ballatoio. Bianco sporco, appena luminoso: è vernice, non neon.
+## ballatoio. Bianco sporco, appena luminoso: è vernice, non neon. Posti e lunghezze
+## cresciuti col catino (× 80/66, 06/10/2026); lo spessore della vernice no.
 static func _campo_del_catino(arena: Node3D) -> void:
 	var vernice := StandardMaterial3D.new()
 	vernice.albedo_color = Color(0.93, 0.92, 0.98)
@@ -246,8 +252,8 @@ static func _campo_del_catino(arena: Node3D) -> void:
 
 	var cerchio := MeshInstance3D.new()
 	var anello := TorusMesh.new()
-	anello.inner_radius = 4.15
-	anello.outer_radius = 4.32
+	anello.inner_radius = 5.03
+	anello.outer_radius = 5.2
 	anello.rings = 64
 	anello.ring_segments = 4
 	cerchio.mesh = anello
@@ -258,10 +264,10 @@ static func _campo_del_catino(arena: Node3D) -> void:
 	arena.add_child(cerchio)
 
 	for tratto in [
-		{"centro": Vector3(0, quota, -7.6), "misura": Vector3(0.16, 0.01, 6.2)},
-		{"centro": Vector3(0, quota, 7.6), "misura": Vector3(0.16, 0.01, 6.2)},
-		{"centro": Vector3(-7.6, quota, 0), "misura": Vector3(6.2, 0.01, 0.16)},
-		{"centro": Vector3(7.6, quota, 0), "misura": Vector3(6.2, 0.01, 0.16)},
+		{"centro": Vector3(0, quota, -9.2), "misura": Vector3(0.16, 0.01, 7.5)},
+		{"centro": Vector3(0, quota, 9.2), "misura": Vector3(0.16, 0.01, 7.5)},
+		{"centro": Vector3(-9.2, quota, 0), "misura": Vector3(7.5, 0.01, 0.16)},
+		{"centro": Vector3(9.2, quota, 0), "misura": Vector3(7.5, 0.01, 0.16)},
 	]:
 		var linea := MeshInstance3D.new()
 		var mesh := BoxMesh.new()
@@ -276,8 +282,8 @@ static func _campo_del_catino(arena: Node3D) -> void:
 	nome.text = "PENTAWALL"
 	nome.font = carattere_insegne()
 	nome.font_size = 160
-	nome.pixel_size = 0.0046
-	nome.position = Vector3(0, quota + 0.005, 8.6)
+	nome.pixel_size = 0.0056
+	nome.position = Vector3(0, quota + 0.005, 10.4)
 	nome.rotation_degrees = Vector3(-90, 0, 0)
 	# Vernice consumata, non un'insegna: a piena luce si mangiava mezzo schermo. E
 	# senza il contorno nero delle scritte, che a terra disegnava lettere vuote.
