@@ -17,8 +17,17 @@
 // il file è cambiato davvero, e lo si riconosce dall'`ETag`: senza quella
 // guardia si riscriverebbero 38 MB sul telefono a ogni avvio.
 //
-// Questo file non cambia mai da una pubblicazione all'altra, ed è voluto: un
-// operaio di servizio che resta identico non ha versioni vecchie da smaltire.
+// **La copia si scrive intanto, non prima** (06/10/2026). Fino ad allora l'operaio
+// scaricava tutto il file, lo scriveva in cache e solo dopo lo passava al gioco: a
+// ogni pubblicazione la barra di caricamento si fermava al 35% (il motore c'era, il
+// pacchetto da 74 MB no) per tutto lo scaricamento, e sul telefono, la sera del
+// 05/10/2026, non è più ripartita. Adesso il file va al gioco mentre arriva, e la
+// barra cammina con lui.
+//
+// Questo file non cambia da una pubblicazione all'altra, ed è voluto: un operaio
+// di servizio che resta identico non ha versioni vecchie da smaltire. Quando
+// cambia (l'ultima volta il 06/10/2026), la prima apertura lo installa mentre il
+// vecchio serve ancora quella pagina, e dalla seconda lavora il nuovo.
 
 const CACHE = 'pentawall';
 
@@ -42,13 +51,7 @@ self.addEventListener('fetch', (evento) => {
 		try {
 			const risposta = await fetch(indirizzo, { cache: 'no-cache', credentials: 'same-origin' });
 			if (risposta && risposta.ok) {
-				const cache = await caches.open(CACHE);
-				const vecchia = await cache.match(indirizzo);
-				const cambiata = vecchia === undefined
-					|| vecchia.headers.get('ETag') !== risposta.headers.get('ETag');
-				if (cambiata) {
-					await cache.put(indirizzo, risposta.clone());
-				}
+				evento.waitUntil(aggiornaLaCopia(indirizzo, risposta.clone()));
 			}
 			return risposta;
 		} catch (senzaRete) {
@@ -61,3 +64,23 @@ self.addEventListener('fetch', (evento) => {
 		}
 	})());
 });
+
+// La copia di riserva, scritta mentre il gioco legge l'originale. Se il file non è
+// cambiato la copia si lascia andare subito: tenuta lì, il browser ne terrebbe in
+// memoria tutto il contenuto. Se la scrittura non riesce (memoria piena) non importa:
+// il gioco ha già il suo file, e la riserva resta quella di prima.
+async function aggiornaLaCopia(indirizzo, risposta) {
+	try {
+		const cache = await caches.open(CACHE);
+		const vecchia = await cache.match(indirizzo);
+		if (vecchia !== undefined && vecchia.headers.get('ETag') === risposta.headers.get('ETag')) {
+			if (risposta.body) {
+				await risposta.body.cancel();
+			}
+			return;
+		}
+		await cache.put(indirizzo, risposta);
+	} catch (errore) {
+		// Solo la riserva non si è aggiornata.
+	}
+}
