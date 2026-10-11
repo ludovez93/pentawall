@@ -97,11 +97,14 @@ const SETTORE := MEZZA_PIANTA * 2.0 / 3.0
 ## Prima della luce per vertice: tetto, muri, pavimenti, rampe, fuori, dardi a terra.
 ## Quando l'arena si prepara dietro l'ingresso, un passo per fotogramma: tutta insieme,
 ## sul PC, era mezzo secondo di palco fermo (misurato il 05/10/2026, muri 258 ms).
-static func veste(arena: Arena) -> void:
+## Senza `imbottiti` muri e palloni restano a chi veste dopo (la PISTA della tappa 11):
+## di GIOCATTOLO si tengono tappetini, rampe, bordi, cielo, canyon e dardi a terra.
+static func veste(arena: Arena, imbottiti := true) -> void:
 	var pianta: Dictionary = arena.pianta()
 	_togli_il_tetto(arena)
 	var materiale := _materiale_dei_moduli()
-	await _muri(arena, pianta, materiale)
+	if imbottiti:
+		await _muri(arena, pianta, materiale)
 	_pavimenti(arena)
 	_rampe(arena, materiale)
 	await arena._respiro()
@@ -112,7 +115,8 @@ static func veste(arena: Arena) -> void:
 	await arena._respiro()
 	_dardi_a_terra(arena, pianta, materiale)
 	_appesi(arena, pianta, materiale)
-	_palloni(arena, materiale)
+	if imbottiti:
+		_palloni(arena, materiale)
 
 
 ## Dopo le luci: il cielo, il sole, niente lampade.
@@ -249,7 +253,11 @@ static func _modulo(getto: Getto, m: Dictionary, posto: Transform3D,
 	var quota := float(m["quota"])
 	var abbassa := SOTTO_IL_PIANO if coperto else 0.0
 	if Arena._e_tondo(nome) and absf(lx - lz) < 0.01:
-		_pilone(getto, lx * 0.5, alto, quota, corpo, bordo, posto, abbassa)
+		# Nel PARCO GONFIABILE (tappa 11) i piloni alti sono colonne gonfiabili.
+		if Aspetto.scelta() == Aspetto.GONFIABILE and alto >= 5.0 and not coperto:
+			Gonfiabile.pilone(getto, lx * 0.5, alto, corpo, bordo, posto, abbassa)
+		else:
+			_pilone(getto, lx * 0.5, alto, quota, corpo, bordo, posto, abbassa)
 		return
 	var spessore := minf(lx, lz)
 	var muro := spessore < 1.3

@@ -73,6 +73,9 @@ var _vignetta := 0.0
 var _verso_vignetta := Vector2(0, 1)
 ## `{"etichetta": Label, "punto": Vector3, "vita": float}`
 var _etichette_volanti: Array[Dictionary] = []
+## Di quanti punti di schermo l'etichetta parte sopra il colpo: grande (tappa 11), la
+## scritta coprirebbe chi l'ha preso.
+var _alza_etichette := 70.0 if Aspetto.corpi_a_cartone() else 26.0
 var _prossima_etichetta := 0
 
 
@@ -160,7 +163,7 @@ func _muovi_le_etichette(delta: float) -> void:
 		var quota := 1.0 - float(voce["vita"]) / VITA_ETICHETTA
 		var dove: Vector2 = camera.unproject_position(voce["punto"])
 		etichetta.position = dove - etichetta.size * 0.5 \
-				- Vector2(0.0, 26.0 + SALITA_ETICHETTA * quota)
+				- Vector2(0.0, _alza_etichette + SALITA_ETICHETTA * quota)
 		etichetta.modulate.a = clampf((1.0 - quota) * 2.2, 0.0, 1.0)
 
 
@@ -467,8 +470,14 @@ func _costruisci() -> void:
 	# Le etichette dei punti che salgono dal colpo: nascono qui, spente, e in
 	# partita cambiano solo testo e posizione.
 	for i in ETICHETTE_IN_RISERVA:
-		var etichetta := _etichetta(30, Color(1, 1, 1, 1))
+		# Nelle prove dell'arena aperta (tappa 11) i punti saltano fuori grandi, col bordo
+		# scuro, dove succede: nei giochi del riferimento si leggono senza cercarli.
+		var grandi := Aspetto.corpi_a_cartone()
+		var etichetta := _etichetta(54 if grandi else 30, Color(1, 1, 1, 1))
 		etichetta.add_theme_font_override("font", carattere_titolo())
+		if grandi:
+			etichetta.add_theme_constant_override("outline_size", 14)
+			etichetta.add_theme_color_override("font_outline_color", Color(0.05, 0.06, 0.18))
 		etichetta.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		etichetta.visible = false
 		add_child(etichetta)

@@ -17,7 +17,8 @@ extends RefCounted
 ## qualunque direzione, e si fanno una volta sola, su quella scelta.
 
 const FILE := "user://aspetto.cfg"
-const NOMI: Array[String] = ["OGGI", "PALAZZETTO", "ORA BLU", "SALA LASER", "GIOCATTOLO"]
+const NOMI: Array[String] = ["OGGI", "PALAZZETTO", "ORA BLU", "SALA LASER", "GIOCATTOLO",
+		"GONFIABILE", "PISTA"]
 const OGGI := 0
 const PALAZZETTO := 1
 const ORA_BLU := 2
@@ -25,6 +26,12 @@ const SALA_LASER := 3
 ## L'arena-giocattolo come NERF Superblast (tappa 10, blocco D): non è una luce nuova,
 ## è un'arena fatta d'altro. Sta in `Giocattolo`.
 const GIOCATTOLO := 4
+## **Le prove della tappa 11, blocco C2** (Fable, 11/10/2026): l'arena **aperta** — il
+## perimetro a 4 metri, i muri alti a 2,4 (`Apertura`) — con i corpi a cartone, in due
+## direzioni da scegliere sugli scatti. GONFIABILE tiene l'imbottito di GIOCATTOLO sulle
+## altezze nuove (`Gonfiabile`); PISTA fa dell'arena un circuito giocattolo (`Pista`).
+const GONFIABILE := 5
+const PISTA := 6
 
 static var _scelta := -1
 static var _ombra: StandardMaterial3D = null
@@ -69,20 +76,48 @@ static func veste(arena: Node3D) -> void:
 			_sala_laser(arena)
 		GIOCATTOLO:
 			await Giocattolo.veste(arena as Arena)
+		GONFIABILE:
+			await Giocattolo.veste(arena as Arena)
+			await Gonfiabile.veste(arena as Arena)
+		PISTA:
+			await Giocattolo.veste(arena as Arena, false)
+			await Pista.veste(arena as Arena)
+
+
+## L'arena aperta: le due prove della tappa 11 (`Apertura`).
+static func apre_l_arena() -> bool:
+	return scelta() == GONFIABILE or scelta() == PISTA
+
+
+## I corpi a cartone (Kenney Mini Characters) al posto di quelli di oggi: vanno con
+## l'arena aperta, perché è con lei che si confrontano negli scatti.
+static func corpi_a_cartone() -> bool:
+	return apre_l_arena()
+
+
+## La rete di cammino della variante: l'arena aperta ha oggetti in mezzo che la rete di
+## sempre non conosce, e ognuna ha la sua, cotta da `tools/cuoci_percorsi.gd`.
+static func rete(di_sempre: String) -> String:
+	match scelta():
+		GONFIABILE:
+			return di_sempre.replace(".res", "_gonfiabile.res")
+		PISTA:
+			return di_sempre.replace(".res", "_pista.res")
+	return di_sempre
 
 
 ## L'arredo da palazzetto di `Vestizione.arreda_arena` — neon sui perimetri, cinghie dei
 ## cassoni, striscioni appesi al soffitto, insegne al neon — sta in tutte le varianti
 ## tranne l'arena-giocattolo, che è a cielo aperto e ha i suoi.
 static func arredo_palestra() -> bool:
-	return scelta() != GIOCATTOLO
+	return scelta() != GIOCATTOLO and not apre_l_arena()
 
 
 ## Dopo le luci: cielo, nebbia, lampade.
 static func illumina(arena: Node3D) -> void:
 	var ambiente := _ambiente(arena)
 	match scelta():
-		GIOCATTOLO:
+		GIOCATTOLO, GONFIABILE, PISTA:
 			Giocattolo.illumina(arena, ambiente)
 		PALAZZETTO:
 			ambiente.ambient_light_color = Color(0.56, 0.53, 0.60)

@@ -53,6 +53,34 @@ const PERSONAGGI := {
 const ALTEZZA_MODELLO := 1.8
 const ALTEZZA_CORPO := 1.8
 
+## **I corpi a cartone** (tappa 11, blocco C2, 11/10/2026): nelle prove dell'arena aperta
+## (`Aspetto.corpi_a_cartone`) i sei hanno i Kenney Mini Characters (CC0, nel repository
+## dal 12/09/2026): testa grossa quanto il busto, faccia dipinta, sette ossa. Alti come
+## la capsula, cioè 1,8 metri, e larghi quasi il doppio dei corpi di oggi: a quindici
+## metri si leggono come una sagoma, non come un bastone (Fable, `fable-c2.md`). Ognuno
+## è scelto sui colori della sua tuta.
+const CARTONE := "res://assets/models/kenney/mini/"
+const ALTEZZA_CARTONE := 0.6713
+const FACCE := {
+	"TU": "character-male-c", "BRACE": "character-male-b", "QUARZO": "character-female-e",
+	"LAMPO": "character-female-b", "NEBBIA": "character-female-f", "TORO": "character-male-d",
+}
+## La corsa del cartone: il passo della sua libreria si mescola a questa velocità (a occhio
+## sugli scatti: è una prova).
+const VELOCITA_PASSO_CARTONE := 3.0
+## Il blaster in mano al cartone, nello spazio dell'osso del braccio: l'impugnatura in
+## fondo al braccio, la canna lungo il braccio. A riposo il braccio del cartone sta in
+## orizzontale verso l'esterno (−X dell'osso): «holding» lo gira di 60 gradi attorno alla
+## verticale e lo porta quasi davanti. Lungo 0,8 nel suo file: a questa misura, settanta
+## centimetri veri.
+const PRESA_CARTONE := Vector3(-0.214, 0.064, 0.0)
+const MISURA_BLASTER_CARTONE := 0.32
+## Le pose del braccio teso: girato di novanta gradi attorno alla verticale, dritto davanti,
+## e poi alzato o abbassato di quanto si mira.
+const BRACCIO_GIU := -50.0
+const BRACCIO_DRITTO := 0.0
+const BRACCIO_SU := 50.0
+
 ## Le velocità a cui le due corse della libreria **appoggiano i piedi senza
 ## scivolare**, misurate sui piedi del modello il 03/10/2026 (escursione del piede
 ## a terra diviso il tempo d'appoggio): la corsetta a 3,5 m/s, lo scatto a 6,3.
@@ -136,12 +164,17 @@ var _radar_acceso := false
 var _coperto := true
 ## Il FANTASMA: i materiali veri dei pezzi, messi da parte finché il corpo è un velo.
 var _materiali_veri := {}
+## A cartone il modello è scalato di `_scala`, e le crescite dei materiali (contorno,
+## sagoma) stanno nello spazio del modello: si dividono per lei.
+var _cartone := false
+var _scala := 1.0
 
 
 static func crea(nome: String) -> Corpo:
 	var corpo := Corpo.new()
 	corpo.chi = nome if PERSONAGGI.has(nome) else "BRACE"
 	corpo.name = "Corpo"
+	corpo._cartone = Aspetto.corpi_a_cartone()
 	corpo._costruisci()
 	return corpo
 
@@ -267,6 +300,11 @@ func scalda(camera: Camera3D) -> void:
 
 ## Il colpo incassato: il busto accusa e la divisa fa luce per un decimo di secondo.
 func colpito() -> void:
+	if _cartone:
+		# A cartone sul petto scoppia la stella con due sbuffi (`Impatto`). Il corpo non
+		# fa in tempo a piegarsi: chi è colpito ricompare subito altrove (`Arena._ricompari`).
+		Impatto.crea(self, global_position + Vector3(0.0, ALTEZZA_CORPO * 0.62, 0.0))
+		return
 	_albero.set("parameters/colpo/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
 	_lampo = 0.12
 
@@ -274,6 +312,9 @@ func colpito() -> void:
 ## Il lampeggio dell'immunità, acceso e spento da chi la conta.
 func lampeggia(acceso: bool) -> void:
 	_lampeggio = acceso
+	# A cartone la tuta non ha la luce: l'immunità fa sparire e ricomparire il corpo.
+	if _cartone and _modello != null:
+		_modello.visible = not acceso
 
 
 ## Dove sta la bocca del blaster in questo momento: la punta della scatola del
@@ -318,8 +359,8 @@ func contorni(scuro: Color, acceso: Color, quota_filo: float) -> Array:
 		var esterno := pelle_contorno(acceso)
 		filo.next_pass = esterno
 		_passate_di(pezzo)[0] = filo
-		fuori.append({"materiale": filo, "quota": quota_filo})
-		fuori.append({"materiale": esterno, "quota": 1.0})
+		fuori.append({"materiale": filo, "quota": quota_filo / _scala})
+		fuori.append({"materiale": esterno, "quota": 1.0 / _scala})
 	_contorno_acceso = false
 	accendi_contorni(true)
 	return fuori
@@ -374,7 +415,7 @@ const GONFIORE_SAGOMA := 0.015
 func aggiorna_la_sagoma(distanza: float, coperto: bool) -> void:
 	if not _radar_acceso:
 		return
-	var gonfiore := clampf(distanza * GONFIORE_SAGOMA, 0.03, 0.8)
+	var gonfiore := clampf(distanza * GONFIORE_SAGOMA, 0.03, 0.8) / _scala
 	for materiale in _passate:
 		var sagoma := _passate[materiale][1] as StandardMaterial3D
 		if sagoma != null:
@@ -535,6 +576,9 @@ func _e_blaster(pezzo: Node) -> bool:
 # ------------------------------------------------------------------ costruzione
 
 func _costruisci() -> void:
+	if _cartone:
+		_costruisci_a_cartone()
+		return
 	var dati: Dictionary = PERSONAGGI[chi]
 	var file := "Superhero_%s_FullBody" % String(dati["sesso"])
 	_modello = (_leggi(MODELLI + file + ".gltf") as PackedScene).instantiate()
@@ -638,7 +682,10 @@ func _arma() -> void:
 	_scheletro.add_child(attacco)
 	_blaster = (_leggi(BLASTER) as PackedScene).instantiate()
 	attacco.add_child(_blaster)
+	_prepara_il_lampo_bocca()
 
+
+func _prepara_il_lampo_bocca() -> void:
 	# Il lampo alla bocca: un disco caldo che si apre e sparisce in sei centesimi.
 	# Resta **sotto la soglia del bagliore** — sopra ci va solo il dardo, che nasce
 	# proprio lì e deve essere lui la cosa più luminosa.
@@ -677,6 +724,120 @@ static func _pelle_lampo_bocca() -> StandardMaterial3D:
 	_pelle_bocca.albedo_color = Color(0.98, 0.94, 0.86, 1.0)
 	_pelle_bocca.disable_receive_shadows = true
 	return _pelle_bocca
+
+
+# ------------------------------------------------------------------ a cartone
+
+func _costruisci_a_cartone() -> void:
+	var file: String = FACCE.get(chi, FACCE["BRACE"])
+	_modello = (_leggi(CARTONE + file + ".glb") as PackedScene).instantiate()
+	# Nel file guarda verso +Z; da noi avanti è −Z.
+	_modello.rotation.y = PI
+	_scala = ALTEZZA_CORPO / ALTEZZA_CARTONE
+	_modello.scale = Vector3.ONE * _scala
+	add_child(_modello)
+	_scheletro = _modello.find_child("Skeleton3D", true, false) as Skeleton3D
+
+	var attacco := BoneAttachment3D.new()
+	attacco.bone_name = "arm-right"
+	attacco.name = "Mano"
+	_scheletro.add_child(attacco)
+	_blaster = (_leggi(BLASTER) as PackedScene).instantiate()
+	# La canna del blaster (+Z nel suo file) va lungo il braccio, cioè verso −X dell'osso,
+	# e il suo sopra resta il sopra dell'osso.
+	_blaster.transform = Transform3D(Basis(Vector3.UP, -PI * 0.5).scaled(
+			Vector3.ONE * MISURA_BLASTER_CARTONE), PRESA_CARTONE)
+	attacco.add_child(_blaster)
+	_prepara_il_lampo_bocca()
+
+	var lettore := _modello.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	var libreria := lettore.get_animation_library(&"")
+	var radice_del_file := String(_scheletro.get_parent().name)
+	# Nel file corsa e riposo non girano in tondo: si fermerebbero al primo passo.
+	for nome in ["idle", "walk", "sprint"]:
+		libreria.get_animation(nome).loop_mode = Animation.LOOP_LINEAR
+	for posa in [["braccio-giu", BRACCIO_GIU], ["braccio-dritto", BRACCIO_DRITTO],
+			["braccio-su", BRACCIO_SU]]:
+		if not libreria.has_animation(posa[0]):
+			libreria.add_animation(posa[0], _posa_del_braccio(radice_del_file, float(posa[1])))
+	_animazioni_a_cartone(libreria, radice_del_file)
+
+	_torsione = Torsione.new()
+	_torsione.name = "Torsione"
+	_torsione.ossa = ["torso"]
+	_torsione.quote = [1.0]
+	_scheletro.add_child(_torsione)
+	_scheletro.modifier_callback_mode_process = Skeleton3D.MODIFIER_CALLBACK_MODE_PROCESS_MANUAL
+
+
+## Lo stesso albero dei corpi di oggi, con quello che il cartone ha: corsa (riposo, passo,
+## scatto), il salto, il braccio teso col blaster che segue la mira, e lo sparo.
+func _animazioni_a_cartone(libreria: AnimationLibrary, radice_del_file: String) -> void:
+	_albero = AnimationTree.new()
+	_albero.name = "Animazioni"
+	_albero.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
+	_albero.add_animation_library(&"", libreria)
+	_modello.add_child(_albero)
+
+	var radice := AnimationNodeBlendTree.new()
+	var corsa := AnimationNodeBlendSpace1D.new()
+	corsa.min_space = 0.0
+	corsa.max_space = VELOCITA_SCATTO
+	corsa.add_blend_point(_animazione("idle"), 0.0, -1, &"fermo")
+	corsa.add_blend_point(_animazione("walk"), VELOCITA_PASSO_CARTONE, -1, &"corsetta")
+	corsa.add_blend_point(_animazione("sprint"), VELOCITA_SCATTO, -1, &"scatto")
+	radice.add_node(&"corsa", corsa, Vector2(0, 0))
+	radice.add_node(&"passo", AnimationNodeTimeScale.new(), Vector2(200, 0))
+	radice.connect_node(&"passo", 0, &"corsa")
+	radice.add_node(&"in_volo", _animazione("jump"), Vector2(200, 160))
+	radice.add_node(&"aria", AnimationNodeBlend2.new(), Vector2(400, 0))
+	radice.connect_node(&"aria", 0, &"passo")
+	radice.connect_node(&"aria", 1, &"in_volo")
+
+	var braccio := NodePath(radice_del_file + "/Skeleton3D:arm-right")
+	var busto := AnimationNodeBlend2.new()
+	busto.filter_enabled = true
+	busto.set_filter_path(braccio, true)
+	var mira := AnimationNodeBlendSpace1D.new()
+	mira.min_space = -1.0
+	mira.max_space = 1.0
+	mira.add_blend_point(_animazione("braccio-giu"), -1.0, -1, &"giu")
+	mira.add_blend_point(_animazione("braccio-dritto"), 0.0, -1, &"dritto")
+	mira.add_blend_point(_animazione("braccio-su"), 1.0, -1, &"su")
+	radice.add_node(&"mira", mira, Vector2(400, 160))
+	radice.add_node(&"busto", busto, Vector2(600, 0))
+	radice.connect_node(&"busto", 0, &"aria")
+	radice.connect_node(&"busto", 1, &"mira")
+
+	# Lo sparo del cartone è il cenno della testa del suo «holding-right-shoot»: il
+	# braccio resta dove mira, e il colpo lo dice il lampo alla bocca.
+	var sparo := AnimationNodeOneShot.new()
+	sparo.fadein_time = 0.02
+	sparo.fadeout_time = 0.08
+	sparo.filter_enabled = true
+	sparo.set_filter_path(NodePath(radice_del_file + "/Skeleton3D:head"), true)
+	radice.add_node(&"sparo", sparo, Vector2(800, 0))
+	radice.add_node(&"colpo_di_blaster", _animazione("holding-right-shoot"), Vector2(800, 160))
+	radice.connect_node(&"sparo", 0, &"busto")
+	radice.connect_node(&"sparo", 1, &"colpo_di_blaster")
+
+	radice.connect_node(&"output", 0, &"sparo")
+	_albero.tree_root = radice
+	_albero.active = true
+	_albero.set("parameters/busto/blend_amount", 1.0)
+
+
+## Una posa ferma del braccio destro: girato dritto davanti, poi alzato di `gradi`
+## (negativi in giù) attorno all'asse delle spalle.
+static func _posa_del_braccio(radice_del_file: String, gradi: float) -> Animation:
+	var posa := Animation.new()
+	posa.length = 0.1
+	posa.loop_mode = Animation.LOOP_LINEAR
+	var traccia := posa.add_track(Animation.TYPE_ROTATION_3D)
+	posa.track_set_path(traccia, NodePath(radice_del_file + "/Skeleton3D:arm-right"))
+	posa.rotation_track_insert_key(traccia, 0.0,
+			Quaternion(Vector3.RIGHT, -deg_to_rad(gradi)) * Quaternion(Vector3.UP, PI * 0.5))
+	return posa
 
 
 ## La libreria di animazioni, letta una volta per tutti: è un file da sette

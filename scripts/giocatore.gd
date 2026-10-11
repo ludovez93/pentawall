@@ -32,6 +32,11 @@ const ALTEZZA_CORPO := 1.8
 
 const BRACCIO_TERZA := 3.9
 const SPALLA_TERZA := 0.85
+## Di quanto la camera sta sopra gli occhi in terza persona. Nelle prove dell'arena aperta
+## (tappa 11) più in alto: la testa del corpo a cartone è larga ottanta centimetri e copriva
+## il campo vicino al mirino (scatti dell'11/10/2026).
+const SOPRA_TERZA := 0.22
+const SOPRA_TERZA_APERTA := 0.62
 ## Quanto la camera resta lontana da muri e soffitti. Gli angoli del piano vicino
 ## stanno a 11 cm dal suo centro (5 cm avanti, schermo del telefono a 2,17 di formato,
 ## campo in corsa di 81 gradi), e non devono mai entrare in un muro; facendo scorrere
@@ -43,6 +48,10 @@ const RAGGIO_CAMERA := 0.2
 const MARGINE_SPALLA := 0.05
 var _sfera_spalla := SphereShape3D.new()
 const CAMPO_TERZA := 75.0
+## Nelle prove dell'arena aperta (tappa 11, blocco C2) il campo in terza persona si
+## stringe: con 75 gradi un corpo a quindici metri è un tredicesimo dello schermo, con 60
+## un nono (Fable, `fable-c2.md`). È un numero d'inquadratura, e la prova lo misura.
+const CAMPO_TERZA_APERTA := 60.0
 const CAMPO_PRIMA := 62.0
 const LENTEZZA_PRIMA := 0.82    ## in prima si mira meglio e ci si muove peggio
 const TEMPO_CAMBIO := 0.16
@@ -76,6 +85,9 @@ var comandi: Node = null        ## i comandi per il pollice, se ci sono
 ## **I potenziamenti** (tappa 8, blocco H): il turbo moltiplica la velocità, i punti
 ## doppi i punti del colpo. Li accende e li spegne chi li gestisce (`Potenziamenti`).
 var spinta := 1.0
+## Il campo in terza persona di questa variante dell'aspetto.
+var _campo_terza := CAMPO_TERZA_APERTA if Aspetto.apre_l_arena() else CAMPO_TERZA
+var _sopra_terza := SOPRA_TERZA_APERTA if Aspetto.apre_l_arena() else SOPRA_TERZA
 var moltiplicatore_punti := 1
 
 var _pendenza := 0.0
@@ -134,7 +146,7 @@ func _unhandled_input(evento: InputEvent) -> void:
 		return
 
 	if evento is InputEventMouseMotion and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
-		var scala := _camera.fov / CAMPO_TERZA
+		var scala := _camera.fov / _campo_terza
 		gira(-evento.relative.x * _sensibilita_mouse * scala,
 				-evento.relative.y * _sensibilita_mouse * scala)
 	elif evento is InputEventKey and evento.pressed and not evento.echo:
@@ -340,7 +352,7 @@ func _leggi_comandi(delta: float) -> void:
 	if comandi != null and comandi.has_method("mira_consumata"):
 		var mira: Vector2 = comandi.mira_consumata()
 		if mira != Vector2.ZERO:
-			var scala := _camera.fov / CAMPO_TERZA
+			var scala := _camera.fov / _campo_terza
 			gira(-mira.x * scala, -mira.y * scala)
 		if comandi.call("fuoco_richiesto"):
 			spara()
@@ -430,10 +442,10 @@ func _aggiorna_camera(delta: float) -> void:
 	var quota := smoothstep(0.0, 1.0, _mescola)
 	_braccio.spring_length = lerpf(BRACCIO_TERZA, 0.0, quota)
 	_braccio.position = _spalla_libera(Vector3(lerpf(SPALLA_TERZA, 0.0, quota),
-			lerpf(0.22, 0.0, quota), 0.0))
+			lerpf(_sopra_terza, 0.0, quota), 0.0))
 	# Il campo si allarga di qualche grado in corsa e torna fermo da fermi: è il
 	# segnale di velocità che costa meno di tutti.
-	_camera.fov = lerpf(CAMPO_TERZA, CAMPO_PRIMA, quota) + CAMPO_CORSA * _corsa
+	_camera.fov = lerpf(_campo_terza, CAMPO_PRIMA, quota) + CAMPO_CORSA * _corsa
 
 	# Il tremito del colpo a segno: un decimo di secondo, che si smorza.
 	if _scossa > 0.0:
@@ -580,7 +592,7 @@ func _costruisci() -> void:
 	# Sopra la spalla e un po' più in alto della testa: con la camera all'altezza
 	# degli occhi, in terza persona il proprio corpo si mangia il centro dello
 	# schermo, che è esattamente dove si mira.
-	_braccio.position = Vector3(SPALLA_TERZA, 0.22, 0)
+	_braccio.position = Vector3(SPALLA_TERZA, _sopra_terza, 0)
 	_braccio.collision_mask = Strati.SOLIDO
 	# **Una sfera, non la camera.** Senza forma, il braccio fa scorrere la piramide
 	# della camera e la lascia **toccare** il muro: il margine vale solo per il raggio
@@ -594,7 +606,7 @@ func _costruisci() -> void:
 	_testa.add_child(_braccio)
 
 	_camera = Camera3D.new()
-	_camera.fov = CAMPO_TERZA
+	_camera.fov = _campo_terza
 	_camera.near = 0.05
 	# 270 dal 06/10/2026: con l'arena a 80 metri il secondo anello del canyon arriva
 	# a 250 dall'angolo opposto, e oltre 220 spariva a pezzi.

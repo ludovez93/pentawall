@@ -262,7 +262,9 @@ func _l_arena() -> void:
 			"%d su %d" % [per_vertice, pezzi])
 	var del_corpo := 0
 	for nodo in (arena.call("giocatore") as Giocatore).corpo().find_children("*", "MeshInstance3D", true, false):
-		var m := (nodo as MeshInstance3D).material_override as BaseMaterial3D
+		# Il materiale che il pezzo usa davvero: il corpo a cartone delle prove (tappa 11) usa
+		# quelli del suo file, senza nessun materiale messo sopra.
+		var m := (nodo as MeshInstance3D).get_active_material(0) as BaseMaterial3D
 		if m != null and m.shading_mode == BaseMaterial3D.SHADING_MODE_PER_PIXEL:
 			del_corpo += 1
 	_conta("e il corpo del giocatore resta su ogni pixel (controprova)", del_corpo > 0,

@@ -20,6 +20,11 @@ var angolo := 0.0
 const OSSA := ["spine_01", "spine_02", "spine_03"]
 const QUOTE := [0.30, 0.34, 0.36]
 
+## Le ossa che si torcono e quanto ognuna, se non sono quelle dei corpi di oggi: il corpo
+## a cartone ne ha una sola, il torso (tappa 11).
+var ossa: Array = OSSA
+var quote: Array = QUOTE
+
 var _indici: Array[int] = []
 
 
@@ -40,7 +45,7 @@ func _torci() -> void:
 	if scheletro == null:
 		return
 	if _indici.is_empty():
-		for nome in OSSA:
+		for nome in ossa:
 			_indici.append(scheletro.find_bone(nome))
 	# La verticale del mondo, vista dallo scheletro: il modello è girato e scalato
 	# dentro il personaggio, e la colonna deve girare attorno al su vero.
@@ -57,5 +62,5 @@ func _torci() -> void:
 		# riportato nello spazio del genitore: le rotazioni attorno allo stesso asse
 		# si sommano senza disturbarsi, quindi l'ordine delle tre vertebre non conta.
 		var asse := (base_genitore.inverse() * su).normalized()
-		var giro := Quaternion(asse, angolo * float(QUOTE[i]))
+		var giro := Quaternion(asse, angolo * float(quote[i]))
 		scheletro.set_bone_pose_rotation(osso, giro * scheletro.get_bone_pose_rotation(osso))

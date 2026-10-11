@@ -13,7 +13,10 @@ extends SceneTree
 ## accorge nessuno. La pianta è un file di testo che si corregge a mano, e questa è
 ## la sua guardia.
 ##
-## Uso:  godot --path . -s tools/cuoci_percorsi.gd
+## Uso:  godot --path . -s tools/cuoci_percorsi.gd [-- <variante dell'aspetto>]
+##
+## Con una variante che apre l'arena (le prove della tappa 11, `Aspetto.rete`) la rete
+## è sua: in mezzo al campo ci sono oggetti che la rete di sempre non conosce.
 
 const PIANTA := "res://arene/palestra.json"
 const RETE := "res://arene/palestra_cammino.res"
@@ -54,13 +57,28 @@ func _initialize() -> void:
 	_lavora()
 
 
+var _rete := RETE
+var _impronta := IMPRONTA
+
+
 func _lavora() -> void:
+	var argomenti := OS.get_cmdline_user_args()
+	var di_prima := Aspetto.scelta()
+	if argomenti.size() > 0:
+		Aspetto.scegli(int(argomenti[0]))
+	else:
+		Aspetto.scegli(Aspetto.OGGI)
+	_rete = Aspetto.rete(RETE)
+	_impronta = _rete.replace(".res", ".json")
+	print("variante %s: %s" % [Aspetto.nome(), _rete])
 	var arena: Node = load("res://scenes/arena.tscn").instantiate()
 	root.add_child(arena)
 	# Due fotogrammi: la scena si costruisce in `_ready`, e le forme di collisione
 	# esistono per il parser solo dopo che sono entrate nell'albero.
 	await process_frame
 	await process_frame
+	# L'arena ha già letto la variante: si rimette quella di prima.
+	Aspetto.scegli(di_prima)
 
 	var rete := _rete_vuota()
 	var sorgente := NavigationMeshSourceGeometryData3D.new()
@@ -76,15 +94,15 @@ func _lavora() -> void:
 		quit(1)
 		return
 
-	var esito := ResourceSaver.save(rete, RETE)
+	var esito := ResourceSaver.save(rete, _rete)
 	if esito != OK:
 		printerr("non si è potuta salvare la rete: errore %d" % esito)
 		quit(1)
 		return
 
 	_scrivi_impronta(poligoni, vertici)
-	print("salvata in ", RETE)
-	print("impronta in ", IMPRONTA)
+	print("salvata in ", _rete)
+	print("impronta in ", _impronta)
 	quit()
 
 
@@ -126,6 +144,6 @@ func _scrivi_impronta(poligoni: int, vertici: int) -> void:
 			"cella": CELLA,
 		},
 	}
-	var file := FileAccess.open(IMPRONTA, FileAccess.WRITE)
+	var file := FileAccess.open(_impronta, FileAccess.WRITE)
 	file.store_string(JSON.stringify(scheda, "  ") + "\n")
 	file.close()

@@ -1,0 +1,14 @@
+{
+  "cotta_il": "2026-10-11",
+  "cotta_per": {
+    "altezza": 1.8,
+    "cella": 0.25,
+    "pendenza_massima": 47.0,
+    "raggio": 0.5,
+    "scalino": 0.4
+  },
+  "impronta": "b991d7c67ce0de5c2beea8cd0b06a314e7b8d59eb0505c6683a49cddb7d6d1bd",
+  "pianta": "res://arene/palestra.json",
+  "poligoni": 1132,
+  "vertici": 1133
+}

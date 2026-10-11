@@ -240,6 +240,9 @@ func _ready() -> void:
 	# l'arena lascia passare un fotogramma: sul telefono l'arena intera costava un
 	# fotogramma solo da secondi, e così il palco continua a muoversi.
 	_pianta = carica_pianta()
+	# Le prove della tappa 11 aprono l'arena: la stessa pianta, coi muri più bassi.
+	if Aspetto.apre_l_arena():
+		_pianta = Apertura.apri(_pianta)
 	_ambiente()
 	_costruisci()
 	await _respiro()
@@ -698,11 +701,12 @@ func _piano_alla_quota(dove: Vector2, quota: float) -> bool:
 ## Se il file non c'è, l'arena si apre lo stesso e il bot torna a fare quello che
 ## faceva prima: una rete che manca non deve togliere il gioco.
 func _rete_di_cammino() -> void:
-	if not ResourceLoader.exists(RETE):
-		push_warning("la rete di cammino non c'è: %s — si gioca senza percorsi" % RETE)
+	var rete := Aspetto.rete(RETE)
+	if not ResourceLoader.exists(rete):
+		push_warning("la rete di cammino non c'è: %s — si gioca senza percorsi" % rete)
 		return
 	var regione := NavigationRegion3D.new()
-	regione.navigation_mesh = load(RETE)
+	regione.navigation_mesh = load(rete)
 	add_child(regione)
 
 
