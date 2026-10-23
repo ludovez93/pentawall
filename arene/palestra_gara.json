@@ -1,0 +1,14 @@
+{
+  "nome": "gara della palestra",
+  "nota": "Il percorso della GARA (tappa 11, blocco D1). Misurato da tools/misura_bandiere.gd il 13/10/2026 e approvato da Ludovico (ricerca-grezza/stato-2026-10-13/gara-bandiere.png): tratti di 40, 42, 38, 39, 44, 67 e 41 m di cammino, 311 m in tutto. Sta fuori da palestra.json perché non tocca la geometria: la rete di cammino porta l'impronta della pianta, e un percorso nuovo non deve chiederne un'altra cottura.",
+  "partenza": {"zona": "ala ocra", "dove": [2.5, -20.5], "quota": 0},
+  "bandiere": [
+    {"numero": 1, "zona": "ala tribuna", "dove": [-21.5, -5.5], "quota": 0},
+    {"numero": 2, "zona": "terrazza sud-ovest", "dove": [-35.5, 33.5], "quota": 3.5},
+    {"numero": 3, "zona": "ballatoio", "dove": [0.5, 23.5], "quota": 7},
+    {"numero": 4, "zona": "terrazza sud-est", "dove": [37.5, 29.5], "quota": 3.5},
+    {"numero": 5, "zona": "ala mattone", "dove": [22.5, -11.5], "quota": 0},
+    {"numero": 6, "zona": "terrazza nord-est", "dove": [28.5, -35.5], "quota": 3.5},
+    {"numero": 7, "zona": "catino", "dove": [0.5, -10.5], "quota": -2}
+  ]
+}

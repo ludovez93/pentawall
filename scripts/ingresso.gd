@@ -47,6 +47,8 @@ var _vetrina: SubViewport
 var _arena_pronta: Node = null
 var _gioca_chiesto := false
 var _quota := 0.0
+## I pulsanti della riga delle modalità, nello stesso ordine di `Modalita.NOMI`.
+var _modalita: Array[Button] = []
 
 
 func _ready() -> void:
@@ -78,6 +80,12 @@ func _ready() -> void:
 				"String(new URLSearchParams(window.location.search).get('aspetto') || '')", true)
 		if aspetto is String and (aspetto as String).is_valid_int():
 			Aspetto.scegli(int(aspetto))
+		# La modalità dall'indirizzo (`?modo=gara`), per chi misura dal browser.
+		var modo: Variant = JavaScriptBridge.eval(
+				"String(new URLSearchParams(window.location.search).get('modo') || '')", true)
+		if modo is String and Modalita.NOMI.has((modo as String).to_upper()):
+			Modalita.scegli(Modalita.NOMI.find((modo as String).to_upper()))
+			_scrivi_le_modalita()
 	_gioca_chiesto = Arena.banco_scheda
 	add_child(Suoni.new())
 	Suoni.musica("musica_ingresso")
@@ -269,9 +277,10 @@ func _titolo_spaziato() -> Font:
 
 
 func _pulsanti() -> void:
+	_riga_delle_modalita()
 	var gioca := Button.new()
 	gioca.text = "GIOCA"
-	gioca.position = Vector2(90, 360)
+	gioca.position = Vector2(90, 392)
 	gioca.custom_minimum_size = Vector2(340, 112)
 	gioca.add_theme_font_override("font", Comandi.carattere_titolo())
 	gioca.add_theme_font_size_override("font_size", 46)
@@ -287,7 +296,7 @@ func _pulsanti() -> void:
 
 	# Sotto GIOCA, finché l'arena si prepara: quanto manca. Sparisce quando è pronta.
 	_attesa = Label.new()
-	_attesa.position = Vector2(92, 486)
+	_attesa.position = Vector2(92, 518)
 	_attesa.add_theme_font_override("font", Comandi.carattere_testo())
 	_attesa.add_theme_font_size_override("font_size", 22)
 	_attesa.add_theme_color_override("font_color", Color(0.40, 1.0, 0.92, 0.8))
@@ -311,20 +320,20 @@ func _pulsanti() -> void:
 	_banco.add_child(_pulsante("ANGOLO", Vector2(170, 68), Color(0.35, 0.4, 0.55),
 			func() -> void: _vai("res://scenes/angolo.tscn")))
 	# L'aspetto (tappa 10): passa alla variante seguente e riprepara l'arena con
-	# quella. La scelta resta salvata, e GIOCA dalla Home la usa. Sta in una riga sua
-	# sopra il banco: in fila con gli altri tre la riga passava gli 854 punti del
-	# telefono in orizzontale.
+	# quella. La scelta resta salvata, e GIOCA dalla Home la usa. Sta in un pulsante a
+	# sé, a destra del banco: sopra il banco, dal 23/10/2026, toccherebbe GIOCA, che è
+	# sceso per far posto alla riga delle modalità.
 	if Aspetto.NOMI.size() > 1:
-		var aspetto := _pulsante("ASPETTO · %s" % Aspetto.nome(), Vector2(300, 60),
+		var aspetto := _pulsante("ASPETTO · %s" % Aspetto.nome(), Vector2(300, 68),
 				Color(0.55, 0.35, 0.7), func() -> void:
 					Aspetto.avanti()
 					banco_al_ritorno = true
 					get_tree().reload_current_scene())
 		aspetto.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-		aspetto.offset_left = 90
-		aspetto.offset_right = 390
-		aspetto.offset_top = -224
-		aspetto.offset_bottom = -164
+		aspetto.offset_left = 700
+		aspetto.offset_right = 1000
+		aspetto.offset_top = -150
+		aspetto.offset_bottom = -82
 		aspetto.visible = false
 		add_child(aspetto)
 		_banco.visibility_changed.connect(func() -> void: aspetto.visible = _banco.visible)
@@ -345,6 +354,56 @@ func _pulsanti() -> void:
 		_riga_versione.add_theme_stylebox_override(stato, StyleBoxEmpty.new())
 	add_child(_riga_versione)
 	_scrivi_la_versione()
+
+
+## **La riga delle modalità** (tappa 11, blocco D): SCONTRO · GARA, sopra GIOCA e larga
+## quanto lui. Quella scelta è piena e chiara, l'altra un vetro scuro; la scelta resta
+## salvata (`Modalita`), e GIOCA entra in quella.
+func _riga_delle_modalita() -> void:
+	var riga := HBoxContainer.new()
+	riga.position = Vector2(90, 326)
+	riga.add_theme_constant_override("separation", 8)
+	add_child(riga)
+	var larga := (340.0 - 8.0 * float(Modalita.NOMI.size() - 1)) / float(Modalita.NOMI.size())
+	for i in Modalita.NOMI.size():
+		var pulsante := Button.new()
+		pulsante.text = Modalita.NOMI[i]
+		pulsante.custom_minimum_size = Vector2(larga, 52)
+		pulsante.add_theme_font_override("font", Comandi.carattere_titolo())
+		pulsante.add_theme_font_size_override("font_size", 24)
+		var quale := i
+		pulsante.pressed.connect(func() -> void:
+			Suoni.tocco()
+			Modalita.scegli(quale)
+			_scrivi_le_modalita())
+		riga.add_child(pulsante)
+		_modalita.append(pulsante)
+	_scrivi_le_modalita()
+
+
+func _scrivi_le_modalita() -> void:
+	for i in _modalita.size():
+		var pulsante := _modalita[i]
+		var scelta := i == Modalita.scelta()
+		var fondo := _sfondo(Color(0.95, 0.96, 1.0), 0.95) if scelta \
+				else _sfondo(Color(0.10, 0.10, 0.20), 0.6)
+		fondo.set_corner_radius_all(18)
+		if not scelta:
+			fondo.border_width_left = 2
+			fondo.border_width_right = 2
+			fondo.border_width_top = 2
+			fondo.border_width_bottom = 2
+			fondo.border_color = Color(1, 1, 1, 0.22)
+		for stato in ["normal", "hover", "focus", "pressed"]:
+			pulsante.add_theme_stylebox_override(stato, fondo)
+		var testo := Color(0.04, 0.03, 0.08) if scelta else Color(1, 1, 1, 0.82)
+		for colore in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+			pulsante.add_theme_color_override(colore, testo)
+
+
+## La modalità scelta sulla Home: serve al collaudo.
+func modalita_scelta() -> int:
+	return Modalita.scelta()
 
 
 ## Il fondo di GIOCA: pieno, acceso, con un'ombra morbida sotto invece del bordo a

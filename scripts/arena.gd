@@ -82,6 +82,30 @@ static var voci_banco: Array = []
 ## Il mondo è pronto e l'arena aspetta di entrare in campo.
 signal preparata
 
+## **La GARA** (tappa 11, blocco D1, approvata il 13/10/2026): sette bandiere in ordine,
+## un giro solo, e chi viene colpito riparte dall'ultima che ha toccato. Vince il primo
+## alla settima, e la partita finisce lì. Il 1999 non aveva un limite di tempo; questo è
+## di sicurezza, e allo scadere vale la classifica delle bandiere. Misurato con G0
+## (`tools/misura_gara.gd`, 23/10/2026): dieci gare fra soli avversari al livello facile,
+## tutte chiuse, fra 42 e 53 secondi (mediana 48); tre a velocità vera, 44-50. Due minuti
+## sono più del doppio della più lunga.
+const DURATA_GARA := 120.0
+## In gara restano TURBO, FULMINE, FANTASMA e RADAR; PUNTI DOPPI e LADRO parlano di punti,
+## e qui non ce ne sono. Per lo stesso motivo i bersagli bonus si fanno da parte.
+const FUORI_GARA := ["doppio", "ladro"]
+## Il tuo posto nella griglia di partenza: la fila davanti, in mezzo (*mio*: la prima gara
+## si deve poter vincere, come la prima partita).
+const POSTO_TUO := 1
+## Quanto pesa, per un avversario in gara, chi gli sta davanti nelle bandiere: la sua
+## distanza conta come se fosse a sei decimi. Preferisce fermare chi lo precede.
+const PREFERENZA_AVANTI := 0.6
+## Ogni quanto si ripete l'avviso di una bandiera toccata fuori ordine.
+const ATTESA_FUORI_ORDINE := 2.5
+## *Nostro*: al via della gara nessuno si può colpire per tanto. In griglia si sta a due metri
+## l'uno dall'altro, e senza questo al VIA ci si sparava addosso a bruciapelo: chi veniva
+## preso ripartiva dalla griglia, cioè di nuovo lì in mezzo (scatto del 23/10/2026).
+const PARTENZA_PROTETTA := 3.0
+
 ## **I cinque avversari.** Il numero non è nostro: la partita di carriera del 1999
 ## girava con cinque bot più il giocatore (`RICERCA-ORIGINALE.md` § 2), ed è anche
 ## il motivo per cui questa pianta ha sei partenze. Uno per partenza, nessuno
@@ -232,6 +256,15 @@ var _prossimo_tabellone := 0.0
 var _potenziamenti: Potenziamenti
 ## Le sagome del tuo RADAR sono accese (tappa 11, blocco B).
 var _radar_acceso := false
+## La modalità della prossima partita (`Modalita`), e quella della partita in corso.
+var _modalita := Modalita.SCONTRO
+var _gara := false
+## Le sette bandiere (tappa 11, blocco D1): ci sono sempre, accese solo in gara.
+var _bandiere: Bandiere
+## I secondi dal via: in gara, a pari bandiere passa chi l'ha toccata prima.
+var _orologio := 0.0
+var _fuori_ordine := -1
+var _attesa_fuori_ordine := 0.0
 
 
 func _ready() -> void:
@@ -260,6 +293,11 @@ func _ready() -> void:
 	# i pezzi che aggiunge la calcolano sui vertici come tutti gli altri. L'arena-giocattolo
 	# lo fa a passi, un fotogramma l'uno quando si prepara dietro l'ingresso.
 	await Aspetto.veste(self)
+	# Le bandiere della GARA nascono sempre, spente: così l'arena preparata dietro
+	# l'ingresso le scalda con tutto il resto, qualunque modalità si scelga dopo.
+	_bandiere = Bandiere.new()
+	add_child(_bandiere)
+	_bandiere.prepara(Bandiere.carica())
 	_luce_per_vertice()
 	await _respiro()
 	_rete_di_cammino()
@@ -362,9 +400,11 @@ func entra_in_campo() -> void:
 	_applica_regola()
 	_aggiorna_righe()
 
-	# Da GIOCA si entra in partita, non in un'arena da guardare.
+	# Da GIOCA si entra in partita, non in un'arena da guardare: nella modalità scelta
+	# sulla Home.
 	_modo_partita = modo_partita
 	if _modo_partita:
+		imposta_modalita(Modalita.scelta())
 		avvia_sfida()
 		if banco_scheda:
 			var banco := BancoScheda.new()
@@ -939,10 +979,16 @@ func _process(delta: float) -> void:
 			_scorre_il_conto(delta)
 		else:
 			_scegli_i_bersagli(delta)
-			_scorre_il_tempo(delta)
-			_guarda_la_classifica(delta)
+			if _gara:
+				_guarda_le_bandiere(delta)
+			if not _finita:
+				_scorre_il_tempo(delta)
+				_guarda_la_classifica(delta)
 	if _modo_partita and _sfida:
-		_comandi.modalita_partita(tempo_scritto(), maxi(posizione_mia(), 1), punteggi()[0])
+		_comandi.modalita_partita(tempo_scritto(), maxi(posizione_mia(), 1), punteggi()[0],
+				_bandiera_scritta())
+	if _comandi != null:
+		_segui_la_tua_bandiera()
 	_segui_i_potenziamenti()
 	for tasto in SCORCIATOIE:
 		var giu := Input.is_physical_key_pressed(tasto)
@@ -1051,8 +1097,8 @@ func _scrivi_il_tabellone() -> void:
 		Vestizione.aggiorna_tabellone(_tabellone, "PENTAWALL", "5 MURI")
 		return
 	var righe := classifica()
-	var capo := "" if righe.is_empty() else "1° %s · %d" % [String(righe[0]["nome"]),
-			int(righe[0]["punti"])]
+	var capo := "" if righe.is_empty() else "1° %s · %s" % [String(righe[0]["nome"]),
+			Comandi.valore_di(righe[0])]
 	if _finita:
 		Vestizione.aggiorna_tabellone(_tabellone, "FINE",
 				"" if righe.is_empty() else "VINCE %s" % String(righe[0]["nome"]))
@@ -1084,6 +1130,11 @@ func _via() -> void:
 	_turno_riscelta = 0
 	for bot in avversari():
 		bot.punta_a(_chi_attaccare(bot))
+	for i in _concorrenti.size():
+		_dai_il_traguardo(i)
+		var corpo: Node3D = _concorrenti[i]["corpo"]
+		if _gara and corpo != null and is_instance_valid(corpo) and corpo.has_method("proteggi"):
+			corpo.call("proteggi", PARTENZA_PROTETTA)
 
 
 ## Il tempo che scende. Finito, finisce la partita: è l'unico modo in cui una
@@ -1160,12 +1211,17 @@ func commuta_sfida() -> void:
 func avvia_sfida() -> void:
 	_sfida = true
 	_finita = false
+	_gara = _modalita == Modalita.GARA
 	_tempo = _durata
 	_conto = CONTO_INIZIALE
 	_avvisi_dati = 0
 	_posizione_annunciata = 0
 	_attesa_annuncio = 0.0
+	_orologio = 0.0
+	_fuori_ordine = -1
+	_attesa_fuori_ordine = 0.0
 	_comandi.spegni_il_podio()
+	_comandi.senza_punti = _gara
 	# I posti dove si va a cercare chi non si trova: le sei partenze.
 	var ronda: Array[Vector3] = []
 	for i in int(_pianta["partenze"].size()):
@@ -1175,24 +1231,42 @@ func avvia_sfida() -> void:
 		bersaglio.metti_in_pausa(true)
 
 	_svuota_il_campo()
-	_mettiti_alla_partenza(_partenza)
+	_bandiere.mostra(_gara)
+	_bandiere.segna(0)
+	var griglia := _bandiere.griglia()
+	if _gara:
+		_mettiti_in_griglia(POSTO_TUO)
+	else:
+		_mettiti_alla_partenza(_partenza)
+	_potenziamenti.escludi(FUORI_GARA if _gara else [])
 	_potenziamenti.riparti()
 	for bonus in _bonus:
-		bonus.riparti()
-	_concorrenti.append({"nome": "TU", "corpo": _giocatore, "punti": 0})
+		bonus.metti_da_parte(_gara)
+	_concorrenti.append({"nome": "TU", "corpo": _giocatore, "punti": 0, "bandiere": 0,
+			"quando": 0.0, "posto": POSTO_TUO, "colpito": 0})
 
 	# **Entrano uno per fotogramma.** Costruire un corpo — mesh, materiali, i due
 	# gusci del contorno — costa tredici millesimi di secondo, e cinque tutti
 	# insieme facevano un fotogramma da sessantatré: un inciampo netto proprio nel
 	# momento in cui si preme SFIDA (misurato il 27/08/2026). Distribuiti, nessun
 	# fotogramma supera i venti, e in un decimo di secondo ci sono tutti.
+	# In gara si parte tutti dalla griglia, raggruppati come nel 1999; nello scontro uno
+	# per partenza.
 	var quante := int(_pianta["partenze"].size())
 	var quanti := mini(NOMI.size(), quante - 1)
+	var posti_liberi: Array[int] = []
+	for p in griglia.size():
+		if p != POSTO_TUO:
+			posti_liberi.append(p)
 	_in_arrivo.clear()
 	for i in quanti:
-		_concorrenti.append({"nome": String(NOMI[i]), "corpo": null, "punti": 0})
-		_in_arrivo.append({"riga": _concorrenti.size() - 1,
-				"partenza": (_partenza + 1 + i) % quante})
+		var posto := posti_liberi[i % posti_liberi.size()]
+		_concorrenti.append({"nome": String(NOMI[i]), "corpo": null, "punti": 0, "bandiere": 0,
+				"quando": 0.0, "posto": posto, "colpito": 0})
+		var dove := _dove_partenza((_partenza + 1 + i) % quante)
+		if _gara:
+			dove = griglia[posto] + Vector3(0, 0.4, 0)
+		_in_arrivo.append({"riga": _concorrenti.size() - 1, "dove": dove})
 	# Nemmeno il primo nasce adesso: il fotogramma in cui si preme il pulsante ha
 	# già da fare — i bersagli che si fanno da parte, il giocatore che va alla
 	# partenza, la classifica che si accende — e sommarci un corpo lo portava a
@@ -1210,8 +1284,8 @@ func avvia_sfida() -> void:
 	_aggiorna_la_classifica()
 	_comandi.scrivi_sfida("CHIUDI")
 	if not _modo_partita:
-		_comandi.annuncia("PARTITA · %s"
-				% String(Avversario.TARATURE[_livello]["nome"]).to_upper())
+		_comandi.annuncia("%s · %s" % ["GARA" if _gara else "PARTITA",
+				String(Avversario.TARATURE[_livello]["nome"]).to_upper()])
 
 
 ## Uno solo per fotogramma, finché la coda non è vuota. Il bersaglio se lo
@@ -1222,7 +1296,7 @@ func _fai_entrare_il_prossimo() -> void:
 		return
 	var chi: Dictionary = _in_arrivo.pop_front()
 	# Il nome è anche la faccia: ogni concorrente ha il suo corpo (`Corpo.PERSONAGGI`).
-	var bot := Avversario.crea(self, _dove_partenza(int(chi["partenza"])), _livello,
+	var bot := Avversario.crea(self, chi["dove"], _livello,
 			String(_concorrenti[int(chi["riga"])]["nome"]))
 	# **Cerca, non sa** (blocco C): nella partita a sei l'avversario ti vede, ti
 	# ricorda o ti cerca. Nel poligono e nell'angolo resta lo sparring partner
@@ -1230,9 +1304,13 @@ func _fai_entrare_il_prossimo() -> void:
 	bot.caccia = true
 	bot.preso_da.connect(_su_colpo_valido.bind(bot))
 	_concorrenti[int(chi["riga"])]["corpo"] = bot
+	if _gara:
+		# In griglia si guarda la prima bandiera, come chi gioca.
+		bot.rotation.y = deg_to_rad(Bandiere.giro_verso(bot.global_position, _bandiere.dove(0)))
 	# Prima del via non attacca nessuno: entra, si guarda intorno e aspetta.
 	if _conto <= 0.0:
 		bot.punta_a(_chi_attaccare(bot))
+		_dai_il_traguardo(int(chi["riga"]))
 	_aggiorna_la_classifica()
 
 
@@ -1246,6 +1324,16 @@ func chiudi_sfida() -> void:
 	_svuota_il_campo()
 	for bersaglio in _bersagli:
 		bersaglio.metti_in_pausa(false)
+	# Chiusa una gara l'arena torna com'era: bandiere spente, e le sfere e i bersagli
+	# bonus che la gara aveva messo da parte di nuovo al loro posto.
+	if _gara:
+		_gara = false
+		_comandi.senza_punti = false
+		_bandiere.mostra(false)
+		_potenziamenti.escludi([])
+		_potenziamenti.riparti()
+		for bonus in _bonus:
+			bonus.metti_da_parte(false)
 	_comandi.spegni_la_classifica()
 	_comandi.spegni_il_podio()
 	_comandi.scrivi_sfida("SFIDA")
@@ -1315,6 +1403,9 @@ func punteggi() -> Array:
 ## resta avanti chi è entrato prima, che è l'ordine delle partenze: senza una
 ## seconda chiave l'ordinamento potrebbe cambiare da solo fra un fotogramma e
 ## l'altro, e la classifica ballerebbe senza motivo.
+##
+## **In gara** (tappa 11, blocco D1) conta le bandiere, e a pari bandiere passa chi l'ha
+## toccata prima; la riga dice «3/7» al posto dei punti.
 func classifica() -> Array:
 	var righe: Array = []
 	for i in _concorrenti.size():
@@ -1325,8 +1416,18 @@ func classifica() -> Array:
 			"tu": riga["corpo"] == _giocatore,
 			"ordine": i,
 		})
+		if _gara:
+			righe[i]["bandiere"] = int(riga["bandiere"])
+			righe[i]["quando"] = float(riga["quando"])
+			righe[i]["testo"] = "%d/%d" % [int(riga["bandiere"]), _bandiere.quante()]
+	var gara := _gara
 	righe.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		if int(a["punti"]) != int(b["punti"]):
+		if gara:
+			if int(a["bandiere"]) != int(b["bandiere"]):
+				return int(a["bandiere"]) > int(b["bandiere"])
+			if int(a["bandiere"]) > 0 and float(a["quando"]) != float(b["quando"]):
+				return float(a["quando"]) < float(b["quando"])
+		elif int(a["punti"]) != int(b["punti"]):
 			return int(a["punti"]) > int(b["punti"])
 		return int(a["ordine"]) < int(b["ordine"]))
 	for i in righe.size():
@@ -1385,7 +1486,7 @@ func _scegli_i_bersagli(delta: float) -> void:
 	if corpo is Avversario and is_instance_valid(corpo):
 		var bot := corpo as Avversario
 		bot.punta_a(_chi_attaccare(bot))
-		bot.bonus = _bonus_a_tiro(bot)
+		bot.bonus = null if _gara else _bonus_a_tiro(bot)
 
 
 ## Chi attaccare: **il più vicino che si vede**, e in mancanza di meglio il più
@@ -1399,14 +1500,18 @@ func _scegli_i_bersagli(delta: float) -> void:
 ## ha **il RADAR** sa dove sono tutti — prende il più vicino, che lo veda o no.
 func _chi_attaccare(bot: Avversario) -> Node3D:
 	var altri: Array = []
+	# In gara si preferisce chi sta davanti nelle bandiere (tappa 11, blocco D1).
+	var mie := _bandiere_di(bot)
 	for riga in _concorrenti:
 		var corpo: Node3D = riga["corpo"]
 		if corpo == null or corpo == bot or not is_instance_valid(corpo):
 			continue
 		if _potenziamenti.ha(corpo, "fantasma"):
 			continue
-		altri.append({"corpo": corpo,
-				"quanto": bot.global_position.distance_to(corpo.global_position)})
+		var quanto := bot.global_position.distance_to(corpo.global_position)
+		if _gara and int(riga.get("bandiere", 0)) > mie:
+			quanto *= PREFERENZA_AVANTI
+		altri.append({"corpo": corpo, "quanto": quanto})
 	if altri.is_empty():
 		return null
 	altri.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
@@ -1431,6 +1536,8 @@ func _chi_attaccare(bot: Avversario) -> Node3D:
 	if attuale != null and is_instance_valid(attuale) and attuale != scelto \
 			and not _potenziamenti.ha(attuale, "fantasma"):
 		var quanto := bot.global_position.distance_to(attuale.global_position)
+		if _gara and _bandiere_di(attuale) > mie:
+			quanto *= PREFERENZA_AVANTI
 		if quanto <= quanto_scelto * AFFEZIONE and _si_vedono(bot, attuale):
 			return attuale
 	return scelto
@@ -1461,6 +1568,7 @@ func _finisci_la_partita() -> void:
 	for bot in avversari():
 		bot.bersaglio = null
 		bot.bonus = null
+		bot.traguardo = Vector3.INF
 	_aggiorna_la_classifica()
 	_comandi.scrivi_sfida("ANCORA")
 	var righe := classifica()
@@ -1497,6 +1605,9 @@ func torna_all_ingresso() -> void:
 func _su_colpo_valido(chi_spara: Object, punti: int, muri: int, chi_incassa: Node3D) -> void:
 	# Prima del via i colpi non contano: si entra in campo tutti insieme.
 	if not _sfida or _finita or _conto > 0.0:
+		return
+	if _gara:
+		_colpo_in_gara(chi_spara, chi_incassa)
 		return
 	var autore := _riga_di(chi_spara)
 	# I punti doppi di chi spara (tappa 8, blocco H).
@@ -1618,7 +1729,9 @@ func bersagli_bonus() -> Array[BersaglioBonus]:
 func _ricompari(chi: Node3D, _da: Object) -> void:
 	if not _sfida or _finita or chi == null or not is_instance_valid(chi):
 		return
-	var posto := _dove_ricomparire(chi)
+	# In gara non si sceglie un posto lontano da tutti: si torna all'ultima bandiera
+	# toccata, ed è quello che costa il colpo (tappa 11, blocco D1).
+	var posto := _posto_in_gara(chi) if _gara else _dove_ricomparire(chi)
 	var dove: Vector3 = posto["dove"]
 	# Chi sparisce lascia uno sbuffo, e dove riappare sale una colonna di luce nel
 	# suo colore (tappa 8, blocco G): senza, chi ricompare dall'altra parte
@@ -1639,6 +1752,175 @@ func _ricompari(chi: Node3D, _da: Object) -> void:
 	if chi.has_method("proteggi"):
 		chi.call("proteggi", PROTEZIONE)
 	Scintille.ricomparsa(dove - Vector3(0, 0.4, 0), colore)
+
+
+# ------------------------------------------------------------------ la gara
+
+## La modalità della prossima partita, SCONTRO o GARA (`Modalita`). Con lei cambia la
+## durata: la gara ha il suo limite di sicurezza. I collaudi la scelgono da qui.
+func imposta_modalita(quale: int) -> void:
+	_modalita = quale
+	_durata = DURATA_GARA if quale == Modalita.GARA else DURATA_PARTITA
+
+
+func modalita() -> int:
+	return _modalita
+
+
+## La partita in corso, o l'ultima giocata, è una gara.
+func in_gara() -> bool:
+	return _gara
+
+
+func bandiere() -> Bandiere:
+	return _bandiere
+
+
+## Quante bandiere ha toccato un corpo, nella gara in corso.
+func bandiere_di(corpo: Object) -> int:
+	return _bandiere_di(corpo)
+
+
+func _bandiere_di(corpo: Object) -> int:
+	var riga := _riga_di(corpo)
+	return int(_concorrenti[riga].get("bandiere", 0)) if riga >= 0 else 0
+
+
+## Quante volte un corpo è stato colpito nella partita in corso: serve alla misura G0.
+func colpi_incassati(corpo: Object) -> int:
+	var riga := _riga_di(corpo)
+	return int(_concorrenti[riga].get("colpito", 0)) if riga >= 0 else 0
+
+
+## I secondi dal via della gara in corso.
+func orologio() -> float:
+	return _orologio
+
+
+## La riga sotto la posizione: in gara, al posto dei punti, la bandiera da toccare.
+func _bandiera_scritta() -> String:
+	if not _gara:
+		return ""
+	var fatte := _bandiere_di(_giocatore)
+	if fatte >= _bandiere.quante():
+		return "ARRIVATO"
+	return "BANDIERA %d DI %d" % [fatte + 1, _bandiere.quante()]
+
+
+## Chi tocca la sua prossima bandiera, e se tu ne tocchi una fuori ordine.
+func _guarda_le_bandiere(delta: float) -> void:
+	_orologio += delta
+	_attesa_fuori_ordine = maxf(_attesa_fuori_ordine - delta, 0.0)
+	for i in _concorrenti.size():
+		var corpo: Node3D = _concorrenti[i]["corpo"]
+		if corpo == null or not is_instance_valid(corpo):
+			continue
+		var prossima := int(_concorrenti[i]["bandiere"])
+		if prossima >= _bandiere.quante():
+			continue
+		if _bandiere.tocca(prossima, corpo.global_position):
+			_bandiera_toccata(i, prossima)
+			if _finita:
+				return
+		elif corpo == _giocatore:
+			_guarda_fuori_ordine(prossima)
+
+
+func _bandiera_toccata(riga: int, indice: int) -> void:
+	_concorrenti[riga]["bandiere"] = indice + 1
+	_concorrenti[riga]["quando"] = _orologio
+	var ultima := indice + 1 >= _bandiere.quante()
+	if _concorrenti[riga]["corpo"] == _giocatore:
+		_bandiere.segna(indice + 1)
+		Suoni.bandiera(ultima)
+		if not ultima:
+			_comandi.annuncia("BANDIERA %d" % (indice + 1))
+	_dai_il_traguardo(riga)
+	_aggiorna_la_classifica()
+	if ultima:
+		_finisci_la_partita()
+
+
+## Fuori ordine non conta, come nel 1999, e un avviso dice quale serve: una volta per
+## bandiera finché ci resti sopra, e mai più spesso di `ATTESA_FUORI_ORDINE`.
+func _guarda_fuori_ordine(prossima: int) -> void:
+	var dentro := -1
+	for j in range(prossima + 1, _bandiere.quante()):
+		if _bandiere.tocca(j, _giocatore.global_position):
+			dentro = j
+	if dentro >= 0 and dentro != _fuori_ordine and _attesa_fuori_ordine <= 0.0:
+		_comandi.annuncia("PRIMA LA BANDIERA %d" % (prossima + 1))
+		_attesa_fuori_ordine = ATTESA_FUORI_ORDINE
+	_fuori_ordine = dentro
+
+
+## Il traguardo di un avversario: la sua prossima bandiera, finché si corre.
+func _dai_il_traguardo(riga: int) -> void:
+	var corpo: Node3D = _concorrenti[riga]["corpo"]
+	if not _gara or not (corpo is Avversario) or not is_instance_valid(corpo):
+		return
+	var bot := corpo as Avversario
+	var prossima := int(_concorrenti[riga]["bandiere"])
+	if _finita or prossima >= _bandiere.quante():
+		bot.traguardo = Vector3.INF
+	else:
+		bot.traguardo = _bandiere.dove(prossima)
+	bot.ricomincia_il_cammino()
+
+
+## **Il colpo in gara** non fa punti: ferma. Chi lo incassa torna alla sua ultima
+## bandiera (alla griglia, se non ne ha toccata nessuna), e se sei tu te lo dice.
+func _colpo_in_gara(chi_spara: Object, chi_incassa: Node3D) -> void:
+	var autore := _riga_di(chi_spara)
+	var vittima := _riga_di(chi_incassa)
+	if vittima >= 0:
+		_concorrenti[vittima]["colpito"] = int(_concorrenti[vittima]["colpito"]) + 1
+	if chi_incassa == _giocatore:
+		# Corto come nello scontro: dove si riparte lo dice la colonna, che si accende lì.
+		_comandi.annuncia("COLPITO DA %s" % String(_concorrenti[autore]["nome"]) if autore >= 0
+				else "COLPITO")
+	elif autore >= 0 and chi_spara != _giocatore:
+		Suoni.colpo_nel_mondo(chi_incassa.global_position)
+	_ricompari.call_deferred(chi_incassa, chi_spara)
+
+
+## Dove si riparte in gara: un passo dopo l'ultima bandiera toccata, o il proprio posto
+## in griglia se ancora nessuna.
+func _posto_in_gara(chi: Node3D) -> Dictionary:
+	var fatte := _bandiere_di(chi)
+	if fatte > 0:
+		return _bandiere.posto_di_ripartenza(mini(fatte, _bandiere.quante()) - 1,
+				get_world_3d().direct_space_state)
+	var riga := _riga_di(chi)
+	var posto := int(_concorrenti[riga]["posto"]) if riga >= 0 else POSTO_TUO
+	var griglia := _bandiere.griglia()
+	return {"dove": griglia[posto] + Vector3(0, 0.4, 0),
+			"giro": Bandiere.giro_verso(griglia[posto], _bandiere.dove(0))}
+
+
+## Il giocatore al suo posto in griglia, girato verso la prima bandiera.
+func _mettiti_in_griglia(posto: int) -> void:
+	var griglia := _bandiere.griglia()
+	_giocatore.global_position = griglia[posto] + Vector3(0, 0.4, 0)
+	_giocatore.velocity = Vector3.ZERO
+	_giocatore.punta(Bandiere.giro_verso(griglia[posto], _bandiere.dove(0)), -4.0)
+
+
+## La freccia sul bordo dello schermo segue la bandiera che devi toccare tu.
+func _segui_la_tua_bandiera() -> void:
+	var prossima := _bandiere_di(_giocatore)
+	if not _gara or not _sfida or _finita or prossima >= _bandiere.quante():
+		_comandi.freccia(Vector3.INF)
+		return
+	# Il segnalino sta sopra la punta dell'asta; se fra la camera e lì c'è un muro, la
+	# bandiera è coperta. Un raggio a fotogramma.
+	var cima := _bandiere.dove(prossima) + Vector3(0, Bandiere.ALTA + 1.0, 0)
+	var camera := get_viewport().get_camera_3d()
+	var coperta := false
+	if camera != null:
+		var domanda := PhysicsRayQueryParameters3D.create(camera.global_position, cima, Strati.SOLIDO)
+		coperta = not get_world_3d().direct_space_state.intersect_ray(domanda).is_empty()
+	_comandi.freccia(cima, _bandiere.colore_di(prossima), "%d" % (prossima + 1), coperta)
 
 
 ## Dove ricomparire: lontano da **tutti** e fuori dalla vista di **tutti**, non solo

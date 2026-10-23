@@ -277,6 +277,16 @@ static func potenziamento_finito() -> void:
 	attivo._mia("potenziamento_fine", -7.0, 1.0)
 
 
+## Una bandiera della GARA toccata da te (tappa 11, blocco D1): la voce delle palle
+## colorate, più acuta; la settima, con la folla.
+static func bandiera(ultima: bool) -> void:
+	if attivo == null:
+		return
+	attivo._mia("potenziamento", -3.0, 1.25)
+	if ultima:
+		attivo._mia("esultanza", -4.0, 1.0)
+
+
 ## I bersagli bonus (tappa 11, blocco F): preso e riacceso si sentono da dove stanno, con
 ## la voce delle palle colorate, più acuta. Chi l'ha preso sente anche il suo colpo a segno.
 static func bersaglio_preso(dove: Vector3) -> void:

@@ -73,6 +73,17 @@ var _vignetta := 0.0
 var _verso_vignetta := Vector2(0, 1)
 ## `{"etichetta": Label, "punto": Vector3, "vita": float}`
 var _etichette_volanti: Array[Dictionary] = []
+## In GARA i colpi non fanno punti (tappa 11, blocco D1): l'etichetta che sale dal colpo
+## dice che l'hai fermato, non quanto vale.
+var senza_punti := false
+## La freccia sul bordo dello schermo: dove sta la prossima bandiera quando non la vedi.
+## `Vector3.INF`: spenta.
+var _freccia_meta := Vector3.INF
+var _freccia_colore := Color.WHITE
+var _freccia_testo := ""
+## La bandiera è nello schermo ma dietro un muro: al posto della freccia, il segnalino.
+var _freccia_coperta := false
+const MARGINE_FRECCIA := 110.0
 ## Di quanti punti di schermo l'etichetta parte sopra il colpo: grande (tappa 11), la
 ## scritta coprirebbe chi l'ha preso.
 var _alza_etichette := 70.0 if Aspetto.corpi_a_cartone() else 26.0
@@ -125,7 +136,7 @@ func punti_dal_mondo(dove: Vector3, punti: int, muri: int, bonus := false) -> vo
 	voce["punto"] = dove
 	voce["vita"] = VITA_ETICHETTA
 	var etichetta: Label = voce["etichetta"]
-	etichetta.text = testo_del_colpo(punti, muri, bonus)
+	etichetta.text = TESTO_FERMATO if senza_punti and not bonus else testo_del_colpo(punti, muri, bonus)
 	etichetta.visible = true
 	etichetta.modulate.a = 1.0
 
@@ -137,6 +148,10 @@ static func testo_del_colpo(punti: int, muri: int, bonus := false) -> String:
 	if bonus:
 		return "+%d · BERSAGLIO" % punti
 	return ("+%d · DIRETTO" if muri <= 0 else "+%d · DI SPONDA") % punti
+
+
+## L'etichetta del colpo a segno in GARA: chi l'incassa torna alla sua ultima bandiera.
+const TESTO_FERMATO := "FERMATO!"
 
 
 ## L'annuncio grosso del colpo, al centro: «DIRETTO · 25», «DI SPONDA · 50».
@@ -262,6 +277,22 @@ func fischio(testo: String) -> void:
 	_tempo_fischio = 0.9
 
 
+## Il numero della bandiera coperta in un tondo nel suo colore, con la punta in giù verso
+## il punto dove sta.
+func _disegna_il_segnalino(dove: Vector2) -> void:
+	var tondo := dove - Vector2(0, 46.0)
+	var punta := PackedVector2Array([dove, tondo + Vector2(-16.0, 20.0), tondo + Vector2(16.0, 20.0)])
+	_disegno.draw_colored_polygon(punta, _freccia_colore)
+	_disegno.draw_circle(tondo, 28.0, _freccia_colore)
+	_disegno.draw_arc(tondo, 28.0, 0.0, TAU, 32, Color(1, 1, 1, 0.95), 4.0, true)
+	var font := carattere_titolo()
+	var dove_testo := tondo + Vector2(-40.0, 15.0)
+	_disegno.draw_string_outline(font, dove_testo, _freccia_testo, HORIZONTAL_ALIGNMENT_CENTER,
+			80.0, 40, 8, Color(0.02, 0.02, 0.06, 0.85))
+	_disegno.draw_string(font, dove_testo, _freccia_testo, HORIZONTAL_ALIGNMENT_CENTER, 80.0, 40,
+			Color(1, 1, 1, 0.98))
+
+
 ## L'annuncio grosso al centro: quanti muri ha fatto il colpo e quanto vale.
 func annuncia(testo: String) -> void:
 	_avviso.text = testo
@@ -321,12 +352,18 @@ func classifica(righe: Array) -> void:
 		var tuo := bool(dato.get("tu", false))
 		(riga["posizione"] as Label).text = "%d" % int(dato["posizione"])
 		(riga["nome"] as Label).text = String(dato["nome"])
-		(riga["punti"] as Label).text = "%d" % int(dato["punti"])
+		(riga["punti"] as Label).text = valore_di(dato)
 		var tinta := Color(1, 1, 1, 0.98) if tuo else Color(1, 1, 1, 0.62)
 		for chiave in ["posizione", "nome", "punti"]:
 			(riga[chiave] as Label).add_theme_color_override("font_color", tinta)
 		pannello.add_theme_stylebox_override("panel",
 				_riga_accesa() if tuo else _vuoto())
+
+
+## Il numero di una riga: i punti, o quello che la riga dice al loro posto — in GARA le
+## bandiere, «3/7».
+static func valore_di(dato: Dictionary) -> String:
+	return String(dato["testo"]) if dato.has("testo") else "%d" % int(dato["punti"])
 
 
 ## Si spegne quando la partita non c'è: fuori dalla sfida l'arena è un posto in
@@ -400,6 +437,7 @@ func _riga_accesa() -> StyleBoxFlat:
 
 func _disegna() -> void:
 	_disegna_la_vignetta()
+	_disegna_la_freccia()
 	var chiaro := Color(1, 1, 1, 0.5)
 	# Il mirino: al centro, sempre, in tutte e due le visuali.
 	var centro := _disegno.size * 0.5
@@ -635,13 +673,99 @@ static func carattere_titolo() -> Font:
 ## L'interfaccia della partita al posto di quella di collaudo: via la riga
 ## tecnica e i pulsanti di prova, dentro il cronometro, la posizione e i punti.
 ## Restano il mirino, la leva, FUOCO e SALTA: quelli sono il gioco.
-func modalita_partita(tempo: String, posizione: int, punti: int) -> void:
+func modalita_partita(tempo: String, posizione: int, punti: int, sotto := "") -> void:
 	if not _in_partita:
 		_accendi_la_partita()
 		_in_partita = true
 	_cronometro.text = tempo
 	_posizione_grande.text = "%d°" % posizione
-	_punti_piccoli.text = "%d PUNTI" % punti
+	# In GARA, al posto dei punti, la bandiera che devi toccare: «BANDIERA 3 DI 7».
+	_punti_piccoli.text = sotto if sotto != "" else "%d PUNTI" % punti
+
+
+## **La freccia della GARA** (tappa 11, blocco D1): quando la prossima bandiera è fuori
+## dallo schermo, sul bordo una freccia nel suo colore dice da che parte girarsi, col
+## numero accanto. Quando è nello schermo ma dietro un muro (`coperta`), sopra il punto dove
+## sta compare il suo numero in un tondo, che punta giù: dalla griglia la prima bandiera è
+## dietro un muro, e senza niente non si sapeva dove andare (scatto del 23/10/2026). In
+## vista, niente: c'è la colonna. `Vector3.INF` la spegne.
+func freccia(meta: Vector3, colore := Color.WHITE, testo := "", coperta := false) -> void:
+	_freccia_meta = meta
+	_freccia_colore = colore
+	_freccia_testo = testo
+	_freccia_coperta = coperta
+
+
+## Il segnalino della bandiera coperta, se c'è: il punto dello schermo sopra cui sta.
+## `Vector2.INF` quando non c'è.
+func dove_il_segnalino() -> Vector2:
+	if _freccia_meta == Vector3.INF or not _freccia_coperta or _disegno == null:
+		return Vector2.INF
+	var camera := get_viewport().get_camera_3d()
+	if camera == null or camera.is_position_behind(_freccia_meta):
+		return Vector2.INF
+	var punto := camera.unproject_position(_freccia_meta)
+	if not Rect2(Vector2.ZERO, _disegno.size).grow(-MARGINE_FRECCIA).has_point(punto):
+		return Vector2.INF
+	return punto
+
+
+## Se la freccia è sul bordo in questo momento, e dove: serve al collaudo. `Vector2.INF`
+## quando non c'è (spenta, o la bandiera è sullo schermo).
+func dove_la_freccia() -> Vector2:
+	if _freccia_meta == Vector3.INF or _disegno == null:
+		return Vector2.INF
+	var camera := get_viewport().get_camera_3d()
+	if camera == null:
+		return Vector2.INF
+	var misura := _disegno.size
+	var centro := misura * 0.5
+	var dietro := camera.is_position_behind(_freccia_meta)
+	var punto := camera.unproject_position(_freccia_meta)
+	if not dietro and Rect2(Vector2.ZERO, misura).grow(-MARGINE_FRECCIA).has_point(punto):
+		return Vector2.INF
+	var verso := punto - centro
+	if dietro:
+		# Alle spalle la proiezione esce rovesciata: si raddrizza, e la freccia va sempre
+		# verso il basso — dietro è giù, come la vignetta del colpo incassato.
+		verso = Vector2(-verso.x, absf(verso.y) + misura.y * 0.5)
+	if verso.length_squared() < 1.0:
+		verso = Vector2(0, 1)
+	verso = verso.normalized()
+	var t := minf((centro.x - MARGINE_FRECCIA) / maxf(absf(verso.x), 0.001),
+			(centro.y - MARGINE_FRECCIA) / maxf(absf(verso.y), 0.001))
+	return centro + verso * t
+
+
+func _disegna_la_freccia() -> void:
+	var segnalino := dove_il_segnalino()
+	if segnalino != Vector2.INF:
+		_disegna_il_segnalino(segnalino)
+		return
+	var dove := dove_la_freccia()
+	if dove == Vector2.INF:
+		return
+	var verso := (dove - _disegno.size * 0.5).normalized()
+	var lato := Vector2(-verso.y, verso.x)
+	# Grande e col bordo bianco: piccola e blu, sul pavimento chiaro si perdeva (23/10/2026).
+	var punta := dove + verso * 34.0
+	var dietro := dove - verso * 20.0
+	var tre := PackedVector2Array([punta, dietro + lato * 32.0, dietro - lato * 32.0])
+	_disegno.draw_colored_polygon(tre, _freccia_colore)
+	_disegno.draw_polyline(PackedVector2Array([punta, dietro + lato * 32.0, dietro - lato * 32.0,
+			punta]), Color(1, 1, 1, 0.95), 4.0, true)
+	if _freccia_testo == "":
+		return
+	# Il numero in un tondo del colore della bandiera, dietro la freccia.
+	var font := carattere_titolo()
+	var tondo := dove - verso * 64.0
+	_disegno.draw_circle(tondo, 28.0, _freccia_colore)
+	_disegno.draw_arc(tondo, 28.0, 0.0, TAU, 32, Color(1, 1, 1, 0.95), 4.0, true)
+	var dove_testo := tondo + Vector2(-40.0, 15.0)
+	_disegno.draw_string_outline(font, dove_testo, _freccia_testo, HORIZONTAL_ALIGNMENT_CENTER,
+			80.0, 40, 8, Color(0.02, 0.02, 0.06, 0.85))
+	_disegno.draw_string(font, dove_testo, _freccia_testo, HORIZONTAL_ALIGNMENT_CENTER, 80.0, 40,
+			Color(1, 1, 1, 0.98))
 
 
 ## Il giro che si fa una volta sola, quando la partita comincia: costa
@@ -766,7 +890,7 @@ func podio(righe: Array, posizione: int) -> void:
 		var tuo := bool(dato.get("tu", false))
 		(riga["posizione"] as Label).text = "%d°" % int(dato["posizione"])
 		(riga["nome"] as Label).text = String(dato["nome"])
-		(riga["punti"] as Label).text = "%d" % int(dato["punti"])
+		(riga["punti"] as Label).text = valore_di(dato)
 		var tinta := Color(1, 0.86, 0.35, 1.0) if tuo else Color(1, 1, 1, 0.72)
 		for chiave in ["posizione", "nome", "punti"]:
 			(riga[chiave] as Label).add_theme_color_override("font_color", tinta)

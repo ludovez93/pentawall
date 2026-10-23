@@ -106,6 +106,17 @@ func riparti() -> void:
 	collision_layer = Strati.BERSAGLIO
 
 
+## Fuori dalla partita (in GARA, tappa 11, blocco D1: i bersagli parlano di punti, e lì non
+## ce ne sono) o di nuovo dentro, acceso. Da parte non si vede e non si colpisce.
+func metti_da_parte(fuori: bool) -> void:
+	visible = not fuori
+	process_mode = Node.PROCESS_MODE_DISABLED if fuori else Node.PROCESS_MODE_INHERIT
+	riparti()
+	if fuori:
+		_spento = INF
+		collision_layer = 0
+
+
 func _process(delta: float) -> void:
 	if _gira > 0.0:
 		_gira -= delta

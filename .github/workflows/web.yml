@@ -120,6 +120,15 @@ jobs:
           # Fino al 04/10/2026 nessun controllo camminava sulle rampe.
           "$GODOT" --headless --path . -s tools/prova_gradini.gd
 
+      - name: Collauda la gara
+        run: |
+          set -euo pipefail
+          # La tappa 11, blocco D1: sette bandiere in ordine, fuori ordine non conta, chi
+          # viene colpito riparte dall'ultima toccata, la settima chiude la partita. Ogni
+          # regola con la sua controprova, la Home che sceglie la modalita', e dieci gare
+          # accelerate fra soli avversari che devono arrivare tutte in fondo.
+          "$GODOT" --headless --path . -s tools/prova_gara.gd
+
       - name: Collauda le varianti dell'aspetto
         run: |
           set -euo pipefail
@@ -144,7 +153,7 @@ jobs:
           # e la rete di cammino un `.res`. Se restano fuori, sul telefono l'arena
           # non si apre e non lo dice nessuno — quindi si guarda **dentro** il
           # pacchetto, prima di pubblicare e non dopo.
-          for dentro in "arene/palestra.json" "arene/palestra_cammino.res"; do
+          for dentro in "arene/palestra.json" "arene/palestra_cammino.res" "arene/palestra_gara.json"; do
             if grep -a -q "$dentro" build/web/index.pck; then
               echo "  ok   $dentro"
             else

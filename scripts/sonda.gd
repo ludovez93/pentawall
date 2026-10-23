@@ -314,6 +314,9 @@ func riga(motivo := "") -> String:
 	# La variante dell'aspetto (tappa 10): le partite di misura si confrontano per
 	# variante, e la zero è l'arena di prima.
 	testo += "&aspetto=%d" % Aspetto.scelta()
+	# La modalità (tappa 11, blocco D): una gara e uno scontro non pesano uguale.
+	if arena != null and arena.has_method("modalita"):
+		testo += "&modo=%s" % Modalita.NOMI[int(arena.call("modalita"))].to_lower()
 	if motivo == "apertura" or _spedite == 0:
 		# Come si chiama la scheda video per il motore: da questo nome Godot decide se
 		# fare la passata di profondità (la spegne solo se dice «Apple»). Nella prima

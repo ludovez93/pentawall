@@ -177,6 +177,12 @@ var bonus: BersaglioBonus = null
 ## 12/09/2026, ti inseguiva senza vederti l'84% del tempo.
 var caccia := false
 
+## **La GARA** (tappa 11, blocco D1): la prossima bandiera da toccare, e la mette l'arena.
+## Finché c'è, i piedi vanno lì e basta — sulla rete di cammino, senza girare intorno a
+## nessuno — e il bersaglio serve solo a sparare, senza fermarsi. `Vector3.INF`: non si
+## corre, e tutto il resto si comporta come prima.
+var traguardo := Vector3.INF
+
 ## Se lo vede **in questo fotogramma**: lo stesso raggio serve a guardare, a
 ## muoversi e a sparare, e si paga una volta sola.
 var _vede := false
@@ -359,6 +365,13 @@ func punto_di_mira() -> Vector3:
 	# Un bersaglio bonus sta fermo: niente anticipo.
 	if _al_bonus():
 		return bonus.centro()
+	# In gara, se non ha nessuno davanti, guarda la strada: il prossimo passo, non la
+	# bandiera dall'altra parte del muro.
+	if in_gara() and (bersaglio == null or not is_instance_valid(bersaglio) or not _vede):
+		var passo := _prossimo_passo()
+		if passo.length_squared() < 0.04:
+			passo = _meta() - global_position
+		return global_position + passo + Vector3(0, ALTEZZA_PETTO, 0)
 	if bersaglio == null or not is_instance_valid(bersaglio):
 		return global_position - global_transform.basis.z * 10.0
 	# In caccia, se non lo vede, guarda dove sta andando — l'ultima notizia o il
@@ -573,6 +586,8 @@ func _muovi(delta: float) -> void:
 		_schivata -= delta
 		# Il turbo non allunga il balzo, come prima; il FULMINE lo accorcia.
 		voluta = _verso_schivata * VELOCITA_SCHIVATA * minf(spinta, 1.0)
+	elif in_gara():
+		voluta = _direzione_di_corsa() * Giocatore.VELOCITA * spinta
 	elif bersaglio != null and is_instance_valid(bersaglio):
 		voluta = _direzione_tattica(delta) * Giocatore.VELOCITA * spinta
 	else:
@@ -611,6 +626,11 @@ func _muovi(delta: float) -> void:
 ## non ha notizie gira per l'arena. Con la caccia spenta è sempre il bersaglio, e
 ## tutto quello che c'è sotto si comporta come prima.
 func _meta() -> Vector3:
+	# In gara si va alla bandiera; una palla colorata a due passi vale la deviazione anche
+	# qui, come in Mario Kart (in gara restano TURBO, FULMINE, FANTASMA e RADAR).
+	if in_gara():
+		var vicina := _sfera_vicina()
+		return vicina if vicina != Vector3.INF else traguardo
 	if bersaglio == null or not is_instance_valid(bersaglio):
 		return global_position
 	# Una palla colorata a due passi vale la deviazione: la si va a prendere, a meno
@@ -684,7 +704,7 @@ static func si_e_sparato(albero: SceneTree, dove: Vector3, chi: Object) -> void:
 ## — i posti dove la gente c'è — e se ne cambia quando ci si arriva, o quando è
 ## chiaro che non ci si arriva.
 func _gira_per_l_arena(delta: float) -> void:
-	if not caccia or bersaglio == null or not is_instance_valid(bersaglio):
+	if not caccia or in_gara() or bersaglio == null or not is_instance_valid(bersaglio):
 		return
 	if _vede or ha_notizia():
 		_ronda = Vector3.ZERO
@@ -772,7 +792,7 @@ func _aggiorna_il_percorso(delta: float) -> void:
 	if _prossimo_percorso > 0.0:
 		return
 	_prossimo_percorso = RICALCOLO_PERCORSO
-	if bersaglio == null or not is_instance_valid(bersaglio):
+	if not in_gara() and (bersaglio == null or not is_instance_valid(bersaglio)):
 		_percorso = PackedVector3Array()
 		return
 	var mappa := get_world_3d().navigation_map
@@ -840,6 +860,26 @@ func _controlla_se_sono_incastrato(delta: float) -> void:
 	_prossimo_percorso = maxf(_prossimo_percorso, 1.0)
 	if is_on_floor():
 		velocity.y = Giocatore.SPINTA_SALTO
+
+
+## Sta correndo una gara: ha una bandiera da raggiungere.
+func in_gara() -> bool:
+	return traguardo != Vector3.INF
+
+
+## **La corsa** (tappa 11, blocco D1): la strada della rete fino alla meta, sempre. Niente
+## distanza di tiro né passi di lato: in gara chi si ferma a duellare perde. Dove la rete
+## non c'è si va dritti.
+func _direzione_di_corsa() -> Vector3:
+	_stava_camminando = false
+	var passo := _prossimo_passo()
+	if _percorso.is_empty() or passo.length_squared() < 0.04:
+		passo = _meta() - global_position
+		passo.y = 0.0
+	if passo.length_squared() < 0.04:
+		return Vector3.ZERO
+	_stava_camminando = true
+	return passo.normalized()
 
 
 func _direzione_del_cammino(distanza: float, lo_vede: bool) -> Vector3:

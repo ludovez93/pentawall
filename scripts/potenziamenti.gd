@@ -63,6 +63,9 @@ var _effetti := {}
 var _spinte := {}
 var _tempo := 0.0
 var _ricomparsa := RICOMPARSA
+## I tipi che in questa partita non ci sono: in GARA PUNTI DOPPI e LADRO, che parlano di
+## punti, e lì non ce ne sono (tappa 11, blocco D1). La loro sfera resta spenta.
+var _esclusi: Array = []
 
 
 ## Mette le sfere nei posti dati: `[{"tipo", "dove"}]`.
@@ -79,8 +82,9 @@ func prepara(posti: Array) -> void:
 ## Tutte di nuovo al loro posto, e nessuno potenziato: si riparte da zero.
 func riparti() -> void:
 	for sfera in _sfere:
-		sfera["attesa"] = 0.0
-		(sfera["nodo"] as Node3D).visible = true
+		var esclusa := _esclusi.has(sfera["tipo"])
+		sfera["attesa"] = INF if esclusa else 0.0
+		(sfera["nodo"] as Node3D).visible = not esclusa
 	var toccati: Array = _effetti.keys()
 	_effetti.clear()
 	for chiave in toccati:
@@ -94,6 +98,11 @@ func riparti() -> void:
 			corpo.set("spinta", 1.0)
 	_spinte.clear()
 	_aggiorna_disponibili()
+
+
+## Quali tipi restano fuori dalla prossima partita; vale da `riparti`.
+func escludi(tipi: Array) -> void:
+	_esclusi = tipi.duplicate()
 
 
 ## Quanto si aspetta prima che una sfera presa ricompaia. I collaudi lo abbassano.
