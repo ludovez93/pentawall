@@ -195,8 +195,10 @@ func _guarda_l_arena_aperta(arena: Node3D, nome: String, pezzi: Dictionary, soff
 	for figlio in arena.get_children():
 		if figlio.is_in_group(Apertura.GRUPPO_OGGETTI):
 			oggetti += 1
-	_conta("%s: i pezzi della direzione, e almeno trenta oggetti in campo" % nome,
-			mancano.is_empty() and oggetti >= 30, "mancano %s, %d oggetti" % [mancano, oggetti])
+	# Venticinque e non più trenta: dal 23/10/2026 gli oggetti che ingombravano porte e
+	# cannoni della PALLA si saltano (PISTA da 33 a 27, GONFIABILE da 42 a 32).
+	_conta("%s: i pezzi della direzione, e almeno venticinque oggetti in campo" % nome,
+			mancano.is_empty() and oggetti >= 25, "mancano %s, %d oggetti" % [mancano, oggetti])
 	print("         %d oggetti in campo" % oggetti)
 	var sponde := 0
 	for figlio in arena.get_children():

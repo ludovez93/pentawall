@@ -119,7 +119,12 @@ static func _oggetti(arena: Arena, materiale: Material) -> void:
 		var tinta: Color = TINTE[rng.randi() % TINTE.size()]
 		var altra: Color = TINTE[(TINTE.find(tinta) + 1 + rng.randi() % 3) % TINTE.size()]
 		var nome := "oggetto %d" % i
-		match rng.randi() % 6:
+		var tipo := rng.randi() % 6
+		# Lontano da porte e cannoni della PALLA: si salta dopo aver tirato i suoi numeri, così
+		# tutti gli altri oggetti restano quelli di prima.
+		if Palle.ingombra(p, 1.3):
+			continue
+		match tipo:
 			0, 1:
 				_blocco(arena, getto, posto, tinta, nome)
 			2:

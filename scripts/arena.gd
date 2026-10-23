@@ -101,6 +101,28 @@ const POSTO_TUO := 1
 const PREFERENZA_AVANTI := 0.6
 ## Ogni quanto si ripete l'avviso di una bandiera toccata fuori ordine.
 const ATTESA_FUORI_ORDINE := 2.5
+## **La PALLA** (tappa 11, blocco D2, approvata il 13/10/2026 col pulsante LANCIA): sei palle
+## colorate e la dorata da lanciare in porta (`Palle`, `Palla`). Ogni gol vale la sua palla;
+## vince chi ha più punti, e la partita finisce quando chi ha segnato tutte e sei le colorate
+## segna anche la dorata (1999). Il 1999 non aveva limite di tempo; questo è di sicurezza, e
+## allo scadere vince chi ha più punti. Misurato con P0 (`tools/misura_palla.gd`, 23/10/2026):
+## sei partite fra soli avversari al livello facile, tutte chiuse dalla dorata fra 78 e 163
+## secondi (mediana 135), 22-49 gol a partita; le palle fanno tre quarti dei punti, i colpi un
+## quarto. Cinque minuti sono quasi il doppio della più lunga.
+const DURATA_PALLA := 300.0
+## I nomi delle palle negli annunci, nell'ordine di `Palla.COLORI`.
+const NOMI_PALLE := ["BLU", "VERDE", "GIALLA", "ARANCIONE", "ROSSA", "VIOLA", "DORATA"]
+## Quanto pesa, per un avversario nella PALLA, chi porta palle: la sua distanza conta a sei
+## decimi. Preferisce fermare chi sta per segnare (`PLAN.md`).
+const PREFERENZA_PORTATORI := 0.6
+## Dove va a tirare un avversario che porta una palla, in metri davanti alla bocca, e da
+## quanto lontano tira se la vede.
+const DAVANTI_ALLA_PORTA := 8.0
+const TIRO_IN_PORTA := 14.0
+## Fin dove un avversario va a prendere una palla che ha già segnato (vale comunque i suoi
+## punti); quelle che gli mancano le va a prendere ovunque.
+const PALLA_COMUNQUE := 25.0
+
 ## *Nostro*: al via della gara nessuno si può colpire per tanto. In griglia si sta a due metri
 ## l'uno dall'altro, e senza questo al VIA ci si sparava addosso a bruciapelo: chi veniva
 ## preso ripartiva dalla griglia, cioè di nuovo lì in mezzo (scatto del 23/10/2026).
@@ -192,7 +214,7 @@ const CANDIDATI := [
 ]
 
 const SCORCIATOIE := {KEY_C: "colore", KEY_S: "sponde", KEY_A: "poligono", KEY_P: "partenza",
-	KEY_B: "sfida", KEY_L: "livello", KEY_R: "dardo"}
+	KEY_B: "sfida", KEY_L: "livello", KEY_R: "dardo", KEY_T: "lancia"}
 
 ## Gli anelli del rimbalzo, riciclati: nascerne uno a ogni impatto è quello che
 ## faceva scattare l'immagine sparando a raffica (LEARNED.md § 25).
@@ -261,7 +283,17 @@ var _modalita := Modalita.SCONTRO
 var _gara := false
 ## Le sette bandiere (tappa 11, blocco D1): ci sono sempre, accese solo in gara.
 var _bandiere: Bandiere
-## I secondi dal via: in gara, a pari bandiere passa chi l'ha toccata prima.
+## Le palle, le porte e i cannoni (tappa 11, blocco D2): ci sono sempre, accese solo nella
+## PALLA. E l'arco che mostra dove cade la palla che lanceresti.
+var _palle: Palle
+var _palla := false
+var _arco: ArcoLancio
+var _dorata_in_campo := false
+var _chiusa_dalla_dorata := false
+## L'arco si ricalcola un fotogramma su tre: sono fino a sessanta passi di una sfera, e un
+## ventesimo di secondo di ritardo nella linea non si vede.
+var _arco_fra := 0
+## I secondi dal via. In gara, a pari bandiere passa chi l'ha toccata prima.
 var _orologio := 0.0
 var _fuori_ordine := -1
 var _attesa_fuori_ordine := 0.0
@@ -298,6 +330,15 @@ func _ready() -> void:
 	_bandiere = Bandiere.new()
 	add_child(_bandiere)
 	_bandiere.prepara(Bandiere.carica())
+	# E le palle con le porte e i cannoni, per lo stesso motivo.
+	_palle = Palle.new()
+	add_child(_palle)
+	_palle.prepara(Palle.carica())
+	_palle.concorrenti = _corpi_in_campo
+	_palle.presa.connect(_su_palla_presa)
+	_palle.in_porta.connect(_su_palla_in_porta)
+	_arco = ArcoLancio.new()
+	add_child(_arco)
 	_luce_per_vertice()
 	await _respiro()
 	_rete_di_cammino()
@@ -394,6 +435,7 @@ func entra_in_campo() -> void:
 	_giocatore.corpo().scalda(_giocatore.camera())
 
 	_comandi.rigioca_richiesta.connect(rigioca)
+	_comandi.lancio_richiesto.connect(_lancia_la_tua)
 	_comandi.uscita_richiesta.connect(torna_all_ingresso)
 
 	get_tree().node_added.connect(_su_nodo_nuovo)
@@ -978,6 +1020,7 @@ func _process(delta: float) -> void:
 		elif _conto > 0.0:
 			_scorre_il_conto(delta)
 		else:
+			_orologio += delta
 			_scegli_i_bersagli(delta)
 			if _gara:
 				_guarda_le_bandiere(delta)
@@ -989,6 +1032,7 @@ func _process(delta: float) -> void:
 				_bandiera_scritta())
 	if _comandi != null:
 		_segui_la_tua_bandiera()
+		_segui_la_tua_palla()
 	_segui_i_potenziamenti()
 	for tasto in SCORCIATOIE:
 		var giu := Input.is_physical_key_pressed(tasto)
@@ -1001,6 +1045,7 @@ func _process(delta: float) -> void:
 				"sfida": commuta_sfida()
 				"livello": cambia_livello()
 				"dardo": commuta_dardo()
+				"lancia": _lancia_la_tua()
 		_tasti[tasto] = giu
 
 
@@ -1212,6 +1257,9 @@ func avvia_sfida() -> void:
 	_sfida = true
 	_finita = false
 	_gara = _modalita == Modalita.GARA
+	_palla = _modalita == Modalita.PALLA
+	_dorata_in_campo = false
+	_chiusa_dalla_dorata = false
 	_tempo = _durata
 	_conto = CONTO_INIZIALE
 	_avvisi_dati = 0
@@ -1242,8 +1290,12 @@ func avvia_sfida() -> void:
 	_potenziamenti.riparti()
 	for bonus in _bonus:
 		bonus.metti_da_parte(_gara)
+	_palle.mostra(_palla)
+	if _palla:
+		_palle.riparti()
 	_concorrenti.append({"nome": "TU", "corpo": _giocatore, "punti": 0, "bandiere": 0,
-			"quando": 0.0, "posto": POSTO_TUO, "colpito": 0})
+			"quando": 0.0, "posto": POSTO_TUO, "colpito": 0, "segnate": [], "gol": 0,
+			"punti_palle": 0})
 
 	# **Entrano uno per fotogramma.** Costruire un corpo — mesh, materiali, i due
 	# gusci del contorno — costa tredici millesimi di secondo, e cinque tutti
@@ -1262,7 +1314,8 @@ func avvia_sfida() -> void:
 	for i in quanti:
 		var posto := posti_liberi[i % posti_liberi.size()]
 		_concorrenti.append({"nome": String(NOMI[i]), "corpo": null, "punti": 0, "bandiere": 0,
-				"quando": 0.0, "posto": posto, "colpito": 0})
+				"quando": 0.0, "posto": posto, "colpito": 0, "segnate": [], "gol": 0,
+				"punti_palle": 0})
 		var dove := _dove_partenza((_partenza + 1 + i) % quante)
 		if _gara:
 			dove = griglia[posto] + Vector3(0, 0.4, 0)
@@ -1334,6 +1387,12 @@ func chiudi_sfida() -> void:
 		_potenziamenti.riparti()
 		for bonus in _bonus:
 			bonus.metti_da_parte(false)
+	# E chiusa una PALLA, via porte e palle.
+	if _palla:
+		_palla = false
+		_palle.mostra(false)
+		_comandi.lancia(false)
+		_arco.nascondi()
 	_comandi.spegni_la_classifica()
 	_comandi.spegni_il_podio()
 	_comandi.scrivi_sfida("SFIDA")
@@ -1487,6 +1546,8 @@ func _scegli_i_bersagli(delta: float) -> void:
 		var bot := corpo as Avversario
 		bot.punta_a(_chi_attaccare(bot))
 		bot.bonus = null if _gara else _bonus_a_tiro(bot)
+		if _palla:
+			_gioca_la_palla(bot)
 
 
 ## Chi attaccare: **il più vicino che si vede**, e in mancanza di meglio il più
@@ -1511,6 +1572,8 @@ func _chi_attaccare(bot: Avversario) -> Node3D:
 		var quanto := bot.global_position.distance_to(corpo.global_position)
 		if _gara and int(riga.get("bandiere", 0)) > mie:
 			quanto *= PREFERENZA_AVANTI
+		if _palla and not _palle.portate_da(corpo).is_empty():
+			quanto *= PREFERENZA_PORTATORI
 		altri.append({"corpo": corpo, "quanto": quanto})
 	if altri.is_empty():
 		return null
@@ -1565,6 +1628,8 @@ func _finisci_la_partita() -> void:
 	_tempo = 0.0
 	_sonda.fermati("traguardo")
 	_potenziamenti.riparti()
+	if _palla:
+		_palle.ferma()
 	for bot in avversari():
 		bot.bersaglio = null
 		bot.bonus = null
@@ -1639,6 +1704,10 @@ func _su_colpo_valido(chi_spara: Object, punti: int, muri: int, chi_incassa: Nod
 	elif chi_incassa == _giocatore:
 		_comandi.annuncia("COLPITO")
 	_aggiorna_la_classifica()
+	# Nella PALLA chi è colpito perde tutte le palle che porta: cadono dove stava, prima
+	# che ricompaia altrove.
+	if _palla:
+		_palle.lascia_tutte(chi_incassa)
 	_ricompari.call_deferred(chi_incassa, chi_spara)
 
 
@@ -1760,7 +1829,13 @@ func _ricompari(chi: Node3D, _da: Object) -> void:
 ## durata: la gara ha il suo limite di sicurezza. I collaudi la scelgono da qui.
 func imposta_modalita(quale: int) -> void:
 	_modalita = quale
-	_durata = DURATA_GARA if quale == Modalita.GARA else DURATA_PARTITA
+	match quale:
+		Modalita.GARA:
+			_durata = DURATA_GARA
+		Modalita.PALLA:
+			_durata = DURATA_PALLA
+		_:
+			_durata = DURATA_PARTITA
 
 
 func modalita() -> int:
@@ -1809,7 +1884,6 @@ func _bandiera_scritta() -> String:
 
 ## Chi tocca la sua prossima bandiera, e se tu ne tocchi una fuori ordine.
 func _guarda_le_bandiere(delta: float) -> void:
-	_orologio += delta
 	_attesa_fuori_ordine = maxf(_attesa_fuori_ordine - delta, 0.0)
 	for i in _concorrenti.size():
 		var corpo: Node3D = _concorrenti[i]["corpo"]
@@ -1921,6 +1995,207 @@ func _segui_la_tua_bandiera() -> void:
 		var domanda := PhysicsRayQueryParameters3D.create(camera.global_position, cima, Strati.SOLIDO)
 		coperta = not get_world_3d().direct_space_state.intersect_ray(domanda).is_empty()
 	_comandi.freccia(cima, _bandiere.colore_di(prossima), "%d" % (prossima + 1), coperta)
+
+
+# ------------------------------------------------------------------ la palla
+
+func palle() -> Palle:
+	return _palle
+
+
+## Le palle colorate che un corpo ha già segnato (gli indici, come `Palla.indice`).
+func segnate_da(corpo: Object) -> Array:
+	var riga := _riga_di(corpo)
+	return _concorrenti[riga].get("segnate", []) if riga >= 0 else []
+
+
+## La riga della partita di un corpo, per chi la deve guardare da fuori (il collaudo).
+func _righe_di(corpo: Object) -> Dictionary:
+	var riga := _riga_di(corpo)
+	return _concorrenti[riga] if riga >= 0 else {}
+
+
+## I secondi giocati dal via della partita in corso.
+func durata_giocata() -> float:
+	return _orologio
+
+
+## L'ultima PALLA l'ha chiusa la dorata, e non il tempo.
+func chiusa_dalla_dorata() -> bool:
+	return _chiusa_dalla_dorata
+
+
+func _su_palla_presa(chi: Node3D, palla: Palla) -> void:
+	if chi == _giocatore:
+		_comandi.annuncia("PALLA %s · %d" % [NOMI_PALLE[palla.indice], palla.valore])
+		Suoni.bandiera(false)
+
+
+## **Il gol.** Vale la palla, doppia coi PUNTI DOPPI, a chi l'ha lanciata; una palla
+## entrata senza che nessuno l'abbia lanciata non vale niente. La sesta colorata di uno
+## stesso concorrente fa entrare la dorata; la dorata segnata da chi ha già le sei chiude la
+## partita, da chi non le ha vale i suoi punti e torna in campo.
+func _su_palla_in_porta(palla: Palla, autore: Node3D) -> void:
+	var riga := _riga_di(autore)
+	if not _sfida or _finita:
+		return
+	if riga < 0:
+		_palle.fai_uscire(palla, Palle.RITORNO)
+		return
+	var r: Dictionary = _concorrenti[riga]
+	var segnate: Array = r["segnate"]
+	var aveva_le_sei := segnate.size() >= Palla.DORATA
+	var punti := palla.valore * (2 if _potenziamenti.ha(autore, "doppio") else 1)
+	r["punti"] = int(r["punti"]) + punti
+	r["punti_palle"] = int(r["punti_palle"]) + punti
+	r["gol"] = int(r["gol"]) + 1
+	if palla.indice < Palla.DORATA and not segnate.has(palla.indice):
+		segnate.append(palla.indice)
+	if autore == _giocatore:
+		_comandi.annuncia("GOL · %s +%d" % [NOMI_PALLE[palla.indice], punti])
+		Suoni.bandiera(true)
+	elif palla.indice == Palla.DORATA:
+		_comandi.annuncia("%s HA SEGNATO LA DORATA" % String(r["nome"]))
+	_aggiorna_la_classifica()
+	if palla.indice == Palla.DORATA and aveva_le_sei:
+		_chiusa_dalla_dorata = true
+		_finisci_la_partita()
+		return
+	_palle.fai_uscire(palla, Palle.RITORNO)
+	if not _dorata_in_campo and segnate.size() >= Palla.DORATA:
+		_dorata_in_campo = true
+		_palle.fai_uscire(_palle.dorata())
+		_comandi.annuncia("HAI LE SEI · ARRIVA LA DORATA" if autore == _giocatore
+				else "%s HA LE SEI · ARRIVA LA DORATA" % String(r["nome"]))
+
+
+## Il pulsante LANCIA (o T sul PC): parte la prima palla che porti fra quelle che non hai
+## ancora segnato, dove guardi, in arco.
+func _lancia_la_tua() -> void:
+	if not _palla or not _sfida or _finita or _conto > 0.0:
+		return
+	var palla := _palle.prossima(_giocatore, segnate_da(_giocatore))
+	if palla == null:
+		return
+	_palle.lancia(_giocatore, palla, Palle.velocita_del_lancio(_mira_tua()))
+	Suoni.salto()
+
+
+## Dove guardi: la camera, in prima o in terza persona.
+func _mira_tua() -> Vector3:
+	return -_giocatore.camera().global_transform.basis.z
+
+
+## Mentre porti una palla: il pulsante LANCIA nel suo colore, l'arco che farebbe e i
+## pallini in alto. Fuori dalla PALLA, tutto spento.
+func _segui_la_tua_palla() -> void:
+	if not _palla or not _sfida:
+		_comandi.lancia(false)
+		_comandi.pallini([])
+		_arco.nascondi()
+		return
+	var segnate := segnate_da(_giocatore)
+	var portate := _palle.portate_da(_giocatore)
+	var stati := []
+	for i in Palla.VALORI.size():
+		var stato := 1 if segnate.has(i) else 0
+		for palla in portate:
+			if palla.indice == i:
+				stato += 2
+		stati.append(stato)
+	_comandi.pallini(stati, Palla.COLORI)
+	var palla := _palle.prossima(_giocatore, segnate)
+	if palla == null or _finita:
+		_comandi.lancia(false)
+		_arco.nascondi()
+		return
+	_comandi.lancia(true, palla.colore)
+	_arco_fra -= 1
+	if _arco_fra > 0:
+		return
+	_arco_fra = 3
+	var velocita := Palle.velocita_del_lancio(_mira_tua())
+	_arco.mostra(_palle.traiettoria(_palle.da_dove_si_lancia(_giocatore, velocita), velocita),
+			palla.colore)
+
+
+## **Gli avversari nella PALLA**: chi porta una palla va davanti alla porta più vicina e la
+## lancia quando vede la bocca; chi non ne porta va a prendere la più vicina fra quelle che
+## non ha ancora segnato (o una qualunque a due passi). Se non c'è niente da prendere, la
+## caccia di sempre. Si decide nel turno in cui sceglie chi attaccare.
+func _gioca_la_palla(bot: Avversario) -> void:
+	var sue := _palle.portate_da(bot)
+	var meta := Vector3.INF
+	if not sue.is_empty():
+		var porta := _porta_vicina(bot.global_position)
+		var bocca := _palle.centro_della_porta(porta)
+		meta = _palle.davanti_alla_porta(porta, DAVANTI_ALLA_PORTA)
+		var petto := bot.global_position + Vector3(0, 1.35, 0)
+		if petto.distance_to(bocca) <= TIRO_IN_PORTA and _vede(petto, bocca):
+			var palla := _palle.prossima(bot, segnate_da(bot))
+			var velocita := Palle.velocita_verso(_palle.da_dove_si_lancia(bot, bocca - petto), bocca)
+			if velocita != Vector3.INF:
+				_palle.lancia(bot, palla, _sbaglia_il_lancio(bot, velocita))
+				if sue.size() <= 1:
+					meta = Vector3.INF
+	else:
+		var palla := _palla_da_prendere(bot)
+		if palla != null:
+			meta = palla.global_position
+	if meta == Vector3.INF:
+		if bot.traguardo != Vector3.INF:
+			bot.traguardo = Vector3.INF
+			bot.ricomincia_il_cammino()
+	elif bot.traguardo == Vector3.INF or bot.traguardo.distance_to(meta) > 1.5:
+		bot.traguardo = meta
+		bot.ricomincia_il_cammino()
+
+
+func _porta_vicina(dove: Vector3) -> int:
+	var migliore := 0
+	var vicina := INF
+	for i in _palle.porte().size():
+		var quanto := dove.distance_to(_palle.porte()[i]["bocca"])
+		if quanto < vicina:
+			vicina = quanto
+			migliore = i
+	return migliore
+
+
+func _vede(da: Vector3, a: Vector3) -> bool:
+	var domanda := PhysicsRayQueryParameters3D.create(da, a, Strati.SOLIDO)
+	return get_world_3d().direct_space_state.intersect_ray(domanda).is_empty()
+
+
+## La mano che sbaglia: lo stesso errore della mira del suo livello, un po' meno (una palla
+## grande in una porta di quattro metri non è un dardo su un corpo).
+func _sbaglia_il_lancio(bot: Avversario, velocita: Vector3) -> Vector3:
+	var apertura := deg_to_rad(float(Avversario.TARATURE[bot.livello()]["errore_gradi"])) * 0.8
+	var giro := velocita.rotated(Vector3.UP, randf_range(-apertura, apertura))
+	var asse := giro.cross(Vector3.UP)
+	if asse.length_squared() < 0.0001:
+		return giro
+	return giro.rotated(asse.normalized(), randf_range(-apertura, apertura))
+
+
+func _palla_da_prendere(bot: Avversario) -> Palla:
+	var segnate := segnate_da(bot)
+	var mancante: Palla = null
+	var qualunque: Palla = null
+	var vicina_mancante := INF
+	var vicina_qualunque := PALLA_COMUNQUE
+	for palla in _palle.palle():
+		if not palla.libera():
+			continue
+		var quanto := bot.global_position.distance_to(palla.global_position)
+		var manca := palla.indice == Palla.DORATA or not segnate.has(palla.indice)
+		if manca and quanto < vicina_mancante:
+			vicina_mancante = quanto
+			mancante = palla
+		elif quanto < vicina_qualunque:
+			vicina_qualunque = quanto
+			qualunque = palla
+	return mancante if mancante != null else qualunque
 
 
 ## Dove ricomparire: lontano da **tutti** e fuori dalla vista di **tutti**, non solo

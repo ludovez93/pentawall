@@ -177,10 +177,11 @@ var bonus: BersaglioBonus = null
 ## 12/09/2026, ti inseguiva senza vederti l'84% del tempo.
 var caccia := false
 
-## **La GARA** (tappa 11, blocco D1): la prossima bandiera da toccare, e la mette l'arena.
-## Finché c'è, i piedi vanno lì e basta — sulla rete di cammino, senza girare intorno a
-## nessuno — e il bersaglio serve solo a sparare, senza fermarsi. `Vector3.INF`: non si
-## corre, e tutto il resto si comporta come prima.
+## **La meta da raggiungere**, e la mette l'arena: nella GARA la prossima bandiera (tappa 11,
+## blocco D1), nella PALLA la palla da prendere o il posto davanti alla porta da cui tirare
+## (blocco D2). Finché c'è, i piedi vanno lì e basta — sulla rete di cammino, senza girare
+## intorno a nessuno — e il bersaglio serve solo a sparare, senza fermarsi. `Vector3.INF`:
+## nessuna meta, e tutto il resto si comporta come prima.
 var traguardo := Vector3.INF
 
 ## Se lo vede **in questo fotogramma**: lo stesso raggio serve a guardare, a

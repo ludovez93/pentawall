@@ -351,12 +351,21 @@ static func _oggetti(arena: Arena, materiale: Material) -> void:
 		var posto := Transform3D(Basis(Vector3.UP, rng.randf() * TAU), Vector3(p.x, 0.0, p.y))
 		var nome := "oggetto %d" % i
 		var dado := rng.randf()
+		var quale := 0
+		if dado >= 0.28 and dado < 0.52:
+			quale = rng.randi() % MACCHINE.size()
+		elif dado >= 0.52 and dado < 0.68:
+			quale = rng.randi() % CARTELLONI.size()
+		# Lontano da porte e cannoni della PALLA: si salta dopo aver tirato i suoi numeri, così
+		# tutti gli altri oggetti restano quelli di prima.
+		if Palle.ingombra(p, 1.3):
+			continue
 		if dado < 0.28:
 			_pila(arena, getto, posto, nome)
 		elif dado < 0.52:
-			_macchinina(arena, getto, posto, MACCHINE[rng.randi() % MACCHINE.size()], nome)
+			_macchinina(arena, getto, posto, MACCHINE[quale], nome)
 		elif dado < 0.68:
-			_cartellone(arena, getto, posto, CARTELLONI[rng.randi() % CARTELLONI.size()], nome)
+			_cartellone(arena, getto, posto, CARTELLONI[quale], nome)
 		elif dado < 0.84:
 			_coni(arena, getto, posto, nome)
 		elif dado < 0.95:

@@ -19,6 +19,8 @@ signal livello_richiesto
 ## vuol dire ricominciare o uscire.
 signal rigioca_richiesta
 signal uscita_richiesta
+## Il pulsante LANCIA della PALLA (tappa 11, blocco D2).
+signal lancio_richiesto
 
 const RAGGIO_LEVA := 96.0
 const ZONA_MORTA := 12.0
@@ -83,6 +85,12 @@ var _freccia_colore := Color.WHITE
 var _freccia_testo := ""
 ## La bandiera è nello schermo ma dietro un muro: al posto della freccia, il segnalino.
 var _freccia_coperta := false
+## La PALLA (tappa 11, blocco D2): il pulsante LANCIA, e i sette pallini in alto — `0`
+## niente, `1` segnata, `2` portata, `3` segnata e portata. Vuoto: spenti.
+var _lancia: Button
+var _colore_lancia := Color.WHITE
+var _pallini: Array = []
+var _colori_pallini: Array = []
 const MARGINE_FRECCIA := 110.0
 ## Di quanti punti di schermo l'etichetta parte sopra il colpo: grande (tappa 11), la
 ## scritta coprirebbe chi l'ha preso.
@@ -277,6 +285,60 @@ func fischio(testo: String) -> void:
 	_tempo_fischio = 0.9
 
 
+## **Il pulsante LANCIA** (tappa 11, blocco D2, la proposta approvata il 13/10/2026):
+## compare accanto al fuoco solo quando porti una palla, nel colore di quella che parte; il
+## fuoco resta il blaster, così chi porta può difendersi. Tondo come FUOCO e SALTA, sopra il
+## fuoco.
+func lancia(visibile: bool, colore := Color.WHITE) -> void:
+	if _lancia == null:
+		if not visibile:
+			return
+		_lancia = _pulsante("LANCIA", Vector2(-176, -334), Vector2(124, 124), colore,
+				func() -> void: lancio_richiesto.emit())
+		_lancia.set_meta("lancia", true)
+		_lancia.add_theme_font_size_override("font_size", 24)
+	if visibile and not colore.is_equal_approx(_colore_lancia):
+		_colore_lancia = colore
+		for stato in ["normal", "hover", "focus"]:
+			_lancia.add_theme_stylebox_override(stato, _tondo(colore, 0.72, 124))
+		_lancia.add_theme_stylebox_override("pressed", _tondo(colore, 0.95, 124))
+	_lancia.visible = visibile
+
+
+func lancia_visibile() -> bool:
+	return _lancia != null and _lancia.visible
+
+
+func colore_del_lancio() -> Color:
+	return _colore_lancia
+
+
+## I sette pallini: uno per palla, nel suo colore. Segnata, pieno; portata, l'anello acceso e
+## più grande; né l'una né l'altra, solo il contorno.
+func pallini(stati: Array, colori: Array = []) -> void:
+	_pallini = stati
+	_colori_pallini = colori
+
+
+func _disegna_i_pallini() -> void:
+	if _pallini.is_empty():
+		return
+	var passo := 34.0
+	var y := 132.0
+	var x := _disegno.size.x - 34.0 - passo * float(_pallini.size() - 1)
+	for i in _pallini.size():
+		var colore: Color = _colori_pallini[i] if i < _colori_pallini.size() else Color.WHITE
+		var stato := int(_pallini[i])
+		var centro := Vector2(x + passo * float(i), y)
+		if stato & 1:
+			_disegno.draw_circle(centro, 11.0, colore)
+		else:
+			_disegno.draw_circle(centro, 11.0, Color(0.03, 0.03, 0.08, 0.45))
+		_disegno.draw_arc(centro, 11.0, 0.0, TAU, 24, Color(colore.r, colore.g, colore.b, 0.95), 2.5, true)
+		if stato & 2:
+			_disegno.draw_arc(centro, 16.0, 0.0, TAU, 28, Color(1, 1, 1, 0.95), 3.0, true)
+
+
 ## Il numero della bandiera coperta in un tondo nel suo colore, con la punta in giù verso
 ## il punto dove sta.
 func _disegna_il_segnalino(dove: Vector2) -> void:
@@ -438,6 +500,7 @@ func _riga_accesa() -> StyleBoxFlat:
 func _disegna() -> void:
 	_disegna_la_vignetta()
 	_disegna_la_freccia()
+	_disegna_i_pallini()
 	var chiaro := Color(1, 1, 1, 0.5)
 	# Il mirino: al centro, sempre, in tutte e due le visuali.
 	var centro := _disegno.size * 0.5
@@ -783,6 +846,8 @@ func _accendi_la_partita() -> void:
 		if not (figlio is Button):
 			continue
 		var pulsante := figlio as Button
+		if pulsante.has_meta("lancia"):
+			continue
 		if not pieni.has(pulsante.text):
 			pulsante.visible = false
 			continue

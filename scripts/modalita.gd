@@ -3,16 +3,18 @@ extends RefCounted
 
 ## **La modalità della partita** (tappa 11, blocco D, accettate il 05/10/2026). Nel 1999
 ## erano tre — PointBlast, SpeedBlast, BallBlast — e due giravano nella stessa arena
-## (`RICERCA-ORIGINALE.md` § 2). Da noi: SCONTRO, la partita a punti di sempre, e GARA,
-## sette bandiere in ordine (`Bandiere`).
+## (`RICERCA-ORIGINALE.md` § 2). Da noi: SCONTRO, la partita a punti di sempre; GARA,
+## sette bandiere in ordine (`Bandiere`); PALLA, sei palle colorate e la dorata da lanciare
+## in porta (`Palle`).
 ##
 ## Si sceglie sulla Home, con la riga sopra GIOCA, e resta salvata sul telefono come
 ## l'aspetto: chi gioca la gara la ritrova la volta dopo.
 
 const FILE := "user://modalita.cfg"
-const NOMI: Array[String] = ["SCONTRO", "GARA"]
+const NOMI: Array[String] = ["SCONTRO", "GARA", "PALLA"]
 const SCONTRO := 0
 const GARA := 1
+const PALLA := 2
 
 static var _scelta := -1
 

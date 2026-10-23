@@ -1,0 +1,108 @@
+{
+  "nome": "palla della palestra",
+  "nota": "Le porte e i cannoni della PALLA (tappa 11, blocco D2). Misurati da tools/misura_porte.gd il 23/10/2026: le porte a terra con la schiena contro un muro alto, una corsia libera di 10 m davanti, lontane da partenze e rinascite (8 m), da sfere (6 m) e bersagli bonus (5 m), in due zone da lati opposti dell'arena; fra quelle buone la coppia che si vede da più pavimento. I cannoni due per ala, con 2,6 m liberi intorno, lontani dalle porte (12 m), dove passano più strade fra i punti di rinascita. Sta fuori da palestra.json per lo stesso motivo del percorso della gara: non tocca la geometria della pianta, e la rete di cammino porta la sua impronta.",
+  "porte": [
+    {
+      "zona": "angolo sud-est",
+      "muro": "perimetro est",
+      "vista": 14.0,
+      "bocca": [
+        38.4,
+        37.1
+      ],
+      "quota": 0,
+      "verso": [
+        -1.0,
+        0.0
+      ]
+    },
+    {
+      "zona": "ala tribuna",
+      "muro": "tribuna, il box del bersaglio",
+      "vista": 10.7,
+      "bocca": [
+        -29.0,
+        -0.2
+      ],
+      "quota": 0,
+      "verso": [
+        0.0,
+        1.0
+      ]
+    }
+  ],
+  "cannoni": [
+    {
+      "zona": "ala ocra",
+      "dove": [
+        14.62,
+        -24.59
+      ],
+      "quota": 0,
+      "strade": 28
+    },
+    {
+      "zona": "ala ocra",
+      "dove": [
+        2.62,
+        -27.59
+      ],
+      "quota": 0,
+      "strade": 14
+    },
+    {
+      "zona": "ala mattone",
+      "dove": [
+        37.12,
+        2.66
+      ],
+      "quota": 0,
+      "strade": 23
+    },
+    {
+      "zona": "ala mattone",
+      "dove": [
+        34.12,
+        11.66
+      ],
+      "quota": 0,
+      "strade": 22
+    },
+    {
+      "zona": "portico",
+      "dove": [
+        11.87,
+        17.91
+      ],
+      "quota": 0,
+      "strade": 69
+    },
+    {
+      "zona": "portico",
+      "dove": [
+        2.62,
+        19.16
+      ],
+      "quota": 0,
+      "strade": 25
+    },
+    {
+      "zona": "ala tribuna",
+      "dove": [
+        -16.68,
+        -13.64
+      ],
+      "quota": 0,
+      "strade": 45
+    },
+    {
+      "zona": "ala tribuna",
+      "dove": [
+        -30.63,
+        14.66
+      ],
+      "quota": 0,
+      "strade": 28
+    }
+  ]
+}

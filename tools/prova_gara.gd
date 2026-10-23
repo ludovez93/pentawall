@@ -355,13 +355,23 @@ func _la_freccia() -> void:
 			or dove.y <= Comandi.MARGINE_FRECCIA + 1.0 or dove.y >= tela.y - Comandi.MARGINE_FRECCIA - 1.0),
 			"%s su %s" % [dove, tela])
 	_conta("e in basso, perché è dietro", dove != Vector2.INF and dove.y > tela.y * 0.5, str(dove))
-	# Dalla griglia, girati verso la prima: è nello schermo ma dietro il muro.
+	# Dalla griglia, girati verso la prima: nell'arena di partenza e in GIOCATTOLO è dietro
+	# il muro; nell'arena aperta i muri sono bassi e si vede. La premessa si verifica con lo
+	# stesso raggio del gioco (LEARNED.md § 19), e la prova chiede la cosa giusta per ognuna.
 	tu.punta(Bandiere.giro_verso(tu.global_position, b.dove(0)), -4.0)
 	await process_frame
 	await process_frame
-	_conta("girati verso la bandiera coperta: niente freccia, il segnalino sopra di lei",
-			comandi.dove_la_freccia() == Vector2.INF and comandi.dove_il_segnalino() != Vector2.INF,
-			"freccia %s, segnalino %s" % [comandi.dove_la_freccia(), comandi.dove_il_segnalino()])
+	var cima := b.dove(0) + Vector3(0, Bandiere.ALTA + 1.0, 0)
+	var domanda := PhysicsRayQueryParameters3D.create(tu.camera().global_position, cima, Strati.SOLIDO)
+	var coperta := not _arena.get_world_3d().direct_space_state.intersect_ray(domanda).is_empty()
+	if coperta:
+		_conta("girati verso la bandiera coperta: niente freccia, il segnalino sopra di lei",
+				comandi.dove_la_freccia() == Vector2.INF and comandi.dove_il_segnalino() != Vector2.INF,
+				"freccia %s, segnalino %s" % [comandi.dove_la_freccia(), comandi.dove_il_segnalino()])
+	else:
+		_conta("girati verso la bandiera, in vista dalla griglia (%s): né freccia né segnalino" % Aspetto.nome(),
+				comandi.dove_la_freccia() == Vector2.INF and comandi.dove_il_segnalino() == Vector2.INF,
+				"freccia %s, segnalino %s" % [comandi.dove_la_freccia(), comandi.dove_il_segnalino()])
 	# In vista, a sette metri: né freccia né segnalino, c'è la colonna.
 	var verso := b.partenza() - b.dove(0)
 	verso.y = 0.0
@@ -446,7 +456,8 @@ func _la_home_sceglie() -> void:
 	var nomi: Array[String] = []
 	for p in pulsanti:
 		nomi.append((p as Button).text)
-	_conta("sulla Home la riga delle modalità dice SCONTRO e GARA", nomi == ["SCONTRO", "GARA"], str(nomi))
+	_conta("sulla Home la riga delle modalità ha SCONTRO e GARA", nomi.size() == Modalita.NOMI.size()
+			and nomi[Modalita.SCONTRO] == "SCONTRO" and nomi[Modalita.GARA] == "GARA", str(nomi))
 	var gioca: Button = ingresso.get("_gioca")
 	var riga := (pulsanti[0] as Control).get_parent() as Control
 	_conta("e sta sopra GIOCA", riga.position.y + 52.0 <= gioca.position.y, "%.0f, %.0f" % [riga.position.y, gioca.position.y])

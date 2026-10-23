@@ -356,7 +356,7 @@ func _pulsanti() -> void:
 	_scrivi_la_versione()
 
 
-## **La riga delle modalità** (tappa 11, blocco D): SCONTRO · GARA, sopra GIOCA e larga
+## **La riga delle modalità** (tappa 11, blocco D): SCONTRO · GARA · PALLA, sopra GIOCA e larga
 ## quanto lui. Quella scelta è piena e chiara, l'altra un vetro scuro; la scelta resta
 ## salvata (`Modalita`), e GIOCA entra in quella.
 func _riga_delle_modalita() -> void:
@@ -370,7 +370,8 @@ func _riga_delle_modalita() -> void:
 		pulsante.text = Modalita.NOMI[i]
 		pulsante.custom_minimum_size = Vector2(larga, 52)
 		pulsante.add_theme_font_override("font", Comandi.carattere_titolo())
-		pulsante.add_theme_font_size_override("font_size", 24)
+		# In tre, ognuno largo un terzo di GIOCA: a 24 SCONTRO non ci stava.
+		pulsante.add_theme_font_size_override("font_size", 24 if Modalita.NOMI.size() < 3 else 20)
 		var quale := i
 		pulsante.pressed.connect(func() -> void:
 			Suoni.tocco()

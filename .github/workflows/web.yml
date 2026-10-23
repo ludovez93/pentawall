@@ -129,6 +129,14 @@ jobs:
           # accelerate fra soli avversari che devono arrivare tutte in fondo.
           "$GODOT" --headless --path . -s tools/prova_gara.gd
 
+      - name: Collauda la palla
+        run: |
+          set -euo pipefail
+          # La tappa 11, blocco D2: le palle si raccolgono e se ne portano piu' d'una, in
+          # porta si lanciano, colpito le perdi, lanciata addosso la consegni, la dorata
+          # dopo le sei; l'arco disegnato e' la strada vera; gli avversari segnano.
+          "$GODOT" --headless --path . -s tools/prova_palla.gd
+
       - name: Collauda le varianti dell'aspetto
         run: |
           set -euo pipefail
@@ -153,7 +161,7 @@ jobs:
           # e la rete di cammino un `.res`. Se restano fuori, sul telefono l'arena
           # non si apre e non lo dice nessuno — quindi si guarda **dentro** il
           # pacchetto, prima di pubblicare e non dopo.
-          for dentro in "arene/palestra.json" "arene/palestra_cammino.res" "arene/palestra_gara.json"; do
+          for dentro in "arene/palestra.json" "arene/palestra_cammino.res" "arene/palestra_gara.json" "arene/palestra_palla.json"; do
             if grep -a -q "$dentro" build/web/index.pck; then
               echo "  ok   $dentro"
             else

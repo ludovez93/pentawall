@@ -15,6 +15,9 @@ const BERSAGLIO := 1 << 2    ## 4 — i bersagli del poligono
 ## dove l'arena distingue le sponde dal resto — perché una geometria ricca in cui
 ## rimbalza qualunque sporgenza rende il rimbalzo un caso, non una bravura.
 const OSTACOLO := 1 << 3
+## 16 — le palle della PALLA (tappa 11, blocco D2): urtano il mondo e basta. I dardi le
+## attraversano e i corpi ci passano sopra: si prendono passandoci, non spingendole.
+const PALLE := 1 << 4
 
 ## Chi ferma il dardo invece di rifletterlo. È la distinzione che regge tutto il
 ## gioco: un avversario non è un muro, e un muro non fa punti.
