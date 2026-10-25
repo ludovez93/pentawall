@@ -507,7 +507,7 @@ func _i_potenziamenti_nuovi(arena: Node, giocatore: Giocatore, bots: Array,
 	righe[mia]["punti"] = 40
 	giocatore.set("_immunita", 0.0)
 	giocatore.incassa(0, vittima)
-	var annuncio := (giocatore.comandi.get("_avviso") as Label).text
+	var annuncio: String = giocatore.comandi.testo_annunciato()
 	_conta("un avversario col ladro ti toglie i punti", int(righe[mia]["punti"]) == 15,
 			"%d" % int(righe[mia]["punti"]))
 	_conta("e l'annuncio lo dice", annuncio == "%s TI HA RUBATO 25" % vittima.personaggio, annuncio)

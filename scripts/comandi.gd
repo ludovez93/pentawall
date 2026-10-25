@@ -22,6 +22,18 @@ signal uscita_richiesta
 ## Il pulsante LANCIA della PALLA (tappa 11, blocco D2).
 signal lancio_richiesto
 
+## **Il vestito del misto 1** (tappa 11, blocco C3a): lamelle navy inclinate, cifre in
+## oro, il quadrato del posto oro, argento, bronzo. I numeri sono le misure del disegno
+## approvato, sulla tela alta 720 (sul telefono 854 x 390 punti diventano 1576 x 720).
+const NAVY := Color("0f1b3d")
+const NAVY_CHIARO := Color("2a3a66")
+const ORO := Color("ffc42e")
+const ARGENTO := Color("c8d0dc")
+const BRONZO := Color("b87333")
+const ROSSO_FUOCO := Color("f2423b")
+## Quanto pende una lamella: 0,20 sono circa undici gradi, tutte nello stesso verso.
+const OBLIQUO := 0.20
+
 const RAGGIO_LEVA := 96.0
 const ZONA_MORTA := 12.0
 const SOGLIA_TRASCINAMENTO := 16.0  ## pixel oltre i quali un tocco è mira, non colpo
@@ -53,13 +65,21 @@ var _tempo_destro := 0.0
 var _disegno: Control
 var _riga_alta: Label
 var _riga_bassa: Label
-var _avviso: Label
+## L'annuncio è una lamella con dentro un testo a colori: il numero in oro vuole un
+## pezzo di testo colorato da solo, e una Label tinge tutto o niente.
+var _pannello_avviso: PanelContainer
+var _avviso: RichTextLabel
+var _testo_avviso := ""
 var _tempo_avviso := 0.0
 var _bottone_sfida: Button
 var _bottone_livello: Button
 var _pulsanti_di_scena := 0
 var _classifica: VBoxContainer
 var _righe_classifica: Array[Dictionary] = []
+## Gli stili della colonna, fatti una volta sola all'apertura.
+var _stile_riga: StyleBoxFlat
+var _stile_riga_tua: StyleBoxFlat
+var _stili_quadrato: Array[StyleBoxFlat] = []
 
 ## **Il colpo che si vede** (tappa 7, blocco B). Tre cose, tutte brevi: il
 ## marcatore sul mirino quando un colpo va a segno, la vignetta rossa sul bordo da
@@ -92,6 +112,9 @@ var _colore_lancia := Color.WHITE
 var _pallini: Array = []
 var _colori_pallini: Array = []
 const MARGINE_FRECCIA := 110.0
+## La lamella dei sette pallini della PALLA: quanto è larga, e quindi quanto si sposta
+## la posizione per farle posto.
+const LARGO_PALLINI := 212.0
 ## Di quanti punti di schermo l'etichetta parte sopra il colpo: grande (tappa 11), la
 ## scritta coprirebbe chi l'ha preso.
 var _alza_etichette := 70.0 if Aspetto.corpi_a_cartone() else 26.0
@@ -108,9 +131,11 @@ func _process(delta: float) -> void:
 		_tempo_destro += delta
 	if _tempo_avviso > 0.0:
 		_tempo_avviso -= delta
-		_avviso.modulate.a = clampf(_tempo_avviso, 0.0, 1.0)
+		_pannello_avviso.modulate.a = clampf(_tempo_avviso, 0.0, 1.0)
 		if _tempo_avviso <= 0.0:
+			_testo_avviso = ""
 			_avviso.text = ""
+			_pannello_avviso.visible = false
 	if _tempo_fischio > 0.0:
 		_tempo_fischio -= delta
 		_fischio.modulate.a = clampf(_tempo_fischio / 0.5, 0.0, 1.0)
@@ -268,17 +293,18 @@ func scrivi_basso(testo: String) -> void:
 ## un conto alla rovescia è un sottotitolo, non un via.
 func fischio(testo: String) -> void:
 	if _fischio == null:
-		_fischio = _etichetta(130, Color(1, 1, 1, 1))
+		# Senza scatola: il VIA è scritto sul campo, bianco col contorno navy (misto 1).
+		_fischio = _etichetta(148, Color.WHITE, 10)
 		_fischio.add_theme_font_override("font", carattere_titolo())
-		_fischio.add_theme_constant_override("outline_size", 12)
 		_fischio.set_anchors_preset(Control.PRESET_CENTER)
 		_fischio.grow_horizontal = Control.GROW_DIRECTION_BOTH
 		_fischio.grow_vertical = Control.GROW_DIRECTION_BOTH
 		_fischio.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		_fischio.offset_left = -300
-		_fischio.offset_right = 300
+		_fischio.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		_fischio.offset_left = -400
+		_fischio.offset_right = 400
 		_fischio.offset_top = -110
-		_fischio.offset_bottom = 60
+		_fischio.offset_bottom = 110
 		add_child(_fischio)
 	_fischio.text = testo
 	_fischio.modulate.a = 1.0
@@ -296,12 +322,12 @@ func lancia(visibile: bool, colore := Color.WHITE) -> void:
 		_lancia = _pulsante("LANCIA", Vector2(-176, -334), Vector2(124, 124), colore,
 				func() -> void: lancio_richiesto.emit())
 		_lancia.set_meta("lancia", true)
-		_lancia.add_theme_font_size_override("font_size", 24)
+		_lancia.add_theme_font_size_override("font_size", 30)
 	if visibile and not colore.is_equal_approx(_colore_lancia):
 		_colore_lancia = colore
 		for stato in ["normal", "hover", "focus"]:
-			_lancia.add_theme_stylebox_override(stato, _tondo(colore, 0.72, 124))
-		_lancia.add_theme_stylebox_override("pressed", _tondo(colore, 0.95, 124))
+			_lancia.add_theme_stylebox_override(stato, _tondo(colore, 0.92, 124))
+		_lancia.add_theme_stylebox_override("pressed", _tondo(colore, 1.0, 124))
 	_lancia.visible = visibile
 
 
@@ -313,53 +339,99 @@ func colore_del_lancio() -> Color:
 	return _colore_lancia
 
 
-## I sette pallini: uno per palla, nel suo colore. Segnata, pieno; portata, l'anello acceso e
-## più grande; né l'una né l'altra, solo il contorno.
+## I sette pallini: uno per palla. Segnata, pieno nel suo colore; portata, bianco con
+## l'anello del colore; né l'una né l'altra, navy chiaro.
 func pallini(stati: Array, colori: Array = []) -> void:
+	var c_erano := not _pallini.is_empty()
 	_pallini = stati
 	_colori_pallini = colori
+	if c_erano != (not _pallini.is_empty()):
+		_sistema_la_posizione()
 
 
+## I sette pallini stanno nella loro lamella, in alto a destra accanto alla posizione:
+## segnata, pieno nel colore; portata, l'anello acceso; nessuna delle due, navy chiaro.
+## Si disegnano invece di costruirli perché sono sette tondi che cambiano ogni gol.
 func _disegna_i_pallini() -> void:
 	if _pallini.is_empty():
 		return
-	var passo := 34.0
-	var y := 132.0
-	var x := _disegno.size.x - 34.0 - passo * float(_pallini.size() - 1)
+	var alto := 60.0
+	var sopra := 18.0
+	var destra := _disegno.size.x - 24.0
+	_disegna_unalamella(Rect2(destra - LARGO_PALLINI, sopra, LARGO_PALLINI, alto),
+			Color(NAVY.r, NAVY.g, NAVY.b, 0.82))
+	var passo := 28.0
+	var y := sopra + alto * 0.5
+	var x := destra - LARGO_PALLINI * 0.5 - passo * (float(_pallini.size()) - 1.0) * 0.5
 	for i in _pallini.size():
 		var colore: Color = _colori_pallini[i] if i < _colori_pallini.size() else Color.WHITE
 		var stato := int(_pallini[i])
 		var centro := Vector2(x + passo * float(i), y)
-		if stato & 1:
-			_disegno.draw_circle(centro, 11.0, colore)
-		else:
-			_disegno.draw_circle(centro, 11.0, Color(0.03, 0.03, 0.08, 0.45))
-		_disegno.draw_arc(centro, 11.0, 0.0, TAU, 24, Color(colore.r, colore.g, colore.b, 0.95), 2.5, true)
 		if stato & 2:
-			_disegno.draw_arc(centro, 16.0, 0.0, TAU, 28, Color(1, 1, 1, 0.95), 3.0, true)
+			_disegno.draw_circle(centro, 10.0, Color.WHITE)
+			_disegno.draw_arc(centro, 8.5, 0.0, TAU, 24, colore, 3.0, true)
+		elif stato & 1:
+			_disegno.draw_circle(centro, 10.0, colore)
+		else:
+			_disegno.draw_circle(centro, 10.0, NAVY_CHIARO)
+
+
+## Una lamella disegnata a mano, per i pezzi che non sono nodi: stessa inclinazione
+## degli StyleBox, cima verso destra.
+func _disegna_unalamella(rett: Rect2, colore: Color) -> void:
+	var pende := OBLIQUO * rett.size.y * 0.5
+	_disegno.draw_colored_polygon(PackedVector2Array([
+			Vector2(rett.position.x + pende, rett.position.y),
+			Vector2(rett.end.x + pende, rett.position.y),
+			Vector2(rett.end.x - pende, rett.end.y),
+			Vector2(rett.position.x - pende, rett.end.y)]), colore)
+	_disegno.draw_line(Vector2(rett.position.x + pende, rett.position.y + 1.0),
+			Vector2(rett.end.x + pende, rett.position.y + 1.0),
+			Color(ARGENTO.r, ARGENTO.g, ARGENTO.b, 0.5), 2.0)
 
 
 ## Il numero della bandiera coperta in un tondo nel suo colore, con la punta in giù verso
 ## il punto dove sta.
+## Il disco navy col numero in oro, e attorno l'anello nel colore della bandiera: il
+## colore dice quale bandiera è, il navy fa da fondo al numero su qualunque muro.
 func _disegna_il_segnalino(dove: Vector2) -> void:
 	var tondo := dove - Vector2(0, 46.0)
 	var punta := PackedVector2Array([dove, tondo + Vector2(-16.0, 20.0), tondo + Vector2(16.0, 20.0)])
-	_disegno.draw_colored_polygon(punta, _freccia_colore)
-	_disegno.draw_circle(tondo, 28.0, _freccia_colore)
-	_disegno.draw_arc(tondo, 28.0, 0.0, TAU, 32, Color(1, 1, 1, 0.95), 4.0, true)
-	var font := carattere_titolo()
-	var dove_testo := tondo + Vector2(-40.0, 15.0)
-	_disegno.draw_string_outline(font, dove_testo, _freccia_testo, HORIZONTAL_ALIGNMENT_CENTER,
-			80.0, 40, 8, Color(0.02, 0.02, 0.06, 0.85))
-	_disegno.draw_string(font, dove_testo, _freccia_testo, HORIZONTAL_ALIGNMENT_CENTER, 80.0, 40,
-			Color(1, 1, 1, 0.98))
+	_disegno.draw_colored_polygon(punta, Color(NAVY.r, NAVY.g, NAVY.b, 0.9))
+	_disegno.draw_circle(tondo, 28.0, Color(NAVY.r, NAVY.g, NAVY.b, 0.9))
+	_disegno.draw_arc(tondo, 28.0, 0.0, TAU, 32, _freccia_colore, 4.0, true)
+	_numero_della_bandiera(tondo)
 
 
-## L'annuncio grosso al centro: quanti muri ha fatto il colpo e quanto vale.
+## L'annuncio grosso al centro, in una lamella: cosa è appena successo e quanto vale.
+## **Le cifre sono oro**, il resto bianco (il disegno del misto 1, momenti 2 e 4).
 func annuncia(testo: String) -> void:
-	_avviso.text = testo
+	_testo_avviso = testo
+	_avviso.text = "[center]%s[/center]" % cifre_in_oro(testo)
+	# Un testo a colori non dice da solo quanto è largo (la sua misura minima è zero, e
+	# dentro una lamella finirebbe spezzato): la larghezza la misura il carattere.
+	_avviso.custom_minimum_size.x = carattere_titolo().get_string_size(
+			testo, HORIZONTAL_ALIGNMENT_LEFT, -1, 63).x + 4.0
+	_pannello_avviso.visible = testo != ""
+	_pannello_avviso.modulate.a = 1.0
 	_tempo_avviso = 1.6
-	_avviso.modulate.a = 1.0
+
+
+## Quello che l'annuncio dice adesso, senza i colori: lo leggono i collaudi.
+func testo_annunciato() -> String:
+	return _testo_avviso
+
+
+static var _numeri: RegEx = null
+
+
+## «+25 · DIRETTO» → il «+25» in oro. Vale per ogni numero del testo, col suo segno più:
+## i punti, i secondi rubati, il numero della bandiera.
+static func cifre_in_oro(testo: String) -> String:
+	if _numeri == null:
+		_numeri = RegEx.new()
+		_numeri.compile("(\\+?\\d+)")
+	return _numeri.sub(testo, "[color=#ffc42e]$1[/color]", true)
 
 
 ## Il pulsante del duello dice cosa farà, non in che stato è: acceso, l'unica
@@ -412,14 +484,20 @@ func classifica(righe: Array) -> void:
 		pannello.visible = true
 		var dato: Dictionary = righe[i]
 		var tuo := bool(dato.get("tu", false))
-		(riga["posizione"] as Label).text = "%d" % int(dato["posizione"])
+		var posto := int(dato["posizione"])
+		(riga["posizione"] as Label).text = "%d" % posto
 		(riga["nome"] as Label).text = String(dato["nome"])
 		(riga["punti"] as Label).text = valore_di(dato)
-		var tinta := Color(1, 1, 1, 0.98) if tuo else Color(1, 1, 1, 0.62)
-		for chiave in ["posizione", "nome", "punti"]:
+		# La tua riga è bianca col testo navy: l'oro resta al primo.
+		var tinta := NAVY if tuo else Color.WHITE
+		for chiave in ["nome", "punti"]:
 			(riga[chiave] as Label).add_theme_color_override("font_color", tinta)
 		pannello.add_theme_stylebox_override("panel",
-				_riga_accesa() if tuo else _vuoto())
+				_stile_riga_tua if tuo else _stile_riga)
+		(riga["quadrato"] as PanelContainer).add_theme_stylebox_override("panel",
+				_stili_quadrato[mini(posto, 4) - 1])
+		(riga["posizione"] as Label).add_theme_color_override("font_color",
+				NAVY if posto <= 3 else Color.WHITE)
 
 
 ## Il numero di una riga: i punti, o quello che la riga dice al loro posto — in GARA le
@@ -435,66 +513,60 @@ func spegni_la_classifica() -> void:
 		_classifica.visible = false
 
 
+## La colonna sta a sinistra, sotto l'ESCI: righe larghe 250 e alte 44, la quarta
+## finisce a 286, lontana dalla fascia dove si appoggia il pollice sinistro.
+## **Gli stili si fanno una volta sola**: in partita la classifica si riscrive a ogni
+## colpo, e fabbricare sei StyleBox per riga sessanta volte al secondo è lavoro buttato.
 func _costruisci_la_classifica() -> void:
+	_stile_riga = lamella(NAVY, 0.82, 10, 18)
+	_stile_riga_tua = lamella(Color.WHITE, 1.0, 10, 18)
+	for posto in [1, 2, 3, 4]:
+		_stili_quadrato.append(_quadrato(colore_del_posto(posto)))
+
 	_classifica = VBoxContainer.new()
 	_classifica.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	_classifica.position = Vector2(28, 112)
-	_classifica.add_theme_constant_override("separation", 2)
+	_classifica.position = Vector2(24, 92)
+	_classifica.add_theme_constant_override("separation", 6)
 	_classifica.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_classifica)
 
 	for i in 8:
 		var pannello := PanelContainer.new()
 		pannello.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		pannello.add_theme_stylebox_override("panel", _vuoto())
+		pannello.custom_minimum_size = Vector2(250, 44)
+		pannello.add_theme_stylebox_override("panel", _stile_riga)
 		var riga := HBoxContainer.new()
-		riga.add_theme_constant_override("separation", 10)
+		riga.add_theme_constant_override("separation", 12)
 		riga.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		pannello.add_child(riga)
 
-		# Diciannove e non ventidue: sul telefono in orizzontale lo schermo è alto
-		# trecentonovanta punti, e ogni riga che cresce mangia la fascia dove sta
-		# il pollice sinistro.
-		var posizione := _etichetta(19, Color(1, 1, 1, 0.62))
-		posizione.custom_minimum_size = Vector2(22, 0)
-		posizione.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		var nome := _etichetta(19, Color(1, 1, 1, 0.62))
-		nome.custom_minimum_size = Vector2(118, 0)
-		var punti := _etichetta(19, Color(1, 1, 1, 0.62))
+		# Il quadrato del posto: oro, argento, bronzo, e navy chiaro dal quarto in giù.
+		var quadrato := PanelContainer.new()
+		quadrato.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		quadrato.custom_minimum_size = Vector2(36, 32)
+		quadrato.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		quadrato.add_theme_stylebox_override("panel", _stili_quadrato[0])
+		var posizione := _etichetta(28, NAVY)
+		posizione.add_theme_font_override("font", carattere_titolo())
+		posizione.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		posizione.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		quadrato.add_child(posizione)
+		riga.add_child(quadrato)
+
+		var nome := _etichetta(26, Color.WHITE)
+		nome.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		nome.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var punti := _etichetta(30, Color.WHITE)
+		punti.add_theme_font_override("font", carattere_titolo())
 		punti.custom_minimum_size = Vector2(58, 0)
+		punti.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		punti.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		for pezzo in [posizione, nome, punti]:
+		for pezzo in [nome, punti]:
 			riga.add_child(pezzo)
 
 		_classifica.add_child(pannello)
-		_righe_classifica.append({"pannello": pannello, "posizione": posizione,
-				"nome": nome, "punti": punti})
-
-
-## Il fondo di una riga qualunque: niente. Serve un oggetto vero lo stesso,
-## perché togliere lo stile a un pannello lo fa tornare a quello del tema. I
-## margini ci sono anche qui: se li avesse solo la riga accesa, la classifica
-## ballerebbe di quattro pixel ogni volta che si cambia posizione.
-func _vuoto() -> StyleBoxEmpty:
-	var stile := StyleBoxEmpty.new()
-	stile.content_margin_left = 8
-	stile.content_margin_right = 8
-	stile.content_margin_top = 2
-	stile.content_margin_bottom = 2
-	return stile
-
-
-## La riga tua: un fondo chiaro appena accennato. Il raggio è piccolo — quello
-## dei pulsanti sarebbe una pasticca su una riga alta ventotto pixel.
-func _riga_accesa() -> StyleBoxFlat:
-	var stile := StyleBoxFlat.new()
-	stile.bg_color = Color(1, 1, 1, 0.15)
-	stile.set_corner_radius_all(6)
-	stile.content_margin_left = 8
-	stile.content_margin_right = 8
-	stile.content_margin_top = 2
-	stile.content_margin_bottom = 2
-	return stile
+		_righe_classifica.append({"pannello": pannello, "quadrato": quadrato,
+				"posizione": posizione, "nome": nome, "punti": punti})
 
 
 func _disegna() -> void:
@@ -571,38 +643,47 @@ func _costruisci() -> void:
 	# Le etichette dei punti che salgono dal colpo: nascono qui, spente, e in
 	# partita cambiano solo testo e posizione.
 	for i in ETICHETTE_IN_RISERVA:
-		# Nelle prove dell'arena aperta (tappa 11) i punti saltano fuori grandi, col bordo
-		# scuro, dove succede: nei giochi del riferimento si leggono senza cercarli.
-		var grandi := Aspetto.corpi_a_cartone()
-		var etichetta := _etichetta(54 if grandi else 30, Color(1, 1, 1, 1))
+		# I punti saltano fuori dove succede, in Bebas col contorno navy: sono l'unica
+		# scritta che vive sulla scena nuda, e senza contorno sul cielo chiaro sparisce.
+		var etichetta := _etichetta(37, Color.WHITE, 8)
 		etichetta.add_theme_font_override("font", carattere_titolo())
-		if grandi:
-			etichetta.add_theme_constant_override("outline_size", 14)
-			etichetta.add_theme_color_override("font_outline_color", Color(0.05, 0.06, 0.18))
 		etichetta.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		etichetta.visible = false
 		add_child(etichetta)
 		_etichette_volanti.append({"etichetta": etichetta, "punto": Vector3.ZERO, "vita": 0.0})
 
-	_riga_alta = _etichetta(30, Color(1, 1, 1, 0.95))
+	_riga_alta = _etichetta(30, Color(1, 1, 1, 0.95), 6)
 	_riga_alta.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_riga_alta.position = Vector2(28, 20)
 	_riga_alta.size = Vector2(700, 44)
 	add_child(_riga_alta)
 
-	_riga_bassa = _etichetta(20, Color(1, 1, 1, 0.6))
+	_riga_bassa = _etichetta(20, Color(1, 1, 1, 0.6), 6)
 	_riga_bassa.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_riga_bassa.position = Vector2(28, 62)
 	_riga_bassa.size = Vector2(900, 40)
 	add_child(_riga_bassa)
 
-	_avviso = _etichetta(52, Color(1, 1, 1, 1))
-	_avviso.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	_avviso.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_avviso.offset_top = 108
-	_avviso.offset_bottom = 190
-	_avviso.text = ""
-	add_child(_avviso)
+	# La lamella dell'annuncio: centrata, il suo centro a 236 come nel disegno.
+	_pannello_avviso = PanelContainer.new()
+	_pannello_avviso.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_pannello_avviso.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_pannello_avviso.offset_top = 196
+	_pannello_avviso.custom_minimum_size = Vector2(0, 80)
+	_pannello_avviso.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_pannello_avviso.add_theme_stylebox_override("panel", lamella(NAVY, 0.85, 60, 60))
+	_pannello_avviso.visible = false
+	add_child(_pannello_avviso)
+	_avviso = RichTextLabel.new()
+	_avviso.bbcode_enabled = true
+	_avviso.fit_content = true
+	_avviso.scroll_active = false
+	_avviso.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_avviso.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_avviso.add_theme_font_override("normal_font", carattere_titolo())
+	_avviso.add_theme_font_size_override("normal_font_size", 63)
+	_avviso.add_theme_color_override("default_color", Color.WHITE)
+	_pannello_avviso.add_child(_avviso)
 
 	_pulsante("FUOCO", Vector2(-190, -190), Vector2(150, 150), Color(0.95, 0.3, 0.35),
 			func() -> void: _fuoco = true)
@@ -664,6 +745,26 @@ func _tondo(colore: Color, opacita: float, lato: float) -> StyleBoxFlat:
 	return stile
 
 
+## L'anello navy dentro il pulsante del fuoco: un pannello vuoto col solo bordo, sei
+## punti dentro il tondo rosso.
+func _anello(lato: float) -> Panel:
+	var anello := Panel.new()
+	anello.set_anchors_preset(Control.PRESET_FULL_RECT)
+	anello.offset_left = 6
+	anello.offset_top = 6
+	anello.offset_right = -6
+	anello.offset_bottom = -6
+	anello.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var stile := StyleBoxFlat.new()
+	stile.bg_color = Color(0, 0, 0, 0)
+	stile.set_corner_radius_all(int(lato * 0.5))
+	stile.set_border_width_all(6)
+	stile.border_color = NAVY
+	stile.anti_aliasing = true
+	anello.add_theme_stylebox_override("panel", stile)
+	return anello
+
+
 func _sfondo(colore: Color, opacita: float) -> StyleBoxFlat:
 	var stile := StyleBoxFlat.new()
 	stile.bg_color = Color(colore.r, colore.g, colore.b, opacita)
@@ -676,33 +777,80 @@ func _sfondo(colore: Color, opacita: float) -> StyleBoxFlat:
 	return stile
 
 
-func _etichetta(dimensione: int, colore: Color) -> Label:
+## Un'etichetta dell'interfaccia. **Il contorno si chiede**: dentro una lamella il testo
+## sta su un fondo e un contorno lo sporcherebbe; sulla scena nuda (il VIA, i punti che
+## salgono, i numeri delle bandiere) senza contorno non si legge.
+func _etichetta(dimensione: int, colore: Color, contorno := 0) -> Label:
 	var etichetta := Label.new()
 	etichetta.add_theme_font_size_override("font_size", dimensione)
 	etichetta.add_theme_color_override("font_color", colore)
-	etichetta.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.75))
-	etichetta.add_theme_constant_override("outline_size", 6)
+	if contorno > 0:
+		etichetta.add_theme_color_override("font_outline_color", NAVY)
+		etichetta.add_theme_constant_override("outline_size", contorno)
 	etichetta.add_theme_font_override("font", carattere_testo())
 	etichetta.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return etichetta
 
 
+## **Una lamella**: il pezzo di cui è fatta tutta l'interfaccia. Navy all'82 % con il
+## filo d'argento in cima, che tiene il profilo anche sopra i muri blu; oro per la tua
+## riga del podio e per RIGIOCA; bianca per la tua riga della classifica.
+static func lamella(colore: Color, opacita := 0.82, margine_sx := 20, margine_dx := 20) -> StyleBoxFlat:
+	var stile := StyleBoxFlat.new()
+	stile.bg_color = Color(colore.r, colore.g, colore.b, opacita)
+	stile.set_corner_radius_all(4)
+	stile.skew = Vector2(OBLIQUO, 0.0)
+	stile.border_width_top = 2
+	stile.border_color = Color(ARGENTO.r, ARGENTO.g, ARGENTO.b, 0.5)
+	stile.shadow_color = Color(0, 0, 0, 0.3)
+	stile.shadow_size = 10
+	stile.shadow_offset = Vector2(0, 4)
+	stile.content_margin_left = margine_sx
+	stile.content_margin_right = margine_dx
+	stile.content_margin_top = 0
+	stile.content_margin_bottom = 0
+	stile.anti_aliasing = true
+	return stile
+
+
+## Il quadrato del posto dentro la riga: pende come la lamella, la cifra dentro sta dritta.
+func _quadrato(colore: Color) -> StyleBoxFlat:
+	var stile := StyleBoxFlat.new()
+	stile.bg_color = colore
+	stile.set_corner_radius_all(3)
+	stile.skew = Vector2(OBLIQUO, 0.0)
+	stile.anti_aliasing = true
+	return stile
+
+
+## Oro al primo, argento al secondo, bronzo al terzo; dal quarto in giu' navy chiaro.
+static func colore_del_posto(posto: int) -> Color:
+	match posto:
+		1: return ORO
+		2: return ARGENTO
+		3: return BRONZO
+	return NAVY_CHIARO
+
+
 
 # ------------------------------------------------------------------ la partita
 
-## I due caratteri dell'interfaccia (tappa 7): i titoli in Russo One, i testi in
-## Exo 2 semi-grasso. Caricati una volta; se mancano si torna a quello del motore.
-const CARATTERE_TESTO := "res://assets/font/Exo2.ttf"
-const CARATTERE_TITOLO := "res://assets/font/RussoOne-Regular.ttf"
+## I due caratteri dell'interfaccia (tappa 11, blocco C3a, il misto 1 scelto il
+## 24/10/2026): le cifre e i titoli in **Bebas Neue**, i testi in **Barlow Condensed**
+## SemiBold. Russo One ed Exo 2 venivano dalla Home al neon e non da un'arena-giocattolo.
+## Tutti e due SIL OFL. Caricati una volta; se mancano si torna a quello del motore.
+const CARATTERE_TESTO := "res://assets/font/BarlowCondensed-SemiBold.ttf"
+const CARATTERE_TITOLO := "res://assets/font/BebasNeue-Regular.ttf"
 static var _testo: Font = null
 static var _titolo: Font = null
 
 var _cronometro: Label
+var _pannello_posizione: PanelContainer
 var _posizione_grande: Label
 var _punti_piccoli: Label
 var _in_partita := false
 var _bottone_esci: Button
-var _podio: PanelContainer
+var _podio: Control
 var _podio_posizione: Label
 var _righe_podio: Array[Dictionary] = []
 var _fischio: Label
@@ -712,15 +860,11 @@ var _pillole: HBoxContainer
 
 static func carattere_testo() -> Font:
 	if _testo == null:
+		# Il file è già SemiBold: il peso non si chiede più al motore (Exo 2 era
+		# variabile, Barlow Condensed no, e una FontVariation su un carattere fisso
+		# non fa niente).
 		var base: Font = load(CARATTERE_TESTO) if ResourceLoader.exists(CARATTERE_TESTO) else null
-		if base == null:
-			_testo = ThemeDB.fallback_font
-		else:
-			var variante := FontVariation.new()
-			variante.base_font = base
-			var server := TextServerManager.get_primary_interface()
-			variante.variation_opentype = {server.name_to_tag("weight"): 640}
-			_testo = variante
+		_testo = base if base != null else ThemeDB.fallback_font
 	return _testo
 
 
@@ -742,8 +886,8 @@ func modalita_partita(tempo: String, posizione: int, punti: int, sotto := "") ->
 		_in_partita = true
 	_cronometro.text = tempo
 	_posizione_grande.text = "%d°" % posizione
-	# In GARA, al posto dei punti, la bandiera che devi toccare: «BANDIERA 3 DI 7».
-	_punti_piccoli.text = sotto if sotto != "" else "%d PUNTI" % punti
+	# In GARA, al posto dei punti, la bandiera che devi toccare: «· BANDIERA 3 DI 7».
+	_punti_piccoli.text = ("· " + sotto) if sotto != "" else "%d PUNTI" % punti
 
 
 ## **La freccia della GARA** (tappa 11, blocco D1): quando la prossima bandiera è fuori
@@ -814,21 +958,26 @@ func _disegna_la_freccia() -> void:
 	var punta := dove + verso * 34.0
 	var dietro := dove - verso * 20.0
 	var tre := PackedVector2Array([punta, dietro + lato * 32.0, dietro - lato * 32.0])
-	_disegno.draw_colored_polygon(tre, _freccia_colore)
+	_disegno.draw_colored_polygon(tre, Color(NAVY.r, NAVY.g, NAVY.b, 0.9))
 	_disegno.draw_polyline(PackedVector2Array([punta, dietro + lato * 32.0, dietro - lato * 32.0,
-			punta]), Color(1, 1, 1, 0.95), 4.0, true)
+			punta]), _freccia_colore, 4.0, true)
 	if _freccia_testo == "":
 		return
-	# Il numero in un tondo del colore della bandiera, dietro la freccia.
-	var font := carattere_titolo()
+	# Il numero in un disco navy con l'anello nel colore della bandiera, dietro la freccia.
 	var tondo := dove - verso * 64.0
-	_disegno.draw_circle(tondo, 28.0, _freccia_colore)
-	_disegno.draw_arc(tondo, 28.0, 0.0, TAU, 32, Color(1, 1, 1, 0.95), 4.0, true)
-	var dove_testo := tondo + Vector2(-40.0, 15.0)
+	_disegno.draw_circle(tondo, 28.0, Color(NAVY.r, NAVY.g, NAVY.b, 0.9))
+	_disegno.draw_arc(tondo, 28.0, 0.0, TAU, 32, _freccia_colore, 4.0, true)
+	_numero_della_bandiera(tondo)
+
+
+## Il numero della bandiera dentro il disco: Bebas oro, col contorno navy.
+func _numero_della_bandiera(tondo: Vector2) -> void:
+	var font := carattere_titolo()
+	var dove_testo := tondo + Vector2(-40.0, 14.0)
 	_disegno.draw_string_outline(font, dove_testo, _freccia_testo, HORIZONTAL_ALIGNMENT_CENTER,
-			80.0, 40, 8, Color(0.02, 0.02, 0.06, 0.85))
-	_disegno.draw_string(font, dove_testo, _freccia_testo, HORIZONTAL_ALIGNMENT_CENTER, 80.0, 40,
-			Color(1, 1, 1, 0.98))
+			80.0, 38, 8, NAVY)
+	_disegno.draw_string(font, dove_testo, _freccia_testo, HORIZONTAL_ALIGNMENT_CENTER, 80.0, 38,
+			ORO)
 
 
 ## Il giro che si fa una volta sola, quando la partita comincia: costa
@@ -840,7 +989,9 @@ func _accendi_la_partita() -> void:
 	# I due pulsanti del gioco: **tondi e a icona** (tappa 8, blocco G), come in ogni
 	# sparatutto per telefono di oggi — il dardo che parte, le due frecce in su. E
 	# coprenti: a un terzo di opacità il loro colore lo faceva il muro dietro.
-	var pieni := {"FUOCO": Color(0.95, 0.3, 0.35), "SALTA": Color(0.2, 0.6, 1.0)}
+	# Il rosso del fuoco e il navy del salto: gli stessi due colori di tutto il resto.
+	var pieni := {"FUOCO": ROSSO_FUOCO, "SALTA": NAVY}
+	var coprenza := {"FUOCO": 0.92, "SALTA": 0.70}
 	var icone := {"FUOCO": ICONA_FUOCO, "SALTA": ICONA_SALTA}
 	for figlio in get_children():
 		if not (figlio is Button):
@@ -852,21 +1003,22 @@ func _accendi_la_partita() -> void:
 			pulsante.visible = false
 			continue
 		var lato := pulsante.offset_right - pulsante.offset_left
+		var coprente: float = coprenza[pulsante.text]
 		for stato in ["normal", "hover", "focus"]:
-			pulsante.add_theme_stylebox_override(stato, _tondo(pieni[pulsante.text], 0.62, lato))
-		pulsante.add_theme_stylebox_override("pressed", _tondo(pieni[pulsante.text], 0.92, lato))
+			pulsante.add_theme_stylebox_override(stato, _tondo(pieni[pulsante.text], coprente, lato))
+		pulsante.add_theme_stylebox_override("pressed",
+				_tondo(pieni[pulsante.text], minf(coprente + 0.3, 1.0), lato))
+		# L'anello navy dentro il FUOCO, a sei dal bordo: è quello che lo stacca da
+		# qualunque muro rosso gli finisca dietro.
+		if pulsante.text == "FUOCO" and not pulsante.has_meta("anello"):
+			pulsante.add_child(_anello(lato))
+			pulsante.set_meta("anello", true)
 		pulsante.set_meta("nome", pulsante.text)
 		pulsante.icon = load(icone[pulsante.text])
 		pulsante.expand_icon = true
 		pulsante.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		pulsante.add_theme_constant_override("icon_max_width", int(lato * 0.52))
 		pulsante.text = ""
-	# Due righe sole in partita, quindi possono essere grandi quanto servono.
-	for riga in _righe_classifica:
-		for chiave in ["posizione", "nome", "punti"]:
-			(riga[chiave] as Label).add_theme_font_size_override("font_size", 25)
-		(riga["nome"] as Label).custom_minimum_size = Vector2(150, 0)
-		(riga["punti"] as Label).custom_minimum_size = Vector2(72, 0)
 	if _cronometro == null:
 		_costruisci_la_partita()
 	# La porta della stanza. Sul telefono il gioco sta a schermo intero e non ha
@@ -874,61 +1026,78 @@ func _accendi_la_partita() -> void:
 	# senza uscita. Piccolo e spento, in alto a sinistra, dove non passa nessun
 	# pollice.
 	if _bottone_esci == null:
-		_bottone_esci = _pulsante("", Vector2.ZERO, Vector2(60, 60),
-				Color(0.35, 0.4, 0.55), func() -> void: uscita_richiesta.emit())
+		_bottone_esci = _pulsante("", Vector2.ZERO, Vector2(64, 60),
+				NAVY, func() -> void: uscita_richiesta.emit())
 		_bottone_esci.set_anchors_preset(Control.PRESET_TOP_LEFT)
-		_bottone_esci.offset_left = 26
+		_bottone_esci.offset_left = 24
 		_bottone_esci.offset_top = 18
-		_bottone_esci.offset_right = 26 + 60
+		_bottone_esci.offset_right = 24 + 64
 		_bottone_esci.offset_bottom = 18 + 60
 		for stato in ["normal", "hover", "focus"]:
-			_bottone_esci.add_theme_stylebox_override(stato, _tondo(Color(0.10, 0.10, 0.18), 0.55, 60))
-		_bottone_esci.add_theme_stylebox_override("pressed", _tondo(Color(0.10, 0.10, 0.18), 0.85, 60))
+			_bottone_esci.add_theme_stylebox_override(stato, lamella(NAVY, 0.82, 0, 0))
+		_bottone_esci.add_theme_stylebox_override("pressed", lamella(NAVY, 0.95, 0, 0))
 		_bottone_esci.set_meta("nome", "ESCI")
 		_bottone_esci.icon = load(ICONA_ESCI)
 		_bottone_esci.expand_icon = true
 		_bottone_esci.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		_bottone_esci.add_theme_constant_override("icon_max_width", 30)
-		_bottone_esci.modulate.a = 0.7
+		_bottone_esci.add_theme_constant_override("icon_max_width", 33)
 	_bottone_esci.visible = true
 
 
+## **Il tabellone** (misto 1): il cronometro in una lamella al centro, la posizione in
+## una a destra, la colonna della classifica a sinistra. Tutto nella fascia alta, che è
+## l'unica senza pollici sopra.
 func _costruisci_la_partita() -> void:
 	var pillola := PanelContainer.new()
 	pillola.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	pillola.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	pillola.offset_top = 14
+	pillola.offset_top = 18
+	pillola.custom_minimum_size = Vector2(164, 60)
 	pillola.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var fondo := StyleBoxFlat.new()
-	fondo.bg_color = Color(0.03, 0.03, 0.08, 0.55)
-	fondo.set_corner_radius_all(20)
-	fondo.content_margin_left = 26
-	fondo.content_margin_right = 26
-	fondo.content_margin_top = 2
-	fondo.content_margin_bottom = 6
-	pillola.add_theme_stylebox_override("panel", fondo)
+	pillola.add_theme_stylebox_override("panel", lamella(NAVY, 0.82))
 	add_child(pillola)
-	_cronometro = _etichetta(46, Color(1, 1, 1, 0.98))
+	_cronometro = _etichetta(52, Color.WHITE)
 	_cronometro.add_theme_font_override("font", carattere_titolo())
 	_cronometro.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_cronometro.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	pillola.add_child(_cronometro)
 
-	_posizione_grande = _etichetta(56, Color(1, 1, 1, 0.98))
-	_posizione_grande.add_theme_font_override("font", carattere_titolo())
-	_posizione_grande.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	_posizione_grande.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	_posizione_grande.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_posizione_grande.offset_right = -30
-	_posizione_grande.offset_top = 8
-	add_child(_posizione_grande)
+	# La posizione e quello che le sta accanto — i punti, o la bandiera in GARA — stanno
+	# nella stessa lamella, che **cresce col testo**: «BANDIERA 3 DI 7» è lungo il doppio
+	# di «25 PUNTI», e una larghezza fissa lo manderebbe a capo.
+	_pannello_posizione = PanelContainer.new()
+	_pannello_posizione.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_pannello_posizione.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_pannello_posizione.offset_top = 18
+	_pannello_posizione.custom_minimum_size = Vector2(300, 60)
+	_pannello_posizione.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_pannello_posizione.add_theme_stylebox_override("panel", lamella(NAVY, 0.82))
+	add_child(_pannello_posizione)
+	var dentro := HBoxContainer.new()
+	dentro.add_theme_constant_override("separation", 12)
+	dentro.alignment = BoxContainer.ALIGNMENT_CENTER
+	dentro.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_pannello_posizione.add_child(dentro)
 
-	_punti_piccoli = _etichetta(22, Color(1, 1, 1, 0.82))
-	_punti_piccoli.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	_punti_piccoli.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	_punti_piccoli.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_punti_piccoli.offset_right = -32
-	_punti_piccoli.offset_top = 78
-	add_child(_punti_piccoli)
+	_posizione_grande = _etichetta(55, Color.WHITE)
+	_posizione_grande.add_theme_font_override("font", carattere_titolo())
+	_posizione_grande.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	dentro.add_child(_posizione_grande)
+
+	_punti_piccoli = _etichetta(26, Color.WHITE)
+	_punti_piccoli.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	dentro.add_child(_punti_piccoli)
+	_sistema_la_posizione()
+
+
+## Dove finisce la lamella della posizione: contro il bordo destro, o più a sinistra per
+## lasciare il posto ai sette pallini della PALLA.
+func _sistema_la_posizione() -> void:
+	if _pannello_posizione == null:
+		return
+	var margine := 24.0 if _pallini.is_empty() else 24.0 + LARGO_PALLINI + 12.0
+	_pannello_posizione.offset_left = -margine
+	_pannello_posizione.offset_right = -margine
 
 
 # ------------------------------------------------------------------- il podio
@@ -946,19 +1115,26 @@ func podio(righe: Array, posizione: int) -> void:
 	_podio_posizione.text = "SEI %d°" % posizione
 	for i in _righe_podio.size():
 		var riga: Dictionary = _righe_podio[i]
-		var scatola: HBoxContainer = riga["riga"]
+		var scatola: PanelContainer = riga["riga"]
 		if i >= righe.size():
 			scatola.visible = false
 			continue
 		scatola.visible = true
 		var dato: Dictionary = righe[i]
 		var tuo := bool(dato.get("tu", false))
-		(riga["posizione"] as Label).text = "%d°" % int(dato["posizione"])
+		var posto := int(dato["posizione"])
+		(riga["posizione"] as Label).text = "%d" % posto
 		(riga["nome"] as Label).text = String(dato["nome"])
 		(riga["punti"] as Label).text = valore_di(dato)
-		var tinta := Color(1, 0.86, 0.35, 1.0) if tuo else Color(1, 1, 1, 0.72)
-		for chiave in ["posizione", "nome", "punti"]:
+		var tinta := NAVY if tuo else Color.WHITE
+		for chiave in ["nome", "punti"]:
 			(riga[chiave] as Label).add_theme_color_override("font_color", tinta)
+		scatola.add_theme_stylebox_override("panel",
+				_stile_riga_tua if tuo else _stile_riga)
+		(riga["quadrato"] as PanelContainer).add_theme_stylebox_override("panel",
+				_stili_quadrato[mini(posto, 4) - 1])
+		(riga["posizione"] as Label).add_theme_color_override("font_color",
+				NAVY if posto <= 3 else Color.WHITE)
 	_podio.visible = true
 	# La colonna di sinistra dice le stesse cose del podio, in piccolo: si spegne.
 	spegni_la_classifica()
@@ -977,7 +1153,7 @@ func potenziamenti(voci: Array) -> void:
 		# resta sotto il cronometro.
 		_pillole = HBoxContainer.new()
 		_pillole.set_anchors_preset(Control.PRESET_TOP_WIDE)
-		_pillole.offset_top = 86
+		_pillole.offset_top = 90
 		_pillole.alignment = BoxContainer.ALIGNMENT_CENTER
 		_pillole.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_pillole.add_theme_constant_override("separation", 8)
@@ -991,23 +1167,23 @@ func potenziamenti(voci: Array) -> void:
 			continue
 		var colore: Color = voci[i]["colore"]
 		(pillola.get_theme_stylebox("panel") as StyleBoxFlat).bg_color = Color(colore.r, colore.g, colore.b, 0.92)
-		(pillola.get_child(0) as Label).text = String(voci[i]["testo"])
+		var testo := pillola.get_child(0) as Label
+		testo.text = String(voci[i]["testo"])
+		# Scritta bianca sul colore scuro, navy su quello chiaro: il giallo del punti
+		# doppi con sopra il bianco non si leggeva.
+		testo.add_theme_color_override("font_color",
+				NAVY if colore.get_luminance() > 0.55 else Color.WHITE)
 	_pillole.visible = not voci.is_empty()
 
 
 func _pillola() -> PanelContainer:
 	var pillola := PanelContainer.new()
 	pillola.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var fondo := StyleBoxFlat.new()
-	fondo.set_corner_radius_all(16)
-	fondo.content_margin_left = 18
-	fondo.content_margin_right = 18
-	fondo.content_margin_top = 2
-	fondo.content_margin_bottom = 4
-	pillola.add_theme_stylebox_override("panel", fondo)
-	var testo := _etichetta(24, Color(0.06, 0.04, 0.10, 1.0))
+	pillola.custom_minimum_size = Vector2(0, 40)
+	pillola.add_theme_stylebox_override("panel", lamella(Color.WHITE, 0.92, 18, 18))
+	var testo := _etichetta(24, Color.WHITE)
 	testo.add_theme_font_override("font", carattere_titolo())
-	testo.add_theme_constant_override("outline_size", 0)
+	testo.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	pillola.add_child(testo)
 	return pillola
 
@@ -1019,75 +1195,104 @@ func spegni_il_podio() -> void:
 		_bottone_esci.visible = true
 
 
+## **Il podio del misto 1**: niente pannello scuro: un velo navy su tutto, il titolo in
+## una lamella oro e sotto le sei righe, la tua bianca. I due pulsanti chiudono la pila.
 func _costruisci_il_podio() -> void:
-	_podio = PanelContainer.new()
-	_podio.set_anchors_preset(Control.PRESET_CENTER)
-	_podio.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_podio.grow_vertical = Control.GROW_DIRECTION_BOTH
-	_podio.custom_minimum_size = Vector2(520, 0)
-	var fondo := StyleBoxFlat.new()
-	fondo.bg_color = Color(0.03, 0.03, 0.09, 0.92)
-	fondo.set_corner_radius_all(26)
-	fondo.border_width_bottom = 2
-	fondo.border_width_top = 2
-	fondo.border_width_left = 2
-	fondo.border_width_right = 2
-	fondo.border_color = Color(1, 1, 1, 0.16)
-	fondo.content_margin_left = 34
-	fondo.content_margin_right = 34
-	fondo.content_margin_top = 18
-	fondo.content_margin_bottom = 20
-	_podio.add_theme_stylebox_override("panel", fondo)
+	_podio = Control.new()
+	_podio.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_podio.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_podio)
 
+	var velo := ColorRect.new()
+	velo.set_anchors_preset(Control.PRESET_FULL_RECT)
+	velo.color = Color(NAVY.r, NAVY.g, NAVY.b, 0.4)
+	velo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_podio.add_child(velo)
+
 	var colonna := VBoxContainer.new()
-	colonna.add_theme_constant_override("separation", 4)
+	colonna.set_anchors_preset(Control.PRESET_CENTER)
+	colonna.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	colonna.grow_vertical = Control.GROW_DIRECTION_BOTH
+	colonna.add_theme_constant_override("separation", 6)
+	colonna.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_podio.add_child(colonna)
 
-	_podio_posizione = _etichetta(44, Color(1, 1, 1, 0.98))
+	var titolo := PanelContainer.new()
+	titolo.custom_minimum_size = Vector2(420, 64)
+	titolo.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	titolo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	titolo.add_theme_stylebox_override("panel", lamella(ORO, 1.0))
+	_podio_posizione = _etichetta(52, NAVY)
 	_podio_posizione.add_theme_font_override("font", carattere_titolo())
 	_podio_posizione.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	colonna.add_child(_podio_posizione)
+	_podio_posizione.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	titolo.add_child(_podio_posizione)
+	colonna.add_child(titolo)
 
 	for i in 6:
+		var scatola := PanelContainer.new()
+		scatola.custom_minimum_size = Vector2(560, 48)
+		scatola.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		scatola.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		scatola.add_theme_stylebox_override("panel", _stile_riga)
 		var riga := HBoxContainer.new()
-		riga.add_theme_constant_override("separation", 14)
+		riga.add_theme_constant_override("separation", 16)
 		riga.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var posizione := _etichetta(24, Color(1, 1, 1, 0.72))
-		posizione.custom_minimum_size = Vector2(46, 0)
-		posizione.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		var nome := _etichetta(24, Color(1, 1, 1, 0.72))
-		nome.custom_minimum_size = Vector2(230, 0)
-		var punti := _etichetta(24, Color(1, 1, 1, 0.72))
-		punti.custom_minimum_size = Vector2(100, 0)
+		scatola.add_child(riga)
+
+		var quadrato := PanelContainer.new()
+		quadrato.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		quadrato.custom_minimum_size = Vector2(36, 32)
+		quadrato.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		quadrato.add_theme_stylebox_override("panel", _stili_quadrato[0])
+		var posizione := _etichetta(28, NAVY)
+		posizione.add_theme_font_override("font", carattere_titolo())
+		posizione.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		posizione.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		quadrato.add_child(posizione)
+		riga.add_child(quadrato)
+
+		var nome := _etichetta(28, Color.WHITE)
+		nome.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		nome.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var punti := _etichetta(30, Color.WHITE)
+		punti.add_theme_font_override("font", carattere_titolo())
+		punti.custom_minimum_size = Vector2(90, 0)
+		punti.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		punti.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		for pezzo in [posizione, nome, punti]:
+		for pezzo in [nome, punti]:
 			riga.add_child(pezzo)
-		colonna.add_child(riga)
-		_righe_podio.append({"riga": riga, "posizione": posizione, "nome": nome,
-				"punti": punti})
+
+		colonna.add_child(scatola)
+		_righe_podio.append({"riga": scatola, "quadrato": quadrato,
+				"posizione": posizione, "nome": nome, "punti": punti})
 
 	var tasti := HBoxContainer.new()
-	tasti.add_theme_constant_override("separation", 16)
+	tasti.add_theme_constant_override("separation", 20)
 	tasti.alignment = BoxContainer.ALIGNMENT_CENTER
+	tasti.custom_minimum_size = Vector2(0, 90)
+	tasti.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	colonna.add_child(tasti)
-	tasti.add_child(_tasto_del_podio("RIGIOCA", Color(0.2, 0.75, 0.45),
+	tasti.add_child(_tasto_del_podio("RIGIOCA", ORO, NAVY,
 			func() -> void: rigioca_richiesta.emit()))
-	tasti.add_child(_tasto_del_podio("ESCI", Color(0.35, 0.4, 0.55),
+	tasti.add_child(_tasto_del_podio("ESCI", NAVY, Color.WHITE,
 			func() -> void: uscita_richiesta.emit()))
 
 
 ## I pulsanti del podio stanno **dentro** il pannello, quindi non si posizionano
 ## come gli altri: li mette in fila il contenitore.
-func _tasto_del_podio(testo: String, colore: Color, azione: Callable) -> Button:
+func _tasto_del_podio(testo: String, colore: Color, tinta: Color, azione: Callable) -> Button:
 	var pulsante := Button.new()
 	pulsante.text = testo
-	pulsante.custom_minimum_size = Vector2(190, 76)
-	pulsante.add_theme_font_size_override("font_size", 26)
+	pulsante.custom_minimum_size = Vector2(240, 80)
+	pulsante.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	pulsante.add_theme_font_size_override("font_size", 34)
 	pulsante.add_theme_font_override("font", carattere_titolo())
-	pulsante.add_theme_color_override("font_color", Color(1, 1, 1, 0.95))
+	pulsante.add_theme_color_override("font_color", tinta)
+	pulsante.add_theme_color_override("font_hover_color", tinta)
+	pulsante.add_theme_color_override("font_pressed_color", tinta)
 	for stato in ["normal", "hover", "focus"]:
-		pulsante.add_theme_stylebox_override(stato, _sfondo(colore, 0.62))
-	pulsante.add_theme_stylebox_override("pressed", _sfondo(colore, 0.9))
+		pulsante.add_theme_stylebox_override(stato, lamella(colore, 0.95))
+	pulsante.add_theme_stylebox_override("pressed", lamella(colore, 1.0))
 	pulsante.pressed.connect(azione)
 	return pulsante

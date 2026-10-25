@@ -241,3 +241,18 @@ func _riposa(fotogrammi: int) -> void:
 func _scatta(nome: String) -> void:
 	await RenderingServer.frame_post_draw
 	root.get_texture().get_image().save_png(CARTELLA + "/" + nome)
+	await _senza_interfaccia(nome)
+
+
+## Lo stesso istante con l'interfaccia spenta (tappa 11, C3a): il fondo su cui si disegnano
+## le direzioni dell'interfaccia. Solo con `pulito` dopo la variante.
+func _senza_interfaccia(nome: String) -> void:
+	if not OS.get_cmdline_user_args().has("pulito"):
+		return
+	var strati := root.find_children("*", "CanvasLayer", true, false)
+	for strato: CanvasLayer in strati:
+		strato.visible = false
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png(CARTELLA + "/" + nome.get_basename() + "-pulito.png")
+	for strato: CanvasLayer in strati:
+		strato.visible = true

@@ -183,8 +183,8 @@ func _fuori_ordine_non_conta() -> void:
 	await _porta(tu, b.dove(2))
 	_conta("toccata fuori ordine, la terza non conta", _arena.bandiere_di(tu) == 0,
 			"%d bandiere" % _arena.bandiere_di(tu))
-	var avviso: Label = tu.comandi._avviso
-	_conta("e un avviso dice quale serve", avviso.text == "PRIMA LA BANDIERA 1", avviso.text)
+	var avviso: String = tu.comandi.testo_annunciato()
+	_conta("e un avviso dice quale serve", avviso == "PRIMA LA BANDIERA 1", avviso)
 	await _porta(tu, b.dove(0))
 	_conta("controprova: la prima conta", _arena.bandiere_di(tu) == 1, "%d" % _arena.bandiere_di(tu))
 	_conta("e la colonna di luce passa alla seconda",
@@ -213,8 +213,8 @@ func _i_colpi_fermano() -> void:
 	_conta("chi è colpito riparte dall'ultima bandiera che ha toccato (la seconda)",
 			piano <= Bandiere.RIPARTENZA + 0.6 and absf(tu.global_position.y - b.dove(1).y) < 1.0,
 			"a %.1f m dalla seconda" % piano)
-	_conta("e lo sa", (tu.comandi._avviso as Label).text == "COLPITO DA %s" % bot.personaggio,
-			(tu.comandi._avviso as Label).text)
+	_conta("e lo sa", tu.comandi.testo_annunciato() == "COLPITO DA %s" % bot.personaggio,
+			tu.comandi.testo_annunciato())
 
 	# La controprova: un avversario che non ne ha toccata nessuna torna al suo posto in griglia.
 	var altro := _arena.avversari()[1]

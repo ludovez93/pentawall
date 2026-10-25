@@ -245,13 +245,13 @@ func _titolo() -> void:
 	nome.add_theme_font_override("font", _titolo_spaziato())
 	nome.add_theme_font_size_override("font_size", 104)
 	nome.add_theme_color_override("font_color", Color(1, 1, 1, 0.98))
-	nome.add_theme_color_override("font_outline_color", Color(0.62, 0.30, 1.0, 0.55))
+	nome.add_theme_color_override("font_outline_color", Color(Comandi.NAVY, 0.75))
 	nome.add_theme_constant_override("outline_size", 12)
 	nome.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(nome)
 
 	var filo := ColorRect.new()
-	filo.color = Color(0.35, 0.95, 0.92, 0.85)
+	filo.color = Comandi.ORO
 	filo.position = Vector2(90, 262)
 	filo.size = Vector2(120, 4)
 	filo.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -262,7 +262,7 @@ func _titolo() -> void:
 	sotto.position = Vector2(90, 280)
 	sotto.add_theme_font_override("font", Comandi.carattere_testo())
 	sotto.add_theme_font_size_override("font_size", 24)
-	sotto.add_theme_color_override("font_color", Color(1, 1, 1, 0.66))
+	sotto.add_theme_color_override("font_color", Color(Comandi.ARGENTO, 0.9))
 	sotto.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(sotto)
 
@@ -284,12 +284,13 @@ func _pulsanti() -> void:
 	gioca.custom_minimum_size = Vector2(340, 112)
 	gioca.add_theme_font_override("font", Comandi.carattere_titolo())
 	gioca.add_theme_font_size_override("font_size", 46)
-	gioca.add_theme_color_override("font_color", Color(0.04, 0.03, 0.08))
-	gioca.add_theme_color_override("font_pressed_color", Color(0.04, 0.03, 0.08))
-	gioca.add_theme_color_override("font_hover_color", Color(0.04, 0.03, 0.08))
+	gioca.add_theme_color_override("font_color", Comandi.NAVY)
+	gioca.add_theme_color_override("font_pressed_color", Comandi.NAVY)
+	gioca.add_theme_color_override("font_hover_color", Comandi.NAVY)
+	# Oro e navy come in partita (tappa 11, C3a): il ciano veniva dalla Home al neon.
 	for stato in ["normal", "hover", "focus"]:
-		gioca.add_theme_stylebox_override(stato, _pieno(Color(0.40, 1.0, 0.92), 0.0))
-	gioca.add_theme_stylebox_override("pressed", _pieno(Color(0.30, 0.86, 0.80), 3.0))
+		gioca.add_theme_stylebox_override(stato, Comandi.lamella(Comandi.ORO, 1.0))
+	gioca.add_theme_stylebox_override("pressed", Comandi.lamella(Color(0.85, 0.63, 0.12), 1.0))
 	gioca.pressed.connect(_comincia)
 	add_child(gioca)
 	_gioca = gioca
@@ -299,7 +300,7 @@ func _pulsanti() -> void:
 	_attesa.position = Vector2(92, 518)
 	_attesa.add_theme_font_override("font", Comandi.carattere_testo())
 	_attesa.add_theme_font_size_override("font_size", 22)
-	_attesa.add_theme_color_override("font_color", Color(0.40, 1.0, 0.92, 0.8))
+	_attesa.add_theme_color_override("font_color", Color(Comandi.ARGENTO, 0.9))
 	_attesa.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_attesa)
 	_scrivi_l_attesa()
@@ -386,18 +387,11 @@ func _scrivi_le_modalita() -> void:
 	for i in _modalita.size():
 		var pulsante := _modalita[i]
 		var scelta := i == Modalita.scelta()
-		var fondo := _sfondo(Color(0.95, 0.96, 1.0), 0.95) if scelta \
-				else _sfondo(Color(0.10, 0.10, 0.20), 0.6)
-		fondo.set_corner_radius_all(18)
-		if not scelta:
-			fondo.border_width_left = 2
-			fondo.border_width_right = 2
-			fondo.border_width_top = 2
-			fondo.border_width_bottom = 2
-			fondo.border_color = Color(1, 1, 1, 0.22)
+		var fondo := Comandi.lamella(Comandi.ORO, 1.0) if scelta \
+				else Comandi.lamella(Comandi.NAVY, 0.72)
 		for stato in ["normal", "hover", "focus", "pressed"]:
 			pulsante.add_theme_stylebox_override(stato, fondo)
-		var testo := Color(0.04, 0.03, 0.08) if scelta else Color(1, 1, 1, 0.82)
+		var testo := Comandi.NAVY if scelta else Color.WHITE
 		for colore in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
 			pulsante.add_theme_color_override(colore, testo)
 

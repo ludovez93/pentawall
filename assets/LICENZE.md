@@ -9,6 +9,8 @@ Tutto libero, verificato all'origine il 12/09/2026 e il 03/10/2026 (i suoni). Ni
 | `materials/ambientcg/*` | superfici PBR a 1K (colore, normale, rugosità) | ambientCG | CC0 1.0 | ambientcg.com |
 | `font/RussoOne-Regular.ttf` | carattere dei titoli e delle insegne | Jovanny Lemonad | SIL OFL 1.1 | fonts.google.com/specimen/Russo+One |
 | `font/Exo2.ttf` | carattere dei testi (variabile in peso) | Natanael Gama | SIL OFL 1.1 | fonts.google.com/specimen/Exo+2 |
+| `font/BebasNeue-Regular.ttf` | carattere delle cifre e dei titoli dell'interfaccia (dal 25/10/2026) | Ryoichi Tsunekawa, Dharma Type | SIL OFL 1.1 | fonts.google.com/specimen/Bebas+Neue |
+| `font/BarlowCondensed-SemiBold.ttf` | carattere dei testi dell'interfaccia (dal 25/10/2026) | Jeremy Tribby | SIL OFL 1.1 | fonts.google.com/specimen/Barlow+Condensed |
 | `models/quaternius/base/*` | i due corpi umani base, con rig a 65 ossa, occhi e sopracciglia | Quaternius | CC0 1.0 | quaternius.itch.io/universal-base-characters |
 | `models/quaternius/UAL1_Standard.glb` | la libreria di animazioni per lo stesso scheletro | Quaternius | CC0 1.0 | quaternius.itch.io/universal-animation-library |
 | `models/quaternius/capelli/*` | le pettinature, ferme all'origine | Quaternius | CC0 1.0 | (stesso pacchetto dei corpi) |
