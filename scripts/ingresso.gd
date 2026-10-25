@@ -258,7 +258,9 @@ func _titolo() -> void:
 	add_child(filo)
 
 	var sotto := Label.new()
-	sotto.text = "IL DARDO RIMBALZA FINO A CINQUE MURI"
+	# Il rimbalzo non è il soggetto del gioco (DECISIONI § 20, 05/10/2026): la riga dice la
+	# regola che il gioco ha dal 1999, ed è quella che lo distingue dagli sparatutto accanto.
+	sotto.text = "QUI NON SI MUORE: SI FANNO PUNTI"
 	sotto.position = Vector2(90, 280)
 	sotto.add_theme_font_override("font", Comandi.carattere_testo())
 	sotto.add_theme_font_size_override("font_size", 24)

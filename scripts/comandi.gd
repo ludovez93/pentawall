@@ -109,6 +109,7 @@ var _freccia_coperta := false
 ## niente, `1` segnata, `2` portata, `3` segnata e portata. Vuoto: spenti.
 var _lancia: Button
 var _colore_lancia := Color.WHITE
+var _anello_lancia: Panel
 var _pallini: Array = []
 var _colori_pallini: Array = []
 const MARGINE_FRECCIA := 110.0
@@ -319,15 +320,22 @@ func lancia(visibile: bool, colore := Color.WHITE) -> void:
 	if _lancia == null:
 		if not visibile:
 			return
-		_lancia = _pulsante("LANCIA", Vector2(-176, -334), Vector2(124, 124), colore,
+		_lancia = _pulsante("LANCIA", Vector2(-176, -334), Vector2(124, 124), NAVY,
 				func() -> void: lancio_richiesto.emit())
 		_lancia.set_meta("lancia", true)
 		_lancia.add_theme_font_size_override("font_size", 30)
+		# **Corpo navy, anello nel colore della palla** (LEARNED § 73, corretto il 25/10/2026):
+		# pieno nel colore, con la palla rossa in mano LANCIA e FUOCO erano due tondi rossi
+		# identici, e sotto il pollice davanti alla porta si sbagliava bottone. Il navy sta su
+		# qualunque muro; il colore, che dice *quale* palla parte, è l'anello.
+		for stato in ["normal", "hover", "focus"]:
+			_lancia.add_theme_stylebox_override(stato, _tondo(NAVY, 0.92, 124))
+		_lancia.add_theme_stylebox_override("pressed", _tondo(NAVY, 1.0, 124))
+		_anello_lancia = _anello(124, colore)
+		_lancia.add_child(_anello_lancia)
 	if visibile and not colore.is_equal_approx(_colore_lancia):
 		_colore_lancia = colore
-		for stato in ["normal", "hover", "focus"]:
-			_lancia.add_theme_stylebox_override(stato, _tondo(colore, 0.92, 124))
-		_lancia.add_theme_stylebox_override("pressed", _tondo(colore, 1.0, 124))
+		(_anello_lancia.get_theme_stylebox("panel") as StyleBoxFlat).border_color = colore
 	_lancia.visible = visibile
 
 
@@ -745,9 +753,9 @@ func _tondo(colore: Color, opacita: float, lato: float) -> StyleBoxFlat:
 	return stile
 
 
-## L'anello navy dentro il pulsante del fuoco: un pannello vuoto col solo bordo, sei
-## punti dentro il tondo rosso.
-func _anello(lato: float) -> Panel:
+## L'anello dentro un pulsante tondo: un pannello vuoto col solo bordo, sei punti dentro
+## il suo. Navy nel FUOCO, nel colore della palla portata nel LANCIA.
+func _anello(lato: float, colore := NAVY) -> Panel:
 	var anello := Panel.new()
 	anello.set_anchors_preset(Control.PRESET_FULL_RECT)
 	anello.offset_left = 6
@@ -759,7 +767,7 @@ func _anello(lato: float) -> Panel:
 	stile.bg_color = Color(0, 0, 0, 0)
 	stile.set_corner_radius_all(int(lato * 0.5))
 	stile.set_border_width_all(6)
-	stile.border_color = NAVY
+	stile.border_color = colore
 	stile.anti_aliasing = true
 	anello.add_theme_stylebox_override("panel", stile)
 	return anello
@@ -852,6 +860,7 @@ var _in_partita := false
 var _bottone_esci: Button
 var _podio: Control
 var _podio_posizione: Label
+var _podio_tempo: Label
 var _righe_podio: Array[Dictionary] = []
 var _fischio: Label
 var _tempo_fischio := 0.0
@@ -1109,10 +1118,19 @@ func _sistema_la_posizione() -> void:
 ## Le righe arrivano già ordinate da chi tiene il punteggio: qui si scrivono e
 ## basta. Si costruisce la prima volta che serve e poi si riaccende: a fine
 ## partita un fotogramma lento non si vede, ma il podio si riapre a ogni RIGIOCA.
-func podio(righe: Array, posizione: int) -> void:
+func podio(righe: Array, posizione: int, tempo := "") -> void:
 	if _podio == null:
 		_costruisci_il_podio()
-	_podio_posizione.text = "SEI %d°" % posizione
+	# **Il verdetto sta nel titolo, non in un annuncio sopra il podio** (corretto il
+	# 25/10/2026): annuncio e podio partivano nello stesso istante e nello stesso posto, e
+	# «HAI VINTO» copriva la tua riga della classifica prima di sbiadirci dietro. Chi ha
+	# vinto, quando non sei tu, si legge nella prima riga, quella col quadrato oro.
+	annuncia("")
+	_podio_posizione.text = "HAI VINTO" if posizione == 1 else "SEI %d°" % posizione
+	# Il tempo, quando la partita l'ha chiusa un traguardo e non il cronometro: in una gara
+	# è il risultato, e il podio copre il quadrante.
+	_podio_tempo.text = tempo
+	_podio_tempo.visible = tempo != ""
 	for i in _righe_podio.size():
 		var riga: Dictionary = _righe_podio[i]
 		var scatola: PanelContainer = riga["riga"]
@@ -1228,6 +1246,15 @@ func _costruisci_il_podio() -> void:
 	_podio_posizione.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	titolo.add_child(_podio_posizione)
 	colonna.add_child(titolo)
+
+	# Sotto il titolo, in oro sul velo: «IN 44,6 S». Si accende solo quando c'è un tempo da
+	# dire, cioè quando la partita è finita a un traguardo. Il contorno navy perché l'oro,
+	# da solo sul cielo azzurro dietro il podio, spariva (LEARNED § 73).
+	_podio_tempo = _etichetta(32, ORO, 8)
+	_podio_tempo.add_theme_font_override("font", carattere_titolo())
+	_podio_tempo.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_podio_tempo.visible = false
+	colonna.add_child(_podio_tempo)
 
 	for i in 6:
 		var scatola := PanelContainer.new()

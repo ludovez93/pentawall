@@ -57,10 +57,13 @@ func _lavora() -> void:
 	await _scatta(prefisso + "-3-porta.png")
 
 	# Con due palle addosso, mirando la porta: il pulsante LANCIA, l'arco, i pallini.
-	var blu := palle.palle()[0]
+	# Le due sono la rossa e la viola, e parte la rossa (`Palle.prossima` dà la prima non
+	# segnata): è il caso peggiore del LANCIA, quello che col corpo pieno nel colore lo
+	# faceva identico al FUOCO (LEARNED § 73, corretto il 25/10/2026).
 	var rossa := palle.palle()[4]
-	blu.prendi(tu)
+	var viola := palle.palle()[5]
 	rossa.prendi(tu)
+	viola.prendi(tu)
 	(arena.get("_concorrenti")[0]["segnate"] as Array).append(2)
 	await _metti(tu, davanti, Bandiere.giro_verso(davanti, palle.centro_della_porta(1)), 6.0)
 	await _riposa(20)

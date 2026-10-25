@@ -1207,6 +1207,15 @@ func tempo_rimasto() -> float:
 	return _tempo
 
 
+## Quanto ha preso la partita, come si scrive sul podio: ai decimi se sta sotto il minuto
+## (una gara si gioca lì: G0 le ha chiuse in 42-53 s), a minuti e secondi se va oltre.
+func _tempo_impiegato() -> String:
+	var quanto := _durata - _tempo
+	if quanto < 60.0:
+		return "IN %s S" % ("%.1f" % quanto).replace(".", ",")
+	return "IN %d:%02d" % [int(quanto) / 60, int(quanto) % 60]
+
+
 func conto_alla_rovescia() -> float:
 	return _conto
 
@@ -1618,14 +1627,20 @@ func _si_vedono(uno: Node3D, altro: Node3D) -> bool:
 
 # ------------------------------------------------------------------------ i punti
 
-## **Scaduto il tempo.** Il campo si ferma, la classifica si apre tutta e sopra
-## arriva il podio con RIGIOCA: è il momento per cui esiste la tappa 7, perché è
-## lì che si vede se una partita ne chiama un'altra.
-func _finisci_la_partita() -> void:
+## **La partita è finita**, o perché è scaduto il tempo, o perché qualcuno ha preso il
+## traguardo (la settima bandiera, la dorata in porta). Il campo si ferma, la classifica
+## si apre tutta e sopra arriva il podio con RIGIOCA: è il momento per cui esiste la
+## tappa 7, perché è lì che si vede se una partita ne chiama un'altra.
+func _finisci_la_partita(per_traguardo := false) -> void:
 	if _finita:
 		return
 	_finita = true
-	_tempo = 0.0
+	# Il cronometro si azzera solo quando è lui a chiudere. Chi arriva al traguardo si tiene
+	# il suo tempo sul quadrante, e il podio lo scrive: una gara chiusa con un minuto
+	# d'avanzo, letta a 0:00, sembrava tempo scaduto — e il tempo, in una gara, è il
+	# risultato (corretto il 25/10/2026).
+	if not per_traguardo:
+		_tempo = 0.0
 	_sonda.fermati("traguardo")
 	_potenziamenti.riparti()
 	if _palla:
@@ -1638,11 +1653,7 @@ func _finisci_la_partita() -> void:
 	_comandi.scrivi_sfida("ANCORA")
 	var righe := classifica()
 	var mia := posizione_mia()
-	if mia == 1:
-		_comandi.annuncia("HAI VINTO")
-	else:
-		_comandi.annuncia("VINCE %s" % String(righe[0]["nome"]))
-	_comandi.podio(righe, maxi(mia, 1))
+	_comandi.podio(righe, maxi(mia, 1), _tempo_impiegato() if per_traguardo else "")
 	Suoni.fine_partita(mia == 1)
 	Suoni.folla(false)
 
@@ -1912,7 +1923,7 @@ func _bandiera_toccata(riga: int, indice: int) -> void:
 	_dai_il_traguardo(riga)
 	_aggiorna_la_classifica()
 	if ultima:
-		_finisci_la_partita()
+		_finisci_la_partita(true)
 
 
 ## Fuori ordine non conta, come nel 1999, e un avviso dice quale serve: una volta per
@@ -2059,7 +2070,7 @@ func _su_palla_in_porta(palla: Palla, autore: Node3D) -> void:
 	_aggiorna_la_classifica()
 	if palla.indice == Palla.DORATA and aveva_le_sei:
 		_chiusa_dalla_dorata = true
-		_finisci_la_partita()
+		_finisci_la_partita(true)
 		return
 	_palle.fai_uscire(palla, Palle.RITORNO)
 	if not _dorata_in_campo and segnate.size() >= Palla.DORATA:
