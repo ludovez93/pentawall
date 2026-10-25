@@ -22,6 +22,30 @@ const TINTE := [ROSSO, GIALLO, BLU, VIOLA]
 const OGGETTI := 90
 const SEME := 1105
 
+## **La pelle del gonfiabile** (tappa 11, blocco C3b, passo 1). Un gonfiabile si riconosce
+## da tre cose: le cuciture fra un rocchio e l'altro, la sfumatura che scurisce verso le
+## pieghe, il punto di luce sul colmo. Qui sono tutte e tre nei **colori dei vertici**:
+## sul telefono niente shader da compilare e niente texture da caricare, e il disegno
+## costa quanto prima.
+##
+## `QUOTE` sono le quote del profilo di un rocchio, da una cucitura all'altra: fitte agli
+## estremi, perché lì ci stanno il nastro e la piega, larghe in mezzo, dove la superficie
+## è liscia.
+const QUOTE := [0.0, 0.03, 0.07, 0.16, 0.34, 0.5, 0.66, 0.84, 0.93, 0.97, 1.0]
+## Quanto è largo il nastro della cucitura, in frazione di rocchio, e fin dove arriva la
+## piega scura che gli sta sotto.
+const NASTRO := 0.035
+const FIN_DOVE := 0.22
+## Quanto schiarisce il nastro, e quanto scurisce la piega.
+const CHIARO := 0.42
+const PIEGA := 0.3
+## Quanto il colmo prende di bianco quando guarda il sole.
+const LUCIDO := 0.3
+## Verso il sole: la rotazione della luce in `Giocattolo.illumina` (-56, -40 gradi) presa
+## al contrario, dalla superficie alla luce. Il sole dell'arena aperta non si muove, e
+## cosi il punto di luce si puo cuocere nei vertici una volta per tutte.
+const VERSO_IL_SOLE := Vector3(-0.359, 0.829, 0.428)
+
 
 static func veste(arena: Arena) -> void:
 	var materiale := Giocattolo._materiale_dei_moduli()
@@ -48,16 +72,73 @@ static func pilone(getto: Giocattolo.Getto, raggio: float, alto: float, corpo: C
 		# Il rocchio si gonfia solo verso fuori: dove due rocchi si toccano le facce piatte
 		# fra uno spigolo e l'altro (venti lati) stanno ancora sulla collisione, e un dardo
 		# non si ferma mai nel vuoto davanti a lui (`prova_aspetto`).
-		for i in 7:
-			var t := float(i) / 6.0
+		for t: float in QUOTE:
 			var gonfio := sin(t * PI)
 			profilo.append(Vector2(raggio * (1.013 + 0.022 * gonfio), rocchio * t))
 			normali.append(Vector2(1.0, -cos(t * PI) * 0.25).normalized())
-		getto.tornio(profilo, normali, corpo if k % 2 == 0 else bordo,
-				base * Giocattolo._su(rocchio * float(k)), 20)
+		var tinta: Color = corpo if k % 2 == 0 else bordo
+		var primo := getto.vertici.size()
+		getto.tornio(profilo, normali, tinta, base * Giocattolo._su(rocchio * float(k)), 20)
+		_pelle(getto, primo, QUOTE.size(), tinta)
 	var palla := raggio * 0.75
+	var sopra := getto.vertici.size()
 	getto.tornio(_cerchio(palla, 9), _normali_cerchio(9), BIANCO,
 			base * Giocattolo._su(cima + palla * 0.85), 14)
+	_lucido(getto, sopra)
+
+
+## I colori dei vertici di un rocchio appena messo nel getto, riga per riga del profilo
+## (`QUOTE`, `righe` punti per ogni lato del tornio): il **nastro** chiaro della cucitura
+## dove due rocchi si toccano, la **piega** scura appena sotto di lui, il colore pieno sul
+## gonfio. Poi il punto di luce.
+static func _pelle(getto: Giocattolo.Getto, primo: int, righe: int, tinta: Color) -> void:
+	for v in range(primo, getto.vertici.size()):
+		var t: float = QUOTE[(v - primo) % righe]
+		var dal_bordo := minf(t, 1.0 - t)
+		getto.colori[v] = tinta.lightened(CHIARO) if dal_bordo <= NASTRO \
+				else tinta.darkened(PIEGA * clampf(1.0 - (dal_bordo - NASTRO) / FIN_DOVE, 0.0, 1.0))
+	_lucido(getto, primo)
+
+
+## **Il punto di luce**: sui vertici dal `primo` in poi, la faccia che guarda il sole
+## prende del bianco. E il lucido del telone, e costa solo i colori dei vertici.
+static func _lucido(getto: Giocattolo.Getto, primo: int, quanto := LUCIDO) -> void:
+	for v in range(primo, getto.vertici.size()):
+		var luce := maxf(0.0, getto.normali[v].dot(VERSO_IL_SOLE))
+		getto.colori[v] = getto.colori[v].lerp(BIANCO, quanto * pow(luce, 5.0))
+
+
+# ------------------------------------------------------------------ lo scivolo
+
+## **Lo scivolo gonfiabile** al posto della rampa liscia (tappa 11, blocco C3b): un
+## materasso ad aria sta su a cuscini trasversali, e fra un cuscino e l'altro si vede il
+## fondo, che e la cucitura. Il fondo sta sei centimetri sotto la cima dei cuscini: in
+## pari lampeggerebbero (`LEARNED.md` § 63). La cima dei cuscini resta quella della
+## collisione — chi sale non deve affondare — e i due tubi dei bordi sono quelli di
+## sempre. Le frecce bianche della salita le mette chi chiama, dopo.
+static func scivolo(getto: Giocattolo.Getto, misura: Vector3, posto: Transform3D,
+		corpo: Color, bordo: Color) -> void:
+	var primo := getto.vertici.size()
+	getto.scatola(Vector3(misura.x - 0.02, misura.y - 0.06, misura.z - 0.02), 0.1,
+			corpo.darkened(0.42), posto)
+	var quanti := maxi(3, roundi(misura.z / 1.15))
+	var passo := misura.z / float(quanti)
+	var giu := posto.affine_inverse()
+	for k in quanti:
+		var z := misura.z * 0.5 - passo * (float(k) + 0.5)
+		var suo := getto.vertici.size()
+		getto.scatola(Vector3(misura.x - 0.06, misura.y, passo - 0.07),
+				minf(misura.y * 0.46, 0.2), corpo,
+				posto * Transform3D(Basis(), Vector3(0.0, 0.0, z)), 1, 0.22)
+		# La stessa piega del rocchio, girata: il cuscino scurisce verso le sue due cuciture,
+		# ed è quello che lo fa vedere gonfio anche con la cima piatta.
+		for v in range(suo, getto.vertici.size()):
+			var quanto := clampf(absf((giu * getto.vertici[v]).z - z) / (passo * 0.5), 0.0, 1.0)
+			getto.colori[v] = getto.colori[v].darkened(PIEGA * quanto * quanto)
+	for lato in [-1.0, 1.0]:
+		getto.scatola(Vector3(0.26, misura.y + 0.06, misura.z + 0.04), 0.1, bordo,
+				posto * Transform3D(Basis(), Vector3(lato * (misura.x * 0.5 - 0.11), 0.05, 0.0)))
+	_lucido(getto, primo)
 
 
 # ------------------------------------------------------------------ la vasca
@@ -100,6 +181,8 @@ static func _vasca(arena: Arena, materiale: Material) -> void:
 			getto.tornio(profilo, normali, tinta, Transform3D(giro.scaled(Vector3.ONE * raggio),
 					Vector3(p.x, -2.0 + su, p.y)), 7)
 		x += passo
+	# Il punto di luce su tutte insieme: una vasca di palline opache sembra ghiaia.
+	_lucido(getto, 0, 0.5)
 	Giocattolo._posa(arena, getto.mesh(), materiale, "vasca di palline")
 
 

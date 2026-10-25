@@ -513,11 +513,15 @@ static func _rampe(arena: Node3D, materiale: Material) -> void:
 		# cominciano due centimetri sopra il suo fondo e finiscono due oltre i suoi capi: i
 		# fianchi dello scivolo stavano in pari con quelli delle piattaforme, e il fondo dei
 		# bordi col fondo dello scivolo.
-		getto.scatola(misura - Vector3(0.02, 0.0, 0.0), 0.1, RAMPA, corpo.transform)
-		for lato in [-1.0, 1.0]:
-			getto.scatola(Vector3(0.26, misura.y + 0.06, misura.z + 0.04), 0.1, BLU,
-					corpo.transform * Transform3D(Basis(),
-							Vector3(lato * (misura.x * 0.5 - 0.11), 0.05, 0.0)))
+		# Nel PARCO GONFIABILE (tappa 11, C3b) lo scivolo e un materasso ad aria a cuscini.
+		if Aspetto.scelta() == Aspetto.GONFIABILE:
+			Gonfiabile.scivolo(getto, misura, corpo.transform, RAMPA, BLU)
+		else:
+			getto.scatola(misura - Vector3(0.02, 0.0, 0.0), 0.1, RAMPA, corpo.transform)
+			for lato in [-1.0, 1.0]:
+				getto.scatola(Vector3(0.26, misura.y + 0.06, misura.z + 0.04), 0.1, BLU,
+						corpo.transform * Transform3D(Basis(),
+								Vector3(lato * (misura.x * 0.5 - 0.11), 0.05, 0.0)))
 		# Le frecce in salita: una V bianca a terra ogni due metri. La rampa va da `da` ad
 		# `a`, che è il suo -Z, e non sempre `a` sta più in alto: se scende, la V si gira.
 		var salita := Basis() if (-corpo.transform.basis.z).y > 0.0 else Basis(Vector3.UP, PI)
