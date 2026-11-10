@@ -19,7 +19,9 @@ extends StaticBody3D
 ##
 ## Si prende dritto o di sponda, e vale il numero che porta scritto: qui la sponda non
 ## raddoppia (`DECISIONI.md` § 20). Lo prendono anche gli avversari, quando non hanno
-## nessuno da attaccare (`Avversario.bonus`).
+## nessuno da attaccare (`Avversario.bonus`) — a «medio» e «duro», non a «facile» (tappa 12,
+## A2). Al via della partita è spento, e si accende la prima volta più tardi (A1,
+## `accendi_fra`).
 
 ## Colpito: chi l'ha preso e quanto vale. I punti doppi li conta l'arena.
 signal preso(chi: Object, punti: int)
@@ -104,6 +106,17 @@ func riparti() -> void:
 	_faccia.rotation = Vector3.ZERO
 	_colori(true)
 	collision_layer = Strati.BERSAGLIO
+
+
+## Spento adesso, senza il giro, e di nuovo acceso fra `secondi`: si sente accendersi come
+## dopo un colpo. È il via della partita (tappa 12, A1): acceso dal secondo zero, con sei
+## tiratori fermi alle partenze, lo prendeva chi ci stava davanti — e chi gioca le prime
+## partite non sa dov'è.
+func accendi_fra(secondi: float) -> void:
+	riparti()
+	_spento = secondi
+	_colori(false)
+	collision_layer = 0
 
 
 ## Fuori dalla partita (in GARA, tappa 11, blocco D1: i bersagli parlano di punti, e lì non

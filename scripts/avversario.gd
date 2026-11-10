@@ -132,7 +132,8 @@ const RONDA_PAZIENZA := 14.0
 ## partita; dove l'elenco è vuoto, chi non ha notizie resta dov'è.
 static var punti_di_ronda: Array[Vector3] = []
 
-## Le tre tarature. Cambiano **solo** come esegue, mai cosa sa fare.
+## Le tre tarature. Cambiano **solo** come esegue, mai cosa sa fare — con un'eccezione,
+## i bersagli bonus a «facile» (tappa 12, A2: lì li lascia a chi gioca).
 const TARATURE := [
 	{
 		"nome": "facile",
@@ -141,6 +142,7 @@ const TARATURE := [
 		"ricarica": 2.2,       ## moltiplicatore della cadenza del giocatore (era 1,8 col dardo a 19: a 24 i colpi fra avversari arrivano di più, e la prima partita tornava persa — misurato con prova_ritmo il 03/10/2026)
 		"lato_giusto": 0.5,    ## quante volte schiva dalla parte con più spazio
 		"salto": 0.10,         ## quanto spesso salta cambiando direzione
+		"dischi": false,       ## se tira ai bersagli bonus (`Arena._bonus_per`)
 	},
 	{
 		"nome": "medio",
@@ -149,6 +151,7 @@ const TARATURE := [
 		"ricarica": 1.3,
 		"lato_giusto": 0.85,
 		"salto": 0.18,
+		"dischi": true,
 	},
 	{
 		"nome": "duro",
@@ -157,6 +160,7 @@ const TARATURE := [
 		"ricarica": 1.0,
 		"lato_giusto": 1.0,
 		"salto": 0.28,
+		"dischi": true,
 	},
 ]
 

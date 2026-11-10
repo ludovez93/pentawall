@@ -1299,6 +1299,9 @@ func avvia_sfida() -> void:
 	_potenziamenti.riparti()
 	for bonus in _bonus:
 		bonus.metti_da_parte(_gara)
+		if not _gara:
+			# Il tempo parte dal VIA, non dal fischio: il conto alla rovescia si aggiunge.
+			bonus.accendi_fra(_conto + bonus.spento_per * PRIMA_ACCENSIONE_BONUS)
 	_palle.mostra(_palla)
 	if _palla:
 		_palle.riparti()
@@ -1386,16 +1389,18 @@ func chiudi_sfida() -> void:
 	_svuota_il_campo()
 	for bersaglio in _bersagli:
 		bersaglio.metti_in_pausa(false)
-	# Chiusa una gara l'arena torna com'era: bandiere spente, e le sfere e i bersagli
-	# bonus che la gara aveva messo da parte di nuovo al loro posto.
+	# Chiusa una partita i bersagli bonus tornano accesi: quelli che la gara aveva messo da
+	# parte, e quelli spenti al via (A1) o presi, che nel banco di prova stanno accesi.
+	for bonus in _bonus:
+		bonus.metti_da_parte(false)
+	# Chiusa una gara l'arena torna com'era: bandiere spente, e le sfere che la gara aveva
+	# messo da parte di nuovo al loro posto.
 	if _gara:
 		_gara = false
 		_comandi.senza_punti = false
 		_bandiere.mostra(false)
 		_potenziamenti.escludi([])
 		_potenziamenti.riparti()
-		for bonus in _bonus:
-			bonus.metti_da_parte(false)
 	# E chiusa una PALLA, via porte e palle.
 	if _palla:
 		_palla = false
@@ -1554,7 +1559,7 @@ func _scegli_i_bersagli(delta: float) -> void:
 	if corpo is Avversario and is_instance_valid(corpo):
 		var bot := corpo as Avversario
 		bot.punta_a(_chi_attaccare(bot))
-		bot.bonus = null if _gara else _bonus_a_tiro(bot)
+		bot.bonus = _bonus_per(bot)
 		if _palla:
 			_gioca_la_palla(bot)
 
@@ -1744,6 +1749,11 @@ func _si_puo_segnare() -> bool:
 ## Entro questa distanza un avversario vede un bersaglio bonus e ci tira: oltre, un disco
 ## di un metro è un francobollo e il colpo sarebbe a caso.
 const PORTATA_BONUS := 30.0
+## **Al via i dischi sono spenti** (tappa 12, A1, approvata il 10/11/2026): ognuno si accende
+## la prima volta dopo questa frazione del suo tempo da spento — 20, 20, 30 e 60 secondi.
+## Accesi dal secondo zero, con sei tiratori fermi alle partenze, il 400 lo prendeva un
+## avversario entro 1,8 s dal via, in tutte le prove (blocco 0).
+const PRIMA_ACCENSIONE_BONUS := 1.0 / 3.0
 ## Da questo valore in su si annuncia quando lo prende un avversario: il più ricco si
 ## accende una volta sola, ed è una notizia.
 const BONUS_ANNUNCIATO := 400
@@ -1765,6 +1775,17 @@ func _su_bonus_preso(chi: Object, punti: int, bersaglio: BersaglioBonus) -> void
 		_comandi.annuncia("%s HA PRESO IL %d" % [String(_concorrenti[autore]["nome"]),
 				bersaglio.valore])
 	_aggiorna_la_classifica()
+
+
+## Il bersaglio bonus che l'arena dà a un avversario nel suo turno: in gara nessuno (i
+## bersagli sono da parte), e **a «facile» nessuno** (tappa 12, A2, approvata il
+## 10/11/2026): lì i dischi sono il modo di recuperare di chi gioca, e imparare dove sono è
+## imparare l'arena. Le prove del blocco 0 davano agli avversari 1.400 punti da disco a
+## partita.
+func _bonus_per(bot: Avversario) -> BersaglioBonus:
+	if _gara or not bool(Avversario.TARATURE[bot.livello()]["dischi"]):
+		return null
+	return _bonus_a_tiro(bot)
 
 
 ## Il bersaglio bonus a cui un avversario può tirare adesso: acceso, entro la portata, di

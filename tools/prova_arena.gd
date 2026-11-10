@@ -527,6 +527,9 @@ func _la_partita_a_sei() -> void:
 ## doppio con i PUNTI DOPPI; spento non dà niente e si riaccende al suo tempo; prima del
 ## via non conta. E un avversario ci tira solo se non ha un concorrente davanti: la
 ## controprova è lo stesso avversario, nello stesso posto, con qualcuno in vista.
+## Dalla tappa 12: al via sono spenti e si accendono dopo un terzo del loro tempo da spento
+## (A1), e a «facile» l'arena non li dà a nessun avversario (A2). I colpi della prova si
+## danno a dischi accesi a mano.
 func _i_bersagli_bonus(pianta: Dictionary) -> void:
 	var bonus: Array = _arena.call("bersagli_bonus")
 	_conta("ci sono i bersagli bonus della pianta", bonus.size() >= 3
@@ -544,9 +547,26 @@ func _i_bersagli_bonus(pianta: Dictionary) -> void:
 	var giocatore: Giocatore = _arena.call("giocatore")
 	_arena.call("avvia_sfida")
 	await _entrano_tutti(5)
+	# A1: spenti, e ognuno col suo tempo contato dal VIA.
+	var spenti := 0
+	var al_tempo := 0
+	for b in bonus:
+		var disco := b as BersaglioBonus
+		if not disco.acceso():
+			spenti += 1
+		var atteso: float = float(_arena.call("conto_alla_rovescia")) + disco.spento_per / 3.0
+		if absf(float(disco.get("_spento")) - atteso) < 0.3:
+			al_tempo += 1
+	_conta("al via i bersagli bonus sono spenti, e si accendono dopo un terzo del loro tempo da spento (A1)",
+			spenti == bonus.size() and al_tempo == bonus.size(),
+			"%d spenti e %d al tempo giusto su %d" % [spenti, al_tempo, bonus.size()])
+	# Acceso a mano: spento, il colpo non conterebbe comunque, e la prova passerebbe per il
+	# motivo sbagliato (LEARNED.md § 19).
+	da_100.riparti()
 	_conta("prima del via un colpo al bersaglio non conta, e resta acceso",
 			da_100.incassa(0, giocatore) == false and da_100.acceso())
 	await _il_via()
+	da_200.riparti()
 	# Fermi tutti: da qui i colpi sono solo quelli della prova (LEARNED.md § 19).
 	var bot: Array = _arena.call("avversari")
 	for uno in bot:
@@ -613,6 +633,16 @@ func _i_bersagli_bonus(pianta: Dictionary) -> void:
 	if posto == Vector3.INF:
 		_arena.call("chiudi_sfida")
 		return
+	# A2: nello stesso posto, a «facile» il turno dell'arena non glielo dà; a «medio» sì.
+	var livello_di_prima := tiratore.livello()
+	tiratore.imposta_livello(0)
+	var a_facile: BersaglioBonus = _arena.call("_bonus_per", tiratore)
+	tiratore.imposta_livello(1)
+	var a_medio: BersaglioBonus = _arena.call("_bonus_per", tiratore)
+	tiratore.imposta_livello(livello_di_prima)
+	_conta("a «facile» l'arena non dà il bersaglio a un avversario, a «medio» sì (A2)",
+			a_facile == null and a_medio == da_100,
+			"facile: %s, medio: %s" % [a_facile != null, a_medio != null])
 	# Il giocatore lontano e fuori vista, fermo a quaranta metri sotto il pavimento.
 	giocatore.process_mode = Node.PROCESS_MODE_DISABLED
 	giocatore.global_position = Vector3(0, -40, 0)
