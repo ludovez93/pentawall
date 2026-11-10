@@ -21,8 +21,11 @@ extends SceneTree
 ##
 ## Uso (vuole la finestra):
 ##   godot --path . --resolution 1280x585 --fixed-fps 30
-##       -s tools/prova_pilotato.gd -- <gara|palla|scontro> [variante] [senza_leva] [video]
+##       -s tools/prova_pilotato.gd -- <gara|palla|scontro> [variante] [senza_leva] [video] [avversari]
 ## Esce con 0 se verde, con 1 se rosso. `senza_leva` è la controprova: deve dare rosso.
+## `avversari` vale per la GARA: senza, gli avversari si tolgono al VIA e la prova dice solo
+## se la strada si corre col pollice; con, restano in pista ed è la gara com'è nel gioco
+## (il pilota non spara e non schiva: conta i colpi che prende e le bandiere di tutti).
 ## Con `video` salva un fotogramma per giro in `scatti/pilotato-<modo>-<variante>/`, da
 ## montare con ffmpeg a 30 al secondo. Il registratore di Godot (`--write-movie`) non va:
 ## scrive alla misura base del progetto, 1280 × 720, e taglia i lati dello schermo del
@@ -101,6 +104,9 @@ var _ricarica := 0.0
 var _colpi := 0
 var _a_segno := 0
 var _marcatore_prima := 0.0
+# La GARA con gli avversari in pista.
+var _con_avversari := false
+var _colpito := 0
 
 
 func _initialize() -> void:
@@ -111,6 +117,7 @@ func _lavora() -> void:
 	var argomenti := OS.get_cmdline_user_args()
 	_modo = argomenti[0] if argomenti.size() > 0 else "gara"
 	_senza_leva = argomenti.has("senza_leva")
+	_con_avversari = _modo == "gara" and argomenti.has("avversari")
 	var aspetto_di_prima := Aspetto.scelta()
 	var modalita_di_prima := Modalita.scelta()
 	if argomenti.size() > 1 and argomenti[1].is_valid_int():
@@ -153,7 +160,7 @@ func _lavora() -> void:
 	scadenza = Time.get_ticks_msec() + 20000
 	while Time.get_ticks_msec() < scadenza and _arena.conto_alla_rovescia() > 0.0:
 		await process_frame
-	if _modo == "gara":
+	if _modo == "gara" and not _con_avversari:
 		# Gli avversari fuori: la GARA dice se la strada si corre col pollice. Dopo il
 		# VIA, perché il VIA li accende (la prima prova li aveva fermati prima, e uno ha
 		# vinto la gara).
@@ -228,6 +235,10 @@ func _un_fotogramma(passo: float) -> void:
 func _gara() -> void:
 	var b := _arena.bandiere()
 	var toccate := _arena.bandiere_di(_tu)
+	# Un colpo preso riporta all'ultima bandiera: il conto è quello dell'arena.
+	if _arena.colpi_incassati(_tu) > _colpito:
+		_colpito = _arena.colpi_incassati(_tu)
+		_diario("colpito (%d): riparte da %s, bandiere %d" % [_colpito, _dove(_tu.global_position), toccate])
 	if toccate >= b.quante():
 		_verde = true
 		_diario("settima bandiera: %.1f s, %d salti" % [_tempo, _salti.size()])
@@ -578,6 +589,14 @@ func _fine(errore: String, aspetto_di_prima: int, modalita_di_prima: int) -> voi
 	Aspetto.scegli(aspetto_di_prima)
 	Modalita.scegli(modalita_di_prima)
 	match _modo:
+		"gara":
+			if _con_avversari and _arena != null:
+				var righe: Array = _arena.get("_concorrenti")
+				var bandiere := []
+				for riga: Dictionary in righe:
+					bandiere.append("%s %d bandiere e %d colpi presi" % [riga["nome"],
+							int(riga.get("bandiere", 0)), int(riga.get("colpito", 0))])
+				print("a fine gara: %s" % "; ".join(PackedStringArray(bandiere)))
 		"palla":
 			print("lanci %d, gol %d" % [_lanci, _gol])
 		"scontro":
