@@ -290,11 +290,20 @@ func _si_tira_a_chi_sta_davanti() -> void:
 			scelto == secondo and _arena._si_vedono(primo, secondo),
 			"sceglie %s, il secondo si vede: %s" % [scelto, _arena._si_vedono(primo, secondo)])
 	_conta("e chi è davanti a tutti non ha nessuno a cui tirare", _arena._chi_attaccare(secondo) == null)
+	# Chi tocca la bandiera che lo mette pari al suo bersaglio lo lascia subito, non al suo
+	# turno di riscelta.
+	_arena._concorrenti[r2]["bandiere"] = 0
+	_arena._concorrenti[r1]["bandiere"] = 1
+	primo.bersaglio = tu
+	_arena._bandiera_toccata(r1, 1)
+	_conta("chi tocca la bandiera che lo mette pari al suo bersaglio lo lascia subito",
+			primo.bersaglio != tu and _arena.bandiere_di(primo) == 2, str(primo.bersaglio))
 	primo.bersaglio = null
 	secondo.global_position = dove_prima
 	tu.global_position = tu_prima
 	_arena._concorrenti[r1]["bandiere"] = 0
 	_arena._concorrenti[r2]["bandiere"] = 0
+	_arena._dai_il_traguardo(r1)
 
 
 func _l_avversario_corre() -> void:

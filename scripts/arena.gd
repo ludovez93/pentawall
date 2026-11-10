@@ -1963,6 +1963,12 @@ func _bandiera_toccata(riga: int, indice: int) -> void:
 		if not ultima:
 			_comandi.annuncia("BANDIERA %d" % (indice + 1))
 	_dai_il_traguardo(riga)
+	# B1: chi tocca una bandiera può aver raggiunto chi inseguiva, e da lì non gli tira più.
+	# Si guarda subito, non al suo turno: in quei sei decimi di secondo sparava ancora, e col
+	# pilota tre colpi su tre dopo B1 venivano da chi aveva appena pareggiato le bandiere.
+	var corpo: Node3D = _concorrenti[riga]["corpo"]
+	if corpo is Avversario and is_instance_valid(corpo):
+		(corpo as Avversario).punta_a(_chi_attaccare(corpo as Avversario))
 	_aggiorna_la_classifica()
 	if ultima:
 		_finisci_la_partita(true)
