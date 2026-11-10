@@ -96,9 +96,6 @@ const FUORI_GARA := ["doppio", "ladro"]
 ## Il tuo posto nella griglia di partenza: la fila davanti, in mezzo (*mio*: la prima gara
 ## si deve poter vincere, come la prima partita).
 const POSTO_TUO := 1
-## Quanto pesa, per un avversario in gara, chi gli sta davanti nelle bandiere: la sua
-## distanza conta come se fosse a sei decimi. Preferisce fermare chi lo precede.
-const PREFERENZA_AVANTI := 0.6
 ## Ogni quanto si ripete l'avviso di una bandiera toccata fuori ordine.
 const ATTESA_FUORI_ORDINE := 2.5
 ## **La PALLA** (tappa 11, blocco D2, approvata il 13/10/2026 col pulsante LANCIA): sei palle
@@ -1573,9 +1570,17 @@ func _scegli_i_bersagli(delta: float) -> void:
 ##
 ## I potenziamenti (tappa 11, blocco B): **il FANTASMA non lo sceglie nessuno**, e chi
 ## ha **il RADAR** sa dove sono tutti — prende il più vicino, che lo veda o no.
+##
+## **In gara si tira solo a chi ha più bandiere** (tappa 12, B1, approvata il 10/11/2026).
+## Prima si tirava al più vicino, con una preferenza leggera per chi stava davanti, e
+## vinceva la vicinanza: chi correva davanti non prendeva un colpo, l'ultimo li prendeva
+## tutti, e alla griglia, tutti a zero bandiere, ci si sparava addosso (blocco 0: 12 colpi
+## su 13 presi da TU venivano da chi aveva le sue stesse bandiere). Adesso alla griglia
+## non tira nessuno, l'ultimo non è il bersaglio di nessuno, il primo è il bersaglio di chi
+## lo insegue, e chi ha colpito smette appena tocca la stessa bandiera. Senza nessuno
+## davanti l'avversario corre alla sua bandiera e basta. Chi gioca tira a chi vuole.
 func _chi_attaccare(bot: Avversario) -> Node3D:
 	var altri: Array = []
-	# In gara si preferisce chi sta davanti nelle bandiere (tappa 11, blocco D1).
 	var mie := _bandiere_di(bot)
 	for riga in _concorrenti:
 		var corpo: Node3D = riga["corpo"]
@@ -1583,9 +1588,9 @@ func _chi_attaccare(bot: Avversario) -> Node3D:
 			continue
 		if _potenziamenti.ha(corpo, "fantasma"):
 			continue
+		if _gara and int(riga.get("bandiere", 0)) <= mie:
+			continue
 		var quanto := bot.global_position.distance_to(corpo.global_position)
-		if _gara and int(riga.get("bandiere", 0)) > mie:
-			quanto *= PREFERENZA_AVANTI
 		if _palla and not _palle.portate_da(corpo).is_empty():
 			quanto *= PREFERENZA_PORTATORI
 		altri.append({"corpo": corpo, "quanto": quanto})
@@ -1611,10 +1616,9 @@ func _chi_attaccare(bot: Avversario) -> Node3D:
 	# nuovo: cambiare preda per mezzo metro vuol dire non attaccarne mai nessuno.
 	var attuale := bot.bersaglio
 	if attuale != null and is_instance_valid(attuale) and attuale != scelto \
-			and not _potenziamenti.ha(attuale, "fantasma"):
+			and not _potenziamenti.ha(attuale, "fantasma") \
+			and not (_gara and _bandiere_di(attuale) <= mie):
 		var quanto := bot.global_position.distance_to(attuale.global_position)
-		if _gara and _bandiere_di(attuale) > mie:
-			quanto *= PREFERENZA_AVANTI
 		if quanto <= quanto_scelto * AFFEZIONE and _si_vedono(bot, attuale):
 			return attuale
 	return scelto

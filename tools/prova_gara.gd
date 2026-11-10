@@ -41,6 +41,7 @@ func _lavora() -> void:
 	await _fuori_ordine_non_conta()
 	await _i_colpi_fermano()
 	_la_classifica_conta_le_bandiere()
+	_si_tira_a_chi_sta_davanti()
 	await _l_avversario_corre()
 	await _la_settima_vince()
 	await _rigioca_e_chiudi()
@@ -260,6 +261,40 @@ func _la_classifica_conta_le_bandiere() -> void:
 			"%s primo, tu %d°" % [righe[0]["nome"], _arena.posizione_mia()])
 	_arena._concorrenti[r]["bandiere"] = 0
 	_arena._concorrenti[r]["quando"] = 0.0
+
+
+## **In gara si tira solo a chi ha più bandiere** (tappa 12, B1). Qui TU ne ha due e gli
+## avversari nessuna. Si cambiano le bandiere a mano e si chiede all'arena chi attaccherebbe.
+func _si_tira_a_chi_sta_davanti() -> void:
+	var tu := _arena.giocatore()
+	var primo := _arena.avversari()[0]
+	var secondo := _arena.avversari()[1]
+	var r1 := _arena._riga_di(primo)
+	var r2 := _arena._riga_di(secondo)
+	_conta("chi ha meno bandiere tira a chi ne ha di più (TU, 2 contro 0)",
+			_arena._chi_attaccare(primo) == tu)
+	_arena._concorrenti[r1]["bandiere"] = 2
+	var a_pari := _arena._chi_attaccare(primo)
+	_conta("a pari bandiere non si tira (e nessun altro ne ha di più): nessun bersaglio",
+			a_pari == null, str(a_pari))
+	# Il secondo davanti a tutti e in vista del primo, che ha già TU nel mirino: deve
+	# lasciarlo, anche se è più vicino (il ramo «chi ce l'ha già davanti se lo tiene»).
+	var dove_prima := secondo.global_position
+	var tu_prima := tu.global_position
+	secondo.global_position = primo.global_position + Vector3(6.0, 0.0, 0.0)
+	tu.global_position = primo.global_position + Vector3(-2.0, 0.0, 0.0)
+	_arena._concorrenti[r2]["bandiere"] = 3
+	primo.bersaglio = tu
+	var scelto := _arena._chi_attaccare(primo)
+	_conta("chi ce l'aveva nel mirino lo lascia quando ha le sue bandiere, e passa a chi è davanti",
+			scelto == secondo and _arena._si_vedono(primo, secondo),
+			"sceglie %s, il secondo si vede: %s" % [scelto, _arena._si_vedono(primo, secondo)])
+	_conta("e chi è davanti a tutti non ha nessuno a cui tirare", _arena._chi_attaccare(secondo) == null)
+	primo.bersaglio = null
+	secondo.global_position = dove_prima
+	tu.global_position = tu_prima
+	_arena._concorrenti[r1]["bandiere"] = 0
+	_arena._concorrenti[r2]["bandiere"] = 0
 
 
 func _l_avversario_corre() -> void:
