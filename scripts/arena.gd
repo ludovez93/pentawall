@@ -1865,8 +1865,7 @@ func _ricompari(chi: Node3D, _da: Object) -> void:
 	if chi == _giocatore:
 		_giocatore.global_position = dove
 		_giocatore.velocity = Vector3.ZERO
-		var giro: float = posto["giro"]
-		_giocatore.punta(_verso_libero(dove) if is_nan(giro) else giro, -4.0)
+		_giocatore.punta(_verso_alla_ricomparsa(posto), PENDENZA_RICOMPARSA)
 		Suoni.ricomparsa()
 	elif chi is Avversario:
 		(chi as Avversario).global_position = dove
@@ -2381,22 +2380,75 @@ func _buon_posto_per_rinascere(punto: Vector2, pezzo: PackedVector2Array, muri: 
 	return true
 
 
-## Verso dove guarda chi rinasce in un punto senza un verso suo: dove si vede più
-## lontano, fra otto direzioni, all'altezza degli occhi.
+## Quanto guarda in giù chi ricompare, in gradi.
+const PENDENZA_RICOMPARSA := -4.0
+
+
+## Verso dove guarda chi ricompare. In gara la sua bandiera, col verso che dà il posto di
+## ripartenza; nello scontro e nella PALLA il verso libero, **in tutti e 24 i posti** (tappa
+## 12, E1): nelle sei partenze valeva il verso scritto nella pianta, e alla partenza 1 il
+## muro stava a un metro dietro la camera (misura E0).
+func _verso_alla_ricomparsa(posto: Dictionary) -> float:
+	var giro: float = posto["giro"]
+	if _gara and not is_nan(giro):
+		return giro
+	return _verso_libero(posto["dove"])
+
+
+## Verso dove guarda chi rinasce: dove si vede più lontano, fra otto direzioni,
+## all'altezza degli occhi — **ma solo fra quelle con tutto il braccio della camera libero
+## alle spalle** (tappa 12, E1, approvata il 10/11/2026). Senza, in quattro-cinque posti su
+## ventiquattro il verso più aperto davanti aveva un muro a uno-due metri dietro: il braccio
+## si accorciava sotto i 2,2 m, il personaggio si nascondeva (`Giocatore._aggiorna_camera`) e
+## restava il muro a mezzo schermo (misura E0, `tools/misura_braccio.gd`). Dove nessun verso
+## ha il braccio intero vince quello con più spazio dietro.
 func _verso_libero(dove: Vector3) -> float:
 	var occhi := dove + Vector3(0, Giocatore.ALTEZZA_OCCHI - 0.4, 0)
 	var spazio := get_world_3d().direct_space_state
 	var migliore := Vector3.FORWARD
 	var piu_lontano := -1.0
+	var piu_dietro := -1.0
+	var col_braccio := false
 	for k in 8:
 		var verso := Vector3.FORWARD.rotated(Vector3.UP, TAU * float(k) / 8.0)
 		var colpo := spazio.intersect_ray(PhysicsRayQueryParameters3D.create(occhi,
 				occhi + verso * 40.0, Strati.SOLIDO))
 		var quanto := 40.0 if colpo.is_empty() else occhi.distance_to(colpo["position"])
-		if quanto > piu_lontano:
+		var dietro := _braccio_libero(spazio, occhi, verso)
+		var intero := dietro >= Giocatore.BRACCIO_TERZA - 0.05
+		var meglio := false
+		if intero:
+			meglio = not col_braccio or quanto > piu_lontano
+		elif not col_braccio:
+			meglio = dietro > piu_dietro
+		if meglio:
+			col_braccio = intero
 			piu_lontano = quanto
+			piu_dietro = dietro
 			migliore = verso
 	return rad_to_deg(atan2(-migliore.x, -migliore.z))
+
+
+## Quanto braccio della camera c'è alle spalle di chi guarda verso `verso`: la stessa sfera
+## che fa scorrere il giocatore, dagli occhi alla spalla destra e poi indietro, alzata di
+## quanto alza la camera lo sguardo in giù della ricomparsa.
+func _braccio_libero(spazio: PhysicsDirectSpaceState3D, occhi: Vector3, verso: Vector3) -> float:
+	var sfera := SphereShape3D.new()
+	sfera.radius = Giocatore.RAGGIO_CAMERA
+	var domanda := PhysicsShapeQueryParameters3D.new()
+	domanda.shape = sfera
+	domanda.collision_mask = Strati.SOLIDO
+	domanda.exclude = [_giocatore.get_rid()]
+	var spalla := verso.cross(Vector3.UP) * Giocatore.SPALLA_TERZA \
+			+ Vector3.UP * float(_giocatore.get("_sopra_terza"))
+	domanda.transform = Transform3D(Basis.IDENTITY, occhi)
+	domanda.motion = spalla
+	var da := occhi + spalla * spazio.cast_motion(domanda)[0]
+	var giu := deg_to_rad(-PENDENZA_RICOMPARSA)
+	var indietro := (-verso * cos(giu) + Vector3.UP * sin(giu)) * Giocatore.BRACCIO_TERZA
+	domanda.transform = Transform3D(Basis.IDENTITY, da)
+	domanda.motion = indietro
+	return spazio.cast_motion(domanda)[0] * Giocatore.BRACCIO_TERZA
 
 
 ## Da quel punto si vede quel corpo? Lo stesso raggio con cui l'avversario decide
