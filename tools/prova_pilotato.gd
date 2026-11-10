@@ -26,6 +26,19 @@ extends SceneTree
 ## `avversari` vale per la GARA: senza, gli avversari si tolgono al VIA e la prova dice solo
 ## se la strada si corre col pollice; con, restano in pista ed è la gara com'è nel gioco
 ## (il pilota non spara e non schiva: conta i colpi che prende e le bandiere di tutti).
+##
+## Le misure della tappa 12 (blocco 0), stampate nel diario e in fondo:
+## - **ogni colpo preso**: chi ha tirato e da quanti metri; in GARA anche le bandiere dei
+##   due. In fondo, in GARA: quando si tocca la prima bandiera, quanti colpi si sono presi
+##   prima, e la serie più fitta dallo stesso avversario in sei secondi;
+## - **ogni bersaglio bonus preso**: chi, quanto, a che secondo; in fondo i punti dai dischi;
+## - **ogni cartello al centro** (l'annuncio grande), e in fondo quanti «COLPITO DA …» sono
+##   stati coperti da un altro prima dei loro 1,6 s e quanti «TI HANNO SUPERATO» sono
+##   usciti nel primo mezzo minuto: i due numeri del blocco F;
+## - nello SCONTRO, **i secondi con almeno un avversario sullo schermo** (dentro
+##   l'inquadratura e senza muri in mezzo) entro 15 m — dove si spegne il contorno — ed
+##   entro 40 m, dove si spegne il nome nell'arena aperta. La distanza è quella della
+##   camera dal mezzo del corpo, la stessa con cui l'avversario spegne contorno e nome.
 ## Con `video` salva un fotogramma per giro in `scatti/pilotato-<modo>-<variante>/`, da
 ## montare con ffmpeg a 30 al secondo. Il registratore di Godot (`--write-movie`) non va:
 ## scrive alla misura base del progetto, 1280 × 720, e taglia i lati dello schermo del
@@ -107,6 +120,16 @@ var _marcatore_prima := 0.0
 # La GARA con gli avversari in pista.
 var _con_avversari := false
 var _colpito := 0
+# Le misure della tappa 12: i colpi presi (`{"t", "chi"}`), la prima bandiera, i punti dai
+# dischi per nome, i secondi con un avversario in vista entro 15 e 40 m.
+var _presi: Array[Dictionary] = []
+var _prima_bandiera := -1.0
+var _dai_dischi := {}
+var _in_vista_15 := 0.0
+var _in_vista_40 := 0.0
+# I cartelli al centro: `{"t", "testo"}`. Uno nuovo si riconosce dal suo tempo che risale.
+var _annunci: Array[Dictionary] = []
+var _resta_annuncio := 0.0
 
 
 func _initialize() -> void:
@@ -154,6 +177,9 @@ func _lavora() -> void:
 	_arena = current_scene as Arena
 	_tu = _arena.giocatore()
 	_comandi = _arena.get("_comandi")
+	_tu.preso_da.connect(_su_colpo_preso)
+	for bonus in _arena.bersagli_bonus():
+		bonus.preso.connect(_su_disco.bind(bonus))
 	if _modo == "palla":
 		_arena.palle().in_porta.connect(_su_gol)
 		_arena.palle().presa.connect(_su_presa)
@@ -215,6 +241,7 @@ func _un_fotogramma(passo: float) -> void:
 	if _tu.global_position.y < SOTTO_L_ARENA:
 		_rosso = "caduto sotto l'arena in %s" % _dove(_tu.global_position)
 		return
+	_guarda_il_cartello()
 	# Ogni cinque secondi, dove sta e dove va: il diario dice cosa faceva fra un fatto e
 	# l'altro.
 	if int(_tempo / 5.0) != int((_tempo - passo) / 5.0):
@@ -238,7 +265,9 @@ func _gara() -> void:
 	# Un colpo preso riporta all'ultima bandiera: il conto è quello dell'arena.
 	if _arena.colpi_incassati(_tu) > _colpito:
 		_colpito = _arena.colpi_incassati(_tu)
-		_diario("colpito (%d): riparte da %s, bandiere %d" % [_colpito, _dove(_tu.global_position), toccate])
+		_diario("riparte da %s (colpo %d)" % [_dove(_tu.global_position), _colpito])
+	if toccate >= 1 and _prima_bandiera < 0.0:
+		_prima_bandiera = _tempo
 	if toccate >= b.quante():
 		_verde = true
 		_diario("settima bandiera: %.1f s, %d salti" % [_tempo, _salti.size()])
@@ -333,6 +362,7 @@ func _su_gol(_palla: Palla, autore: Node3D) -> void:
 
 
 func _scontro(passo: float) -> void:
+	_conta_chi_si_vede(passo)
 	_ricarica = maxf(_ricarica - passo, 0.0)
 	var marcatore := float(_comandi.get("_marcatore"))
 	if marcatore > _marcatore_prima + 0.05:
@@ -360,6 +390,102 @@ func _scontro(passo: float) -> void:
 		_colpi += 1
 		_ricarica = 0.45
 		_premi(_pulsante("FUOCO"))
+
+
+# ------------------------------------------------------------------ le misure della tappa 12
+
+## Un colpo preso, nell'istante in cui arriva: chi ha sparato è ancora dove stava, e chi è
+## stato preso non è ancora ricomparso (la ricomparsa è differita). Conta quando conta per
+## l'arena: dopo il VIA e prima della fine.
+func _su_colpo_preso(chi: Object, _punti: int, _muri: int) -> void:
+	if not _arena.in_sfida() or bool(_arena.get("_finita")) or _arena.conto_alla_rovescia() > 0.0:
+		return
+	var nome := _nome_di(chi)
+	var metri := (chi as Node3D).global_position.distance_to(_tu.global_position) \
+			if chi is Node3D else -1.0
+	_presi.append({"t": _tempo, "chi": nome, "prima": _arena.bandiere_di(_tu) == 0})
+	var bandiere := ""
+	if _modo == "gara":
+		bandiere = ", bandiere: TU %d, %s %d" % [_arena.bandiere_di(_tu), nome, _arena.bandiere_di(chi)]
+	_diario("COLPITO DA %s a %.1f m%s" % [nome, metri, bandiere])
+
+
+## Un bersaglio bonus preso da chiunque. Prima del VIA un disco non si lascia prendere
+## (`BersaglioBonus.conta`), quindi qui arriva solo quello che vale. Doppio con i PUNTI
+## DOPPI, come lo conta l'arena.
+func _su_disco(chi: Object, punti: int, bonus: BersaglioBonus) -> void:
+	var potenziamenti: Potenziamenti = _arena.get("_potenziamenti")
+	if potenziamenti != null and potenziamenti.ha(chi, "doppio"):
+		punti *= 2
+	var nome := _nome_di(chi)
+	_dai_dischi[nome] = int(_dai_dischi.get(nome, 0)) + punti
+	_diario("disco da %d preso da %s (+%d)" % [bonus.valore, nome, punti])
+
+
+## Un avversario è sullo schermo se il mezzo del corpo sta nell'inquadratura e fra la camera
+## e lui non c'è un muro. Si conta il più vicino.
+func _conta_chi_si_vede(passo: float) -> void:
+	var camera := _tu.camera()
+	var vicino := INF
+	for chi in _arena.avversari():
+		var mezzo := chi.global_position + Vector3(0, Avversario.ALTEZZA_CORPO * 0.5, 0)
+		if not camera.is_position_in_frustum(mezzo) or not _si_vede(mezzo, chi):
+			continue
+		vicino = minf(vicino, camera.global_position.distance_to(mezzo))
+	if vicino <= Avversario.PORTATA_ALONE:
+		_in_vista_15 += passo
+	if vicino <= Avversario.PORTATA_NOMI_APERTA:
+		_in_vista_40 += passo
+
+
+## Un cartello nuovo al centro: `Comandi.annuncia` rimette il suo tempo a 1,6 s, quindi
+## basta vederlo risalire (anche quando il testo è lo stesso di prima).
+func _guarda_il_cartello() -> void:
+	var resta := float(_comandi.get("_tempo_avviso"))
+	if resta > _resta_annuncio + 0.01 and _comandi.testo_annunciato() != "":
+		_annunci.append({"t": _tempo, "testo": _comandi.testo_annunciato()})
+		_diario("cartello: %s" % _comandi.testo_annunciato())
+	_resta_annuncio = resta
+
+
+## I due numeri del blocco F: i «COLPITO DA …» coperti da un altro cartello prima della
+## loro fine, e i «TI HANNO SUPERATO» del primo mezzo minuto.
+func _conto_dei_cartelli() -> String:
+	var colpito := 0
+	var coperti := 0
+	var superato := 0
+	for i in _annunci.size():
+		var testo := String(_annunci[i]["testo"])
+		if testo.begins_with("TI HANNO SUPERATO") and float(_annunci[i]["t"]) <= 30.0:
+			superato += 1
+		if testo.begins_with("COLPITO"):
+			colpito += 1
+			if i + 1 < _annunci.size() and float(_annunci[i + 1]["t"]) - float(_annunci[i]["t"]) < 1.6:
+				coperti += 1
+	return "cartelli %d · «COLPITO…» coperti prima della fine: %d su %d · «TI HANNO SUPERATO» nei primi 30 s: %d" \
+			% [_annunci.size(), coperti, colpito, superato]
+
+
+## Il numero più alto di colpi dallo stesso avversario dentro sei secondi.
+func _serie_piu_fitta() -> String:
+	var meglio := 0
+	var chi_meglio := ""
+	for i in _presi.size():
+		var quanti := 0
+		for j in range(i, _presi.size()):
+			if _presi[j]["chi"] == _presi[i]["chi"] \
+					and float(_presi[j]["t"]) - float(_presi[i]["t"]) < 6.0:
+				quanti += 1
+		if quanti > meglio:
+			meglio = quanti
+			chi_meglio = _presi[i]["chi"]
+	return "%d di %s" % [meglio, chi_meglio] if meglio > 0 else "nessun colpo"
+
+
+func _nome_di(chi: Object) -> String:
+	if chi is Avversario:
+		return (chi as Avversario).personaggio
+	return "TU" if chi == _tu else "?"
 
 
 # ------------------------------------------------------------------ camminare
@@ -594,13 +720,32 @@ func _fine(errore: String, aspetto_di_prima: int, modalita_di_prima: int) -> voi
 				var righe: Array = _arena.get("_concorrenti")
 				var bandiere := []
 				for riga: Dictionary in righe:
-					bandiere.append("%s %d bandiere e %d colpi presi" % [riga["nome"],
-							int(riga.get("bandiere", 0)), int(riga.get("colpito", 0))])
+					bandiere.append("%s %d bandiere (l'ultima a %.1f s) e %d colpi presi" % [riga["nome"],
+							int(riga.get("bandiere", 0)), float(riga.get("quando", 0.0)),
+							int(riga.get("colpito", 0))])
 				print("a fine gara: %s" % "; ".join(PackedStringArray(bandiere)))
+				var prima := 0
+				for colpo in _presi:
+					if bool(colpo["prima"]):
+						prima += 1
+				print("prima bandiera: %s · colpi presi prima della prima bandiera: %d · la serie più fitta in 6 s: %s"
+						% ["a %.1f s" % _prima_bandiera if _prima_bandiera >= 0.0 else "mai", prima,
+						_serie_piu_fitta()])
 		"palla":
 			print("lanci %d, gol %d" % [_lanci, _gol])
 		"scontro":
 			print("colpi %d, a segno %d" % [_colpi, _a_segno])
+			print("un avversario sullo schermo: entro 15 m per %.1f s, entro 40 m per %.1f s, su %.1f s"
+					% [_in_vista_15, _in_vista_40, _tempo])
+	if _modo != "gara" and _arena != null:
+		print("colpi presi %d · punti dai dischi: %s" % [_presi.size(),
+				str(_dai_dischi) if not _dai_dischi.is_empty() else "nessuno"])
+		# La classifica com'è quando il pilota smette: non è il risultato finale (§ 78).
+		var pezzi := PackedStringArray()
+		for riga in _arena.classifica():
+			pezzi.append("%s %d" % [String(riga["nome"]), int(riga["punti"])])
+		print("classifica a %.0f s: %s" % [_tempo, " · ".join(pezzi)])
+	print(_conto_dei_cartelli())
 	print("salti per sbloccarsi: %d%s" % [_salti.size(),
 			("  — " + ", ".join(PackedStringArray(_salti))) if not _salti.is_empty() else ""])
 	if _rosso != "":

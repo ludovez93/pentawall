@@ -7,6 +7,9 @@ extends SceneTree
 ## sotto il pavimento, non tocca niente e nessuno lo vede — e per ognuna si stampano la
 ## durata, chi ha vinto, le bandiere di tutti e i colpi incassati.
 ##
+## Dalla tappa 12 (blocco 0) si stampano anche **i colpi per gara**, la somma dei colpi
+## incassati da tutti: è il numero che dice se dopo il blocco B la gara è ancora una lotta.
+##
 ## **Accelerate**: la fisica gira a `ACCELERA` × 60 passi al secondo e il tempo di gioco a
 ## `ACCELERA` volte quello vero, così ogni passo di fisica dura sempre un sessantesimo di
 ## secondo di gioco, come sul telefono. Cambia quanto si aspetta, non come si corre.
@@ -41,10 +44,12 @@ func _lavora() -> void:
 	arena.imposta_durata(TETTO)
 	arena.set("_livello", livello)
 	var giocatore := arena.giocatore()
-	print("G0: %d gare fra cinque avversari, livello %s, ×%.0f" % [gare, Avversario.TARATURE[livello]["nome"], accelera])
+	print("G0: %d gare fra cinque avversari in %s, livello %s, ×%.0f" % [gare, Aspetto.nome(),
+			Avversario.TARATURE[livello]["nome"], accelera])
 
 	var durate: Array[float] = []
 	var colpi_tutti: Array[int] = []
+	var colpi_gare: Array[int] = []
 	var chiuse := 0
 	var vinte := {}
 	for g in gare:
@@ -64,12 +69,15 @@ func _lavora() -> void:
 			durate.append(durata)
 			vinte[primo["nome"]] = int(vinte.get(primo["nome"], 0)) + 1
 		var pezzi: Array[String] = []
+		var colpi_gara := 0
 		for bot in arena.avversari():
 			var colpi := arena.colpi_incassati(bot)
 			colpi_tutti.append(colpi)
+			colpi_gara += colpi
 			pezzi.append("%s %d/7 %d colpi" % [bot.personaggio, arena.bandiere_di(bot), colpi])
-		print("  gara %2d: %5.1f s %s, vince %-7s | %s  (%.0f s veri)" % [g + 1, durata,
-				"" if finita else "(NON CHIUSA)", String(primo["nome"]), "  ·  ".join(pezzi),
+		colpi_gare.append(colpi_gara)
+		print("  gara %2d: %5.1f s %s, vince %-7s, %2d colpi | %s  (%.0f s veri)" % [g + 1, durata,
+				"" if finita else "(NON CHIUSA)", String(primo["nome"]), colpi_gara, "  ·  ".join(pezzi),
 				(Time.get_ticks_msec() - inizio) / 1000.0])
 		arena.chiudi_sfida()
 		giocatore.process_mode = Node.PROCESS_MODE_INHERIT
@@ -89,5 +97,11 @@ func _lavora() -> void:
 				durate[durate.size() / 2], somma / durate.size(), durate[-1]])
 	print("colpi incassati per avversario a gara: media %.1f, il più colpito %d" % [
 			float(colpi_somma) / maxf(colpi_tutti.size(), 1), colpi_tutti.max() if not colpi_tutti.is_empty() else 0])
+	if not colpi_gare.is_empty():
+		var tutti := 0
+		for c in colpi_gare:
+			tutti += c
+		print("colpi per gara: media %.1f, da %d a %d" % [float(tutti) / colpi_gare.size(),
+				colpi_gare.min(), colpi_gare.max()])
 	print("vittorie: %s" % str(vinte))
 	quit(0)
