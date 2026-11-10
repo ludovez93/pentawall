@@ -54,6 +54,7 @@ func _lavora() -> void:
 	await _la_sonda_parla()
 	await _il_colpo_si_sente()
 	await _i_bersagli_bonus(pianta)
+	await _gli_annunci_di_classifica()
 
 	_chiudi()
 
@@ -685,6 +686,58 @@ func _i_bersagli_bonus(pianta: Dictionary) -> void:
 	await process_frame
 	for b in bonus:
 		(b as BersaglioBonus).riparti()
+
+
+## **Gli annunci di classifica** (tappa 12, F1). «TI HANNO SUPERATO» solo quando si perde il
+## primo posto, mai da zero punti; e dopo un colpo preso «COLPITO DA …» non lo copre la
+## classifica. I punti si scrivono a mano e la classifica si guarda a mano, tutto nello stesso
+## fotogramma: l'arena non fa in tempo a metterci le sue.
+func _gli_annunci_di_classifica() -> void:
+	var giocatore: Giocatore = _arena.call("giocatore")
+	var comandi: Comandi = giocatore.comandi
+	_arena.call("avvia_sfida")
+	await _entrano_tutti(5)
+	await _il_via()
+	var bot: Array = _arena.call("avversari")
+	for uno in bot:
+		(uno as Avversario).bersaglio = null
+		(uno as Avversario).bonus = null
+		(uno as Node).process_mode = Node.PROCESS_MODE_DISABLED
+	_arena.set("_prossima_riscelta", 9999.0)
+	var righe: Array = _arena.get("_concorrenti")
+	# Punti a tutti (la prima riga sei tu), cartello pulito, attesa passata: cosa si annuncia?
+	var guarda := func(punti: Array) -> String:
+		for i in punti.size():
+			righe[i]["punti"] = punti[i]
+		comandi.annuncia("")
+		_arena.call("_guarda_la_classifica", Arena.ATTESA_ANNUNCIO + 0.1)
+		return comandi.testo_annunciato()
+	guarda.call([0, 0, 0, 0, 0, 0])
+	var da_zero: String = guarda.call([0, 25, 0, 0, 0, 0])
+	_conta("primo solo per l'ordine, a zero punti: superato, non si annuncia", da_zero == "", da_zero)
+	var primo: String = guarda.call([50, 25, 0, 0, 0, 0])
+	var perso: String = guarda.call([50, 75, 0, 0, 0, 0])
+	_conta("perso il primo posto con dei punti: «TI HANNO SUPERATO»",
+			primo == "SEI PRIMO" and perso == "TI HANNO SUPERATO", "%s, poi %s" % [primo, perso])
+	var terzo: String = guarda.call([50, 75, 60, 0, 0, 0])
+	_conta("da secondo a terzo: niente, la posizione è nel riquadro", terzo == "", terzo)
+	# Un colpo preso da primo, poi uno ti passa: per tre secondi il cartello resta il colpo.
+	guarda.call([100, 75, 60, 0, 0, 0])
+	# «SEI PRIMO» ha appena fatto partire l'attesa: si azzera, o la prova passerebbe anche
+	# senza la regola nuova (LEARNED.md § 19).
+	_arena.set("_attesa_annuncio", 0.0)
+	giocatore.set("_immunita", 0.0)
+	var preso := giocatore.incassa(0, bot[0])
+	righe[1]["punti"] = 200
+	_arena.call("_guarda_la_classifica", 0.5)
+	var subito := comandi.testo_annunciato()
+	_conta("dopo un colpo preso «COLPITO DA …» non lo copre la classifica",
+			preso and subito == "COLPITO DA %s" % (bot[0] as Avversario).personaggio, subito)
+	_arena.call("_guarda_la_classifica", Arena.ATTESA_ANNUNCIO)
+	_conta("controprova: passati i tre secondi, «TI HANNO SUPERATO»",
+			comandi.testo_annunciato() == "TI HANNO SUPERATO", comandi.testo_annunciato())
+	_arena.call("chiudi_sfida")
+	await process_frame
 
 
 func _punti_di(corpo: Node3D) -> int:

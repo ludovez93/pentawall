@@ -336,6 +336,8 @@ func _la_settima_vince() -> void:
 	_conta("chi tocca la settima vince, e la partita finisce lì", bool(_arena.get("_finita"))
 			and bool(righe[0]["tu"]) and righe[0]["testo"] == "7/7", str(righe[0]))
 	_conta("e sale il podio", tu.comandi._podio != null and tu.comandi._podio.visible)
+	_conta("col tempo, perché hai vinto tu (F2)", tu.comandi._podio_tempo.visible
+			and tu.comandi._podio_tempo.text.begins_with("IN "), tu.comandi._podio_tempo.text)
 	var fermi := 0
 	for uno in _arena.avversari():
 		if not uno.in_gara():
@@ -356,6 +358,18 @@ func _rigioca_e_chiudi() -> void:
 			and not bool(_arena.get("_finita")))
 	_conta("con la colonna sulla prima", b._colonna.visible and Vector2(b._colonna.position.x,
 			b._colonna.position.z).distance_to(Vector2(b.dove(0).x, b.dove(0).z)) < 0.01)
+	# F2 (tappa 12): stavolta vince un avversario, e il podio non scrive il tempo, che era il
+	# suo. Le bandiere contano dal VIA.
+	var scadenza := Time.get_ticks_msec() + 6000
+	while Time.get_ticks_msec() < scadenza and _arena.conto_alla_rovescia() > 0.0:
+		await process_frame
+	var vincitore := _arena.avversari()[3]
+	_arena._concorrenti[_arena._riga_di(vincitore)]["bandiere"] = 6
+	await _porta(vincitore, b.dove(6))
+	var comandi := _arena.giocatore().comandi
+	_conta("vince un avversario: sul podio niente tempo, che era il suo (F2)",
+			bool(_arena.get("_finita")) and comandi._podio.visible and not comandi._podio_tempo.visible,
+			"finita: %s, tempo «%s»" % [_arena.get("_finita"), comandi._podio_tempo.text])
 	_arena.chiudi_sfida()
 	await process_frame
 	var potenziamenti: Potenziamenti = _arena.get_node("potenziamenti")

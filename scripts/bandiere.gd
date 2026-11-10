@@ -53,6 +53,13 @@ const COLORI: Array[Color] = [
 	Color(1.0, 0.72, 0.12),   # oro
 ]
 const SPENTA := Color(0.36, 0.36, 0.44)
+## Il numero delle bandiere in attesa (tappa 12, F3): un grigio-azzurro, la prossima resta
+## bianca piena. Era bianco con l'opacità a 0,8 contro lo 0,98 della prossima, ma il numero
+## è disegnato col taglio netto della trasparenza (`ALPHA_CUT_DISCARD`, quello della
+## targhetta, per non far nascere uno shader nuovo sul telefono): ogni pixel è pieno o non
+## c'è, e 0,8 si disegnava pieno come 0,98. Fino a sei numeri bianchi uguali. Quello che
+## si può abbassare è il colore, non l'opacità.
+const IN_ATTESA := Color(0.55, 0.58, 0.70, 0.95)
 
 var _posti: Array[Vector3] = []
 var _partenza := Vector3.ZERO
@@ -187,7 +194,7 @@ func segna(prossima: int) -> void:
 			numero.modulate = Color(1, 1, 1, 0.98)
 		else:
 			drappo.material_override = asta["normale"]
-			numero.modulate = Color(1, 1, 1, 0.8)
+			numero.modulate = IN_ATTESA
 		(asta["anello"] as Node3D).visible = i == prossima
 	_colonna.visible = prossima < _aste.size()
 	_anima.visible = _colonna.visible

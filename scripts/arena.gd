@@ -1225,15 +1225,22 @@ func imposta_durata(secondi: float) -> void:
 
 ## «SEI PRIMO» e «TI HANNO SUPERATO»: gli annunci che tengono dentro. Uno ogni
 ## tre secondi al massimo, o in mischia diventano una mitragliata.
+##
+## **«TI HANNO SUPERATO» solo quando perdi il primo posto, e mai da zero** (tappa 12, F1,
+## approvata il 10/11/2026). Partiva a ogni posizione persa: all'inizio dello scontro erano
+## sei cartelli in venticinque secondi, e la posizione si legge già nel riquadro in alto. A
+## zero punti (in gara a zero bandiere) si è primi solo per l'ordine delle partenze, e perdere
+## quel posto non è una notizia.
 func _guarda_la_classifica(delta: float) -> void:
 	_attesa_annuncio = maxf(_attesa_annuncio - delta, 0.0)
 	var adesso := posizione_mia()
 	if adesso <= 0 or adesso == _posizione_annunciata or _attesa_annuncio > 0.0:
 		return
 	if _posizione_annunciata > 0:
+		var da_zero := (_bandiere_di(_giocatore) if _gara else int(punteggi()[0])) == 0
 		if adesso == 1:
 			_comandi.annuncia("SEI PRIMO")
-		elif adesso > _posizione_annunciata:
+		elif _posizione_annunciata == 1 and not da_zero:
 			_comandi.annuncia("TI HANNO SUPERATO")
 	_posizione_annunciata = adesso
 	_attesa_annuncio = ATTESA_ANNUNCIO
@@ -1662,7 +1669,9 @@ func _finisci_la_partita(per_traguardo := false) -> void:
 	_comandi.scrivi_sfida("ANCORA")
 	var righe := classifica()
 	var mia := posizione_mia()
-	_comandi.podio(righe, maxi(mia, 1), _tempo_impiegato() if per_traguardo else "")
+	# Il tempo sul podio solo a chi ha vinto (tappa 12, F2): «SEI 6° · IN 42,3 S» era il tempo
+	# del vincitore, e sembrava il tuo. Chi ha vinto si legge già nella prima riga.
+	_comandi.podio(righe, maxi(mia, 1), _tempo_impiegato() if per_traguardo and mia == 1 else "")
 	Suoni.fine_partita(mia == 1)
 	Suoni.folla(false)
 
@@ -1723,12 +1732,21 @@ func _su_colpo_valido(chi_spara: Object, punti: int, muri: int, chi_incassa: Nod
 			Suoni.colpo_nel_mondo(chi_incassa.global_position)
 	elif chi_incassa == _giocatore:
 		_comandi.annuncia("COLPITO")
+	if chi_incassa == _giocatore:
+		_tieni_il_cartello()
 	_aggiorna_la_classifica()
 	# Nella PALLA chi è colpito perde tutte le palle che porta: cadono dove stava, prima
 	# che ricompaia altrove.
 	if _palla:
 		_palle.lascia_tutte(chi_incassa)
 	_ricompari.call_deferred(chi_incassa, chi_spara)
+
+
+## **Il cartello di un colpo preso resta suo** (tappa 12, F1): il cartello al centro ha un
+## posto solo, e l'annuncio di classifica che arrivava mezzo secondo dopo copriva «COLPITO
+## DA …». Dopo un colpo preso la classifica aspetta i suoi tre secondi.
+func _tieni_il_cartello() -> void:
+	_attesa_annuncio = ATTESA_ANNUNCIO
 
 
 ## In che riga della partita sta un corpo. Sei righe: cercarle una per una costa
@@ -1989,6 +2007,7 @@ func _colpo_in_gara(chi_spara: Object, chi_incassa: Node3D) -> void:
 		# Corto come nello scontro: dove si riparte lo dice la colonna, che si accende lì.
 		_comandi.annuncia("COLPITO DA %s" % String(_concorrenti[autore]["nome"]) if autore >= 0
 				else "COLPITO")
+		_tieni_il_cartello()
 	elif autore >= 0 and chi_spara != _giocatore:
 		Suoni.colpo_nel_mondo(chi_incassa.global_position)
 	_ricompari.call_deferred(chi_incassa, chi_spara)
