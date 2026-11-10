@@ -407,7 +407,14 @@ func _su_colpo_preso(chi: Object, _punti: int, _muri: int) -> void:
 	var bandiere := ""
 	if _modo == "gara":
 		bandiere = ", bandiere: TU %d, %s %d" % [_arena.bandiere_di(_tu), nome, _arena.bandiere_di(chi)]
-	_diario("COLPITO DA %s a %.1f m%s" % [nome, metri, bandiere])
+	# A chi mirava: un dardo tirato a un altro prende chi gli passa davanti.
+	var mirava := ""
+	if chi is Avversario:
+		var suo: Node3D = (chi as Avversario).bersaglio
+		mirava = ", mirava a %s" % (_nome_di(suo) if suo != null else "nessuno")
+		if suo != null and _modo == "gara":
+			mirava += " (%d bandiere)" % _arena.bandiere_di(suo)
+	_diario("COLPITO DA %s a %.1f m%s%s" % [nome, metri, bandiere, mirava])
 
 
 ## Un bersaglio bonus preso da chiunque. Prima del VIA un disco non si lascia prendere
