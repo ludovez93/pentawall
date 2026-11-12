@@ -258,6 +258,9 @@ var _tempo := 0.0
 var _conto := 0.0
 var _posizione_annunciata := 0
 var _attesa_annuncio := 0.0
+## Quanto resta del cartello di un colpo preso (i 1,6 s di `Comandi.annuncia`): finché c'è,
+## le notizie sui potenziamenti degli altri tacciono (tappa 12, F, 12/11/2026).
+var _cartello_del_colpo := 0.0
 var _avvisi_dati := 0
 var _prossima_riscelta := 0.0
 var _turno_riscelta := 0
@@ -1095,7 +1098,7 @@ func _su_potenziamento_preso(chi: Node3D, tipo: String) -> void:
 	else:
 		Suoni.potenziamento(false)
 		var riga := _riga_di(chi)
-		if riga >= 0 and ANNUNCI_ALTRUI.has(tipo):
+		if riga >= 0 and ANNUNCI_ALTRUI.has(tipo) and _cartello_del_colpo <= 0.0:
 			_comandi.annuncia(String(ANNUNCI_ALTRUI[tipo]) % String(_concorrenti[riga]["nome"]))
 
 
@@ -1233,6 +1236,7 @@ func imposta_durata(secondi: float) -> void:
 ## quel posto non è una notizia.
 func _guarda_la_classifica(delta: float) -> void:
 	_attesa_annuncio = maxf(_attesa_annuncio - delta, 0.0)
+	_cartello_del_colpo = maxf(_cartello_del_colpo - delta, 0.0)
 	var adesso := posizione_mia()
 	if adesso <= 0 or adesso == _posizione_annunciata or _attesa_annuncio > 0.0:
 		return
@@ -1747,9 +1751,12 @@ func _su_colpo_valido(chi_spara: Object, punti: int, muri: int, chi_incassa: Nod
 
 ## **Il cartello di un colpo preso resta suo** (tappa 12, F1): il cartello al centro ha un
 ## posto solo, e l'annuncio di classifica che arrivava mezzo secondo dopo copriva «COLPITO
-## DA …». Dopo un colpo preso la classifica aspetta i suoi tre secondi.
+## DA …». Dopo un colpo preso la classifica aspetta i suoi tre secondi, e le notizie sui
+## potenziamenti degli altri finché il cartello è acceso: «TORO HA IL LADRO» copriva
+## «COLPITO DA NEBBIA» dopo 1,4 s (pilota, scontro in GIOCATTOLO, 12/11/2026).
 func _tieni_il_cartello() -> void:
 	_attesa_annuncio = ATTESA_ANNUNCIO
+	_cartello_del_colpo = 1.6
 
 
 ## In che riga della partita sta un corpo. Sei righe: cercarle una per una costa

@@ -733,9 +733,19 @@ func _gli_annunci_di_classifica() -> void:
 	var subito := comandi.testo_annunciato()
 	_conta("dopo un colpo preso «COLPITO DA …» non lo copre la classifica",
 			preso and subito == "COLPITO DA %s" % (bot[0] as Avversario).personaggio, subito)
+	# Né lo copre la notizia di un potenziamento preso da un altro (12/11/2026: «TORO HA IL
+	# LADRO» copriva «COLPITO DA NEBBIA» dopo 1,4 s).
+	_arena.call("_su_potenziamento_preso", bot[1], "ladro")
+	var notizia := comandi.testo_annunciato()
+	_conta("né lo copre il potenziamento preso da un altro",
+			notizia == "COLPITO DA %s" % (bot[0] as Avversario).personaggio, notizia)
 	_arena.call("_guarda_la_classifica", Arena.ATTESA_ANNUNCIO)
 	_conta("controprova: passati i tre secondi, «TI HANNO SUPERATO»",
 			comandi.testo_annunciato() == "TI HANNO SUPERATO", comandi.testo_annunciato())
+	_arena.call("_su_potenziamento_preso", bot[1], "ladro")
+	_conta("controprova: spento il cartello del colpo, la notizia del potenziamento esce",
+			comandi.testo_annunciato() == "%s HA IL LADRO" % (bot[1] as Avversario).personaggio,
+			comandi.testo_annunciato())
 	_arena.call("chiudi_sfida")
 	await process_frame
 
