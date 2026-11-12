@@ -215,10 +215,13 @@ func _colpito_le_perde() -> void:
 	tu.incassa(0, bot)
 	await process_frame
 	await process_frame
-	_conta("colpito, perde tutte le palle che porta", palle.portate_da(tu).is_empty())
-	_conta("che cadono dove stava", rossa.libera() and rossa.global_position.distance_to(dove) < 4.0
-			and viola.libera() and viola.global_position.distance_to(dove) < 4.0,
-			"a %.1f e %.1f m" % [rossa.global_position.distance_to(dove), viola.global_position.distance_to(dove)])
+	# Tappa 12, C3: un colpo fa cadere solo la palla in mano (la prima non segnata, la rossa).
+	_conta("colpito, perde solo la palla che ha in mano",
+			palle.portate_da(tu).size() == 1 and palle.portate_da(tu)[0] == viola,
+			"porta %d palle" % palle.portate_da(tu).size())
+	_conta("che cade dove stava", rossa.libera() and rossa.global_position.distance_to(dove) < 4.0,
+			"a %.1f m" % rossa.global_position.distance_to(dove))
+	palle.lascia_tutte(tu)
 	_conta("e il colpo vale i suoi punti, come nello scontro", _punti_di(bot) == 25, "%d" % _punti_di(bot))
 
 

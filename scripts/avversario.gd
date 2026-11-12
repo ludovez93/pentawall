@@ -139,7 +139,7 @@ const TARATURE := [
 		"nome": "facile",
 		"reazione": 0.45,      ## secondi prima di accorgersi di un dardo in arrivo
 		"errore_gradi": 4.5,   ## quanto può sbagliare la mira
-		"ricarica": 2.2,       ## moltiplicatore della cadenza del giocatore (era 1,8 col dardo a 19: a 24 i colpi fra avversari arrivano di più, e la prima partita tornava persa — misurato con prova_ritmo il 03/10/2026)
+		"ricarica": 3.0,       ## moltiplicatore della cadenza del giocatore (era 1,8 col dardo a 19: a 24 i colpi fra avversari arrivano di più, e la prima partita tornava persa — misurato con prova_ritmo il 03/10/2026; 2,2 fino al 12/11/2026: al ritmo visto davvero, un colpo ogni 16-24 s, si finiva 4° e 5° — tappa 12, C1)
 		"lato_giusto": 0.5,    ## quante volte schiva dalla parte con più spazio
 		"salto": 0.10,         ## quanto spesso salta cambiando direzione
 		"dischi": false,       ## se tira ai bersagli bonus (`Arena._bonus_per`)

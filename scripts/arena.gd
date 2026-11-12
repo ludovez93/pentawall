@@ -1735,10 +1735,13 @@ func _su_colpo_valido(chi_spara: Object, punti: int, muri: int, chi_incassa: Nod
 	if chi_incassa == _giocatore:
 		_tieni_il_cartello()
 	_aggiorna_la_classifica()
-	# Nella PALLA chi è colpito perde tutte le palle che porta: cadono dove stava, prima
-	# che ricompaia altrove.
+	# Nella PALLA chi è colpito perde la palla che ha in mano: cade dove stava, prima che
+	# ricompaia altrove, e le altre restano sue (tappa 12, C3). Nel 1999 cadevano tutte, ma
+	# solo morendo, cioè dopo più colpi: qui un colpo solo rimanda già alla rinascita.
 	if _palla:
-		_palle.lascia_tutte(chi_incassa)
+		var riga_colpito := _riga_di(chi_incassa)
+		_palle.lascia_una(chi_incassa,
+				_concorrenti[riga_colpito]["segnate"] if riga_colpito >= 0 else [])
 	_ricompari.call_deferred(chi_incassa, chi_spara)
 
 

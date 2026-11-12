@@ -186,13 +186,25 @@ func fai_uscire(palla: Palla, dopo := 0.0) -> void:
 		_ritorni.append({"palla": palla, "quando": _orologio + dopo})
 
 
-## Chi è colpito perde tutte le palle che porta: cadono dove stava, con un saltello.
+## Tutte le palle che `chi` porta cadono dove sta, con un saltello. Era la regola del colpo
+## preso fino alla tappa 12 (blocco C); oggi la usano i collaudi per svuotare le mani.
 func lascia_tutte(chi: Node3D) -> void:
 	var sue := portate_da(chi)
 	for i in sue.size():
 		var giro := TAU * float(i) / float(maxi(sue.size(), 1)) + randf() * 0.6
 		var spinta := Vector3(cos(giro) * 2.2, 4.0, sin(giro) * 2.2)
 		sue[i].in_campo_da(chi.global_position + Vector3(0, 1.0, 0), spinta, null, _orologio, chi)
+
+
+## Chi è colpito perde **una palla sola**: quella che lancerebbe adesso (`prossima`, il colore
+## del tasto LANCIA). Cade dove stava, con un saltello; le altre restano sue.
+func lascia_una(chi: Node3D, segnate: Array) -> void:
+	var palla := prossima(chi, segnate)
+	if palla == null:
+		return
+	var giro := randf() * TAU
+	var spinta := Vector3(cos(giro) * 2.2, 4.0, sin(giro) * 2.2)
+	palla.in_campo_da(chi.global_position + Vector3(0, 1.0, 0), spinta, null, _orologio, chi)
 
 
 ## La palla che `chi` lancerebbe adesso: la prima che porta fra quelle che non ha ancora
