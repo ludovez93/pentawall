@@ -84,7 +84,9 @@ var _stili_quadrato: Array[StyleBoxFlat] = []
 ## **Il colpo che si vede** (tappa 7, blocco B). Tre cose, tutte brevi: il
 ## marcatore sul mirino quando un colpo va a segno, la vignetta rossa sul bordo da
 ## cui arriva un colpo incassato, e i numeri che salgono dal punto d'impatto.
-const DURATA_MARCATORE := 0.16
+## Il marcatore durava 0,16 s, sottile e nel solo colore del dardo: sui muri rossi e arancioni
+## della palestra non si vedeva (tappa 12, D3, scatti a 3× del 12/11/2026).
+const DURATA_MARCATORE := 0.3
 const DURATA_VIGNETTA := 0.55
 const VITA_ETICHETTA := 1.0
 const SALITA_ETICHETTA := 70.0   ## punti di schermo percorsi salendo
@@ -588,15 +590,18 @@ func _disegna() -> void:
 	for verso in [Vector2.LEFT, Vector2.RIGHT, Vector2.UP, Vector2.DOWN]:
 		_disegno.draw_line(centro + verso * 11.0, centro + verso * 20.0, chiaro, 2.0)
 	# Il marcatore del colpo a segno: quattro tacche in diagonale, nel colore del
-	# dardo, che si aprono e spariscono in un sesto di secondo.
+	# dardo sopra un'anima navy (il colore dice «tuo», il fondo lo dà il vestito:
+	# LEARNED § 73), che si aprono e spariscono in tre decimi di secondo.
 	if _marcatore > 0.0:
 		var quota := _marcatore / DURATA_MARCATORE
 		var tinta := Proiettile.colore_riservato
 		tinta.a = quota
+		var anima := Color(NAVY.r, NAVY.g, NAVY.b, 0.85 * quota)
 		var apertura := 14.0 + (1.0 - quota) * 10.0
 		for verso in [Vector2(1, 1), Vector2(-1, 1), Vector2(1, -1), Vector2(-1, -1)]:
 			var v: Vector2 = (verso as Vector2).normalized()
-			_disegno.draw_line(centro + v * apertura, centro + v * (apertura + 12.0), tinta, 3.0)
+			_disegno.draw_line(centro + v * (apertura - 1.5), centro + v * (apertura + 17.5), anima, 8.0)
+			_disegno.draw_line(centro + v * apertura, centro + v * (apertura + 16.0), tinta, 4.0)
 
 	if _dito_sinistro != -1:
 		_disegno.draw_arc(_centro_leva, RAGGIO_LEVA, 0.0, TAU, 40, Color(1, 1, 1, 0.28), 3.0)
@@ -653,7 +658,8 @@ func _costruisci() -> void:
 	for i in ETICHETTE_IN_RISERVA:
 		# I punti saltano fuori dove succede, in Bebas col contorno navy: sono l'unica
 		# scritta che vive sulla scena nuda, e senza contorno sul cielo chiaro sparisce.
-		var etichetta := _etichetta(37, Color.WHITE, 8)
+		# 50 (era 37, tappa 12, D3): a 37 sul telefono erano 14 punti d'altezza in piena azione.
+		var etichetta := _etichetta(50, Color.WHITE, 10)
 		etichetta.add_theme_font_override("font", carattere_titolo())
 		etichetta.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		etichetta.visible = false
