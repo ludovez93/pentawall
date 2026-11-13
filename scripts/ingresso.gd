@@ -110,11 +110,13 @@ func _process(delta: float) -> void:
 
 ## Il palco: una pedana tonda al neon in una stanza buia, due luci di taglio nei
 ## colori dell'arena e il personaggio in mezzo. Sta dietro all'interfaccia, nella
-## stessa finestra: è un mondo 3D come l'arena, solo più piccolo.
+## stessa finestra: è un mondo 3D come l'arena, solo più piccolo. Nelle varianti di
+## giorno è un angolo dell'arena (`_angolo_d_arena`).
 func _scena() -> void:
 	_palco = Node3D.new()
 	_palco.name = "palco"
 	add_child(_palco)
+	var di_giorno := Aspetto.scelta() in [Aspetto.GIOCATTOLO, Aspetto.GONFIABILE, Aspetto.PISTA]
 
 	var mondo := WorldEnvironment.new()
 	var ambiente := Environment.new()
@@ -143,7 +145,26 @@ func _scena() -> void:
 	_luce(Vector3(-2.6, 2.4, -1.6), Color(0.35, 0.95, 1.0), 7.0)
 	_luce(Vector3(2.4, 2.6, -1.8), Vestizione.NEON, 7.0)
 	_luce(Vector3(0.0, 0.5, 1.8), Color(0.55, 0.45, 1.0), 1.8)
+	if di_giorno:
+		_angolo_d_arena(ambiente)
+	else:
+		_stanza_al_neon()
 
+	_corpo = Corpo.crea("TU")
+	_palco.add_child(_corpo)
+	# Girato di tre quarti verso chi guarda: il blaster punta fuori dallo schermo.
+	_corpo.rotation.y = PI - 0.45
+
+	_camera = Camera3D.new()
+	_camera.fov = 38.0
+	_camera.current = true
+	_palco.add_child(_camera)
+	_camera.look_at_from_position(Vector3(-1.5, 1.55, 4.2), Vector3(0.0, 1.05, 0.0))
+
+
+## La stanza buia delle varianti al chiuso: pedana e anelli al neon, pavimento quasi nero,
+## strisce al neon sul fondo.
+func _stanza_al_neon() -> void:
 	# La pedana: un disco smussato scuro con l'anello al neon sul bordo.
 	var pedana := MeshInstance3D.new()
 	var disco := CylinderMesh.new()
@@ -191,16 +212,69 @@ func _scena() -> void:
 				else Color(0.30, 0.99, 0.95), 0.75)
 		_palco.add_child(striscia)
 
-	_corpo = Corpo.crea("TU")
-	_palco.add_child(_corpo)
-	# Girato di tre quarti verso chi guarda: il blaster punta fuori dallo schermo.
-	_corpo.rotation.y = PI - 0.45
 
-	_camera = Camera3D.new()
-	_camera.fov = 38.0
-	_camera.current = true
-	_palco.add_child(_camera)
-	_camera.look_at_from_position(Vector3(-1.5, 1.55, 4.2), Vector3(0.0, 1.05, 0.0))
+## **Di giorno la Home è un angolo dell'arena** (problema 8 di `PROBLEMI.md`, tappa 13
+## blocco C). Fino al 13/11/2026 la Home era la stanza buia al neon anche per le tre
+## varianti di giorno, e Home e arena sembravano due giochi. Adesso il personaggio sta nel
+## mondo in cui gioca: lo stesso cielo e lo stesso sole (`Giocattolo.illumina`), il tappeto
+## a incastro del campo, una pedana imbottita e alle spalle i moduli imbottiti con le loro
+## decalcomanie, fatti con le funzioni dell'arena (`Giocattolo._modulo`, `_decalchi`) e non
+## disegnati a parte: quello che cambia nell'arena cambia anche qui.
+func _angolo_d_arena(ambiente: Environment) -> void:
+	Giocattolo.illumina(_palco, ambiente)
+	var tappeto := StandardMaterial3D.new()
+	tappeto.albedo_texture = load(Giocattolo.TAPPETO)
+	tappeto.albedo_color = Giocattolo.CAMPO
+	tappeto.roughness = 0.85
+	tappeto.metallic_specular = 0.2
+	# Quattro metri per giro, come i tappetini dell'arena.
+	tappeto.uv1_scale = Vector3(10.0, 10.0, 1.0)
+	var pavimento := MeshInstance3D.new()
+	var piano := PlaneMesh.new()
+	piano.size = Vector2(40, 40)
+	pavimento.mesh = piano
+	pavimento.position = Vector3(0, -0.21, 0)
+	pavimento.material_override = tappeto
+	_palco.add_child(pavimento)
+
+	var getto := Giocattolo.Getto.new()
+	# La pedana: un tondo imbottito arancio col piede blu, come le basi dei piloni.
+	getto.tondo(1.3, 0.21, 0.08, Giocattolo.ARANCIO, Transform3D(Basis(), Vector3(0, -0.21, 0)), 40)
+	getto.tondo(1.36, 0.07, 0.03, Giocattolo.BLU, Transform3D(Basis(), Vector3(0, -0.205, 0)), 40)
+	# Alle spalle, i pezzi di un'ala dell'arena: il muro lungo, una barriera bassa di
+	# traverso, un cassone e un pilone. Nome, tinta e misure come nella pianta; nella PISTA
+	# diventano quello che diventano nella sua arena (`Pista._muri`): muretto, gomme,
+	# cassone, colonna.
+	var pista := Aspetto.scelta() == Aspetto.PISTA
+	var gomme := Giocattolo.Getto.new()
+	var pannelli: Array[Dictionary] = []
+	for pezzo: Array in [
+			["ocra, il muro di fondo", "ocra", Vector2(13.0, 0.9), 3.4, Vector3(1.0, 0.0, -6.6), 0.0],
+			["mattone, la barriera", "mattone", Vector2(4.6, 0.9), 1.6, Vector3(4.6, 0.0, -3.0), -62.0],
+			["tribuna, cassone", "tribuna", Vector2(2.2, 2.2), 1.3, Vector3(-3.6, 0.0, -3.9), 18.0],
+			["ocra, pilone", "ocra", Vector2(1.6, 1.6), 5.2, Vector3(-1.6, 0.0, -8.6), 0.0]]:
+		var m := {"nome": pezzo[0], "tinta": pezzo[1], "misura": [pezzo[2].x, pezzo[2].y],
+				"alto": pezzo[3], "quota": -0.21}
+		var posto := Transform3D(Basis(Vector3.UP, deg_to_rad(pezzo[5])),
+				pezzo[4] + Vector3(0, -0.21 + float(pezzo[3]) * 0.5, 0))
+		var misura: Vector2 = pezzo[2]
+		var alto := float(pezzo[3])
+		if not pista:
+			Giocattolo._modulo(getto, m, posto, pannelli, false)
+		elif Arena._e_tondo(String(pezzo[0])):
+			Pista._colonna(getto, misura.x * 0.5, alto, alto, posto, alto >= 5.0)
+		elif minf(misura.x, misura.y) >= 1.3:
+			Pista._cassone(getto, misura.x, misura.y, alto, posto, Pista.CASSONI[pezzo[1]], false)
+		elif alto >= 3.0:
+			Pista._muretto(getto, {"sponde": []}, misura.x, misura.y, alto, posto)
+		else:
+			Pista._muro_di_gomme(gomme, misura.x, misura.y, alto, posto)
+	var materiale := Giocattolo._materiale_dei_moduli()
+	Giocattolo._posa(_palco, getto.mesh(), materiale, "angolo d'arena")
+	if pista:
+		Giocattolo._posa(_palco, gomme.mesh(), materiale, "gomme")
+	else:
+		Giocattolo._decalchi(_palco, {"sponde": []}, pannelli)
 
 
 func _luce(dove: Vector3, colore: Color, forza: float) -> void:
@@ -353,6 +427,10 @@ func _pulsanti() -> void:
 	_riga_versione.add_theme_font_size_override("font_size", 17)
 	_riga_versione.add_theme_font_override("font", Comandi.carattere_testo())
 	_riga_versione.add_theme_color_override("font_color", Color(1, 1, 1, 0.32))
+	# Sul pavimento chiaro della Home di giorno il bianco velato spariva: il contorno navy
+	# la tiene leggibile su tutti e due i fondi, discreta come prima.
+	_riga_versione.add_theme_color_override("font_outline_color", Color(Comandi.NAVY, 0.55))
+	_riga_versione.add_theme_constant_override("outline_size", 5)
 	for stato in ["normal", "hover", "focus", "pressed"]:
 		_riga_versione.add_theme_stylebox_override(stato, StyleBoxEmpty.new())
 	add_child(_riga_versione)
