@@ -33,7 +33,8 @@ const ALONI := [
 ## spara è il suo dardo incandescente a tradirlo.
 const PORTATA_ALONE := 15.0
 const DISSOLVENZA_ALONE := 3.5
-## Fin dove si legge il nome nelle prove dell'arena aperta (tappa 11, blocco C2).
+## Fin dove si legge il nome: nell'arena aperta dalla tappa 11 (blocco C2), in tutte le arene
+## dalla tappa 12 (D1, 12/11/2026).
 const PORTATA_NOMI_APERTA := 40.0
 
 ## Lo spessore del contorno si misura **sullo schermo, non nel mondo**: `grow`
@@ -1024,9 +1025,12 @@ func _costruisci() -> void:
 				Color(ALONI[alone_scelto]["colore"]), SPESSORE_FILO):
 			_contorni.append(contorno as Dictionary)
 
-	# Il nome sopra la testa, piccolo: risponde a «chi mi ha preso?». Vive con il
-	# contorno — entro i quindici metri — e per lo stesso motivo.
+	# Il nome sopra la testa: risponde a «chi mi ha preso?» e a «chi sto colpendo?». In
+	# tutte le arene ha misura fissa e si legge fino a quaranta metri (tappa 12, D1): nella
+	# palestra spariva a quindici col contorno, e chi colpivi da lontano era una figurina
+	# senza nome. I muri lo coprono come coprono il corpo.
 	_targhetta = targhetta(personaggio)
+	a_misura_fissa(_targhetta)
 	_targhetta.position = Vector3(0, ALTEZZA_CORPO + 0.32, 0)
 	_aspetto.add_child(_targhetta)
 
@@ -1055,10 +1059,15 @@ static func targhetta(nome: String) -> Label3D:
 	# Nelle prove dell'arena aperta (tappa 11) il nome ha la stessa misura sullo schermo
 	# a qualunque distanza: a quindici metri, alto 26 centimetri, non si leggeva.
 	if Aspetto.corpi_a_cartone():
-		etichetta.fixed_size = true
-		etichetta.pixel_size = 0.0007
-		etichetta.outline_size = 22
+		a_misura_fissa(etichetta)
 	return etichetta
+
+
+## La targhetta alla stessa misura sullo schermo a qualunque distanza.
+static func a_misura_fissa(etichetta: Label3D) -> void:
+	etichetta.fixed_size = true
+	etichetta.pixel_size = 0.0007
+	etichetta.outline_size = 22
 
 
 ## La pelle del contorno: la capsula vista **da dentro** e cresciuta di poco, senza
@@ -1103,11 +1112,9 @@ func _aggiorna_i_contorni() -> void:
 			_corpo.aggiorna_la_sagoma(distanza,
 					not get_world_3d().direct_space_state.intersect_ray(domanda).is_empty())
 	if _targhetta != null:
-		# Nelle prove dell'arena aperta il nome ha la sua misura fissa sullo schermo, e si
-		# legge fino a quaranta metri: il campo si vede da lontano, e chi ci gioca anche.
-		var nome := quanto
-		if Aspetto.corpi_a_cartone():
-			nome = clampf((PORTATA_NOMI_APERTA - distanza) / DISSOLVENZA_ALONE, 0.0, 1.0)
+		# Il nome ha la sua misura fissa sullo schermo e si legge fino a quaranta metri, in
+		# tutte le arene (tappa 12, D1): chi ci gioca si vede da lontano. Il contorno no.
+		var nome := clampf((PORTATA_NOMI_APERTA - distanza) / DISSOLVENZA_ALONE, 0.0, 1.0)
 		_targhetta.visible = nome > 0.0 and not _fantasma
 		_targhetta.modulate.a = 0.95 * nome
 		_targhetta.outline_modulate.a = 0.85 * nome
