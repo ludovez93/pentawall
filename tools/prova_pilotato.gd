@@ -65,7 +65,9 @@ const FERMO_ROSSO := 2.0      ## secondi fermo spingendo: rosso
 const PENDENZA_IN_CORSA := -6.0
 const SOTTO_L_ARENA := -8.0   ## il pavimento più basso è il catino, a −2
 
-const TEMPI := {"gara": 120.0, "palla": 90.0, "scontro": 60.0}
+## La PALLA si gioca intera (dalla tappa 13): finisce quando qualcuno segna la dorata con
+## le sei colorate, o allo scadere dei cinque minuti di sicurezza.
+const TEMPI := {"gara": 120.0, "palla": Arena.DURATA_PALLA + 5.0, "scontro": 60.0}
 
 ## La PALLA: da quanto lontano dalla bocca si tira, e quanto si prova a mirare prima di
 ## avvicinarsi.
@@ -140,6 +142,7 @@ func _lavora() -> void:
 	var argomenti := OS.get_cmdline_user_args()
 	_modo = argomenti[0] if argomenti.size() > 0 else "gara"
 	_senza_leva = argomenti.has("senza_leva")
+	_non_spara = argomenti.has("non_spara")
 	_con_avversari = _modo == "gara" and argomenti.has("avversari")
 	var aspetto_di_prima := Aspetto.scelta()
 	var modalita_di_prima := Modalita.scelta()
@@ -285,6 +288,14 @@ func _gara() -> void:
 func _palla(passo: float) -> void:
 	var palle := _arena.palle()
 	var portate := palle.portate_da(_tu)
+	_ricarica = maxf(_ricarica - passo, 0.0)
+	_conta_i_colpi_a_segno()
+	_conta_i_lanci(palle)
+	if not _non_spara and portate.is_empty():
+		var bersaglio := _chi_colpire_in_palla(passo)
+		if bersaglio != null:
+			_tira_a(bersaglio)
+			return
 	if portate.is_empty():
 		_mirando = 0.0
 		_distanza_di_tiro = 0
@@ -350,12 +361,101 @@ func _palla(passo: float) -> void:
 		_diario("nessun arco dentro la porta: ci si avvicina")
 
 
+## **Nella PALLA il pilota spara** (tappa 13, blocco B). Fino alla tappa 12 non sparava
+## mai, e un giocatore vero sì: un colpo fa cadere la palla che l'altro ha in mano. Con una
+## palla in mano va in porta; senza, spara a chi porta palle entro `PORTATA_PALLA` e a
+## chiunque gli arrivi entro `ADDOSSO`, se si vede; dopo `PAZIENZA_DI_TIRO` secondi sullo
+## stesso bersaglio lo lascia stare per tre secondi, come chi capisce che non lo prende. Il
+## primo giro (13/11/2026, fino a 4 s su chiunque entro 8 m e anche con la palla in mano)
+## sparava 32 colpi a partita e segnava 2 gol invece di 6. Con `non_spara` gioca come prima.
+const PORTATA_PALLA := 12.0
+const ADDOSSO := 6.0
+const PAZIENZA_DI_TIRO := 2.5
+var _non_spara := false
+var _su_chi := ""
+var _da_quanto := 0.0
+var _lasciati := {}
+
+
+func _chi_colpire_in_palla(passo: float) -> Avversario:
+	var palle := _arena.palle()
+	for nome: String in _lasciati.keys():
+		_lasciati[nome] = float(_lasciati[nome]) - passo
+		if float(_lasciati[nome]) <= 0.0:
+			_lasciati.erase(nome)
+	var scelto: Avversario = null
+	var meglio := INF
+	for chi in _arena.avversari():
+		if chi.global_position.y < SOTTO_L_ARENA or _lasciati.has(String(chi.name)):
+			continue
+		var petto := chi.global_position + Vector3(0, 1.1, 0)
+		var lontano := petto.distance_to(_tu.global_position)
+		var porta := not palle.portate_da(chi).is_empty()
+		if lontano > (PORTATA_PALLA if porta else ADDOSSO) or not _si_vede(petto, chi):
+			continue
+		# Chi porta palle conta come se fosse a metà strada.
+		var peso := lontano * (0.5 if porta else 1.0)
+		if peso < meglio:
+			meglio = peso
+			scelto = chi
+	if scelto == null:
+		_su_chi = ""
+		_da_quanto = 0.0
+		return null
+	if String(scelto.name) != _su_chi:
+		_su_chi = String(scelto.name)
+		_da_quanto = 0.0
+	_da_quanto += passo
+	if _da_quanto > PAZIENZA_DI_TIRO:
+		_lasciati[_su_chi] = 3.0
+		_su_chi = ""
+		_da_quanto = 0.0
+		return null
+	return scelto
+
+
+## Mira al petto e spara quando il petto è vicino al mirino: lo stesso tiro dello SCONTRO.
+func _tira_a(bersaglio: Avversario) -> void:
+	_leva(0.3)
+	var scarto := _metti_nel_mirino(bersaglio.global_position + Vector3(0, 1.1, 0), true)
+	if scarto.length() < CENTRATO and _ricarica <= 0.0 and _tasto_su_fra == 0:
+		_colpi += 1
+		_ricarica = 0.45
+		_premi(_pulsante("FUOCO"))
+
+
+func _conta_i_colpi_a_segno() -> void:
+	var marcatore := float(_comandi.get("_marcatore"))
+	if marcatore > _marcatore_prima + 0.05:
+		_a_segno += 1
+		_diario("a segno (%d su %d colpi)" % [_a_segno, _colpi])
+	_marcatore_prima = marcatore
+
+
+## Lanci e gol di tutti (tappa 13, blocco B): una palla che smette di essere portata ed è
+## «lanciata da» chi la portava è un lancio; i gol li dice il segnale della porta.
+var _portatori := {}
+var _lanci_di := {}
+var _gol_di := {}
+
+
+func _conta_i_lanci(palle: Palle) -> void:
+	for palla in palle.palle():
+		var prima: Node3D = _portatori.get(palla.indice, null)
+		if prima != null and is_instance_valid(prima) and palla.portata_da == null 				and palla.lanciata_da == prima:
+			var nome := _nome_di(prima)
+			_lanci_di[nome] = int(_lanci_di.get(nome, 0)) + 1
+		_portatori[palla.indice] = palla.portata_da
+
+
 func _su_presa(chi: Node3D, palla: Palla) -> void:
 	if chi == _tu:
 		_diario("presa la palla %d" % palla.indice)
 
 
 func _su_gol(_palla: Palla, autore: Node3D) -> void:
+	if autore != null:
+		_gol_di[_nome_di(autore)] = int(_gol_di.get(_nome_di(autore), 0)) + 1
 	if autore != _tu:
 		return
 	_gol += 1
@@ -365,11 +465,7 @@ func _su_gol(_palla: Palla, autore: Node3D) -> void:
 func _scontro(passo: float) -> void:
 	_conta_chi_si_vede(passo)
 	_ricarica = maxf(_ricarica - passo, 0.0)
-	var marcatore := float(_comandi.get("_marcatore"))
-	if marcatore > _marcatore_prima + 0.05:
-		_a_segno += 1
-		_diario("a segno (%d su %d colpi)" % [_a_segno, _colpi])
-	_marcatore_prima = marcatore
+	_conta_i_colpi_a_segno()
 	var bersaglio: Avversario = null
 	for chi in _arena.avversari():
 		if chi.global_position.y < SOTTO_L_ARENA:
@@ -385,12 +481,7 @@ func _scontro(passo: float) -> void:
 	if lontano > PORTATA or not _si_vede(petto, bersaglio):
 		_vai_a(bersaglio.global_position)
 		return
-	_leva(0.3)
-	var scarto := _metti_nel_mirino(petto, true)
-	if scarto.length() < CENTRATO and _ricarica <= 0.0 and _tasto_su_fra == 0:
-		_colpi += 1
-		_ricarica = 0.45
-		_premi(_pulsante("FUOCO"))
+	_tira_a(bersaglio)
 
 
 # ------------------------------------------------------------------ le misure della tappa 12
@@ -874,7 +965,12 @@ func _fine(errore: String, aspetto_di_prima: int, modalita_di_prima: int) -> voi
 						% ["a %.1f s" % _prima_bandiera if _prima_bandiera >= 0.0 else "mai", prima,
 						_serie_piu_fitta()])
 		"palla":
-			print("lanci %d, gol %d" % [_lanci, _gol])
+			print("lanci %d, gol %d · colpi %d, a segno %d%s" % [_lanci, _gol, _colpi, _a_segno,
+					" (non spara)" if _non_spara else ""])
+			var righe := PackedStringArray()
+			for nome: String in _lanci_di:
+				righe.append("%s %d su %d" % [nome, int(_gol_di.get(nome, 0)), int(_lanci_di[nome])])
+			print("gol su lanci: %s" % " · ".join(righe))
 		"scontro":
 			print("colpi %d, a segno %d" % [_colpi, _a_segno])
 			print("un avversario sullo schermo: entro 15 m per %.1f s, entro 40 m per %.1f s, su %.1f s"

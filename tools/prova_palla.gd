@@ -37,6 +37,7 @@ func _lavora() -> void:
 	await _si_raccolgono()
 	await _in_porta()
 	await _colpito_le_perde()
+	await _a_facile_solo_chi_porta()
 	await _lanciata_addosso()
 	await _il_lancio_e_la_sua_strada()
 	await _la_dorata()
@@ -473,6 +474,40 @@ func _vicino_a_un_cannone(dove: Vector3) -> bool:
 
 
 ## Una palla ferma in un posto, libera.
+## Tappa 13, blocco B: a «facile» nella PALLA un avversario tira solo a chi porta palle, ed
+## entro dieci metri. Gli altri avversari si parcheggiano sotto l'arena, così l'unico che
+## potrebbe scegliere è chi gioca; poi tornano dov'erano.
+func _a_facile_solo_chi_porta() -> void:
+	var palle := _arena.palle()
+	var tu := _arena.giocatore()
+	var bot := _arena.avversari()[0]
+	var parcheggiati := {}
+	for altro in _arena.avversari():
+		if altro != bot:
+			parcheggiati[altro] = altro.global_position
+			altro.process_mode = Node.PROCESS_MODE_DISABLED
+			altro.global_position = Vector3(0, -80, 0)
+	palle.lascia_tutte(tu)
+	await _porta(tu, Vector3(0, 0, -24))
+	await _porta(bot, Vector3(6, 0, -24))
+	_conta("a facile, nella palla, chi non porta palle non lo sceglie nessuno",
+			_arena.call("_chi_attaccare", bot) == null, str(_arena.call("_chi_attaccare", bot)))
+	var blu := palle.palle()[0]
+	await _attendi(func() -> bool: return blu.libera(), 3000)
+	await _ferma(blu, tu.global_position + Vector3(0, 0.4, 0))
+	await _attendi(func() -> bool: return not palle.portate_da(tu).is_empty(), 2000)
+	await _porta(bot, Vector3(6, 0, -24))
+	_conta("chi porta una palla a sei metri sì", _arena.call("_chi_attaccare", bot) == tu,
+			str(_arena.call("_chi_attaccare", bot)))
+	await _porta(bot, Vector3(14, 0, -24))
+	_conta("a quattordici metri no", _arena.call("_chi_attaccare", bot) == null,
+			str(_arena.call("_chi_attaccare", bot)))
+	palle.lascia_tutte(tu)
+	for altro: Node3D in parcheggiati:
+		altro.global_position = parcheggiati[altro]
+		altro.process_mode = Node.PROCESS_MODE_INHERIT
+
+
 func _ferma(palla: Palla, dove: Vector3) -> void:
 	palla.in_campo_da(dove, Vector3.ZERO, null, -10.0)
 	await physics_frame

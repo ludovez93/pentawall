@@ -1673,9 +1673,19 @@ func _scegli_i_bersagli(delta: float) -> void:
 ## non tira nessuno, l'ultimo non è il bersaglio di nessuno, il primo è il bersaglio di chi
 ## lo insegue, e chi ha colpito smette appena tocca la stessa bandiera. Senza nessuno
 ## davanti l'avversario corre alla sua bandiera e basta. Chi gioca tira a chi vuole.
+##
+## **Nella PALLA, a «facile», si tira solo a chi porta palle, entro dieci metri** (tappa 13,
+## blocco B): è la stessa regola della gara portata alla palla — si ferma chi sta per
+## segnare, e da vicino. Prima si tirava a chiunque e da ovunque: il pilota che spara finiva
+## ultimo in tre partite su tre, colpito ogni 8-12 secondi; sei colpi su otto li prendeva
+## senza palla in mano (colpi che non fermano nessuno, lo rimandavano solo alla rinascita), e
+## con la sola prima regola i colpi arrivavano appena presa una palla, da tutti, 5 su 8 da
+## 12-18 metri.
 func _chi_attaccare(bot: Avversario) -> Node3D:
 	var altri: Array = []
 	var mie := _bandiere_di(bot)
+	var entro := float(Avversario.TARATURE[bot.livello()]["solo_chi_porta"])
+	var solo_chi_porta := _palla and entro >= 0.0
 	for riga in _concorrenti:
 		var corpo: Node3D = riga["corpo"]
 		if corpo == null or corpo == bot or not is_instance_valid(corpo):
@@ -1685,6 +1695,8 @@ func _chi_attaccare(bot: Avversario) -> Node3D:
 		if _gara and int(riga.get("bandiere", 0)) <= mie:
 			continue
 		var quanto := bot.global_position.distance_to(corpo.global_position)
+		if solo_chi_porta and (_palle.portate_da(corpo).is_empty() or quanto > entro):
+			continue
 		if _palla and not _palle.portate_da(corpo).is_empty():
 			quanto *= PREFERENZA_PORTATORI
 		altri.append({"corpo": corpo, "quanto": quanto})
@@ -1711,7 +1723,8 @@ func _chi_attaccare(bot: Avversario) -> Node3D:
 	var attuale := bot.bersaglio
 	if attuale != null and is_instance_valid(attuale) and attuale != scelto \
 			and not _potenziamenti.ha(attuale, "fantasma") \
-			and not (_gara and _bandiere_di(attuale) <= mie):
+			and not (_gara and _bandiere_di(attuale) <= mie) 			and not (solo_chi_porta and (_palle.portate_da(attuale).is_empty()
+					or bot.global_position.distance_to(attuale.global_position) > entro)):
 		var quanto := bot.global_position.distance_to(attuale.global_position)
 		if quanto <= quanto_scelto * AFFEZIONE and _si_vedono(bot, attuale):
 			return attuale

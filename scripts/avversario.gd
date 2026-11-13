@@ -144,6 +144,7 @@ const TARATURE := [
 		"lato_giusto": 0.5,    ## quante volte schiva dalla parte con più spazio
 		"salto": 0.10,         ## quanto spesso salta cambiando direzione
 		"dischi": false,       ## se tira ai bersagli bonus (`Arena._bonus_per`)
+		"solo_chi_porta": 10.0,  ## nella PALLA tira solo a chi porta palle, ed entro questi metri; -1: a chiunque (`Arena._chi_attaccare`; tappa 13, B)
 	},
 	{
 		"nome": "medio",
@@ -153,6 +154,7 @@ const TARATURE := [
 		"lato_giusto": 0.85,
 		"salto": 0.18,
 		"dischi": true,
+		"solo_chi_porta": -1.0,
 	},
 	{
 		"nome": "duro",
@@ -162,6 +164,7 @@ const TARATURE := [
 		"lato_giusto": 1.0,
 		"salto": 0.28,
 		"dischi": true,
+		"solo_chi_porta": -1.0,
 	},
 ]
 
