@@ -551,7 +551,8 @@ var _fotogrammi_misurati := 0
 var _episodio := {}
 var _episodi: Array[Dictionary] = []
 ## Le ampiezze della sfumatura messe a confronto sulla stessa strada: da, a (metri).
-const PROVE_SFUMA := [[0.0, 0.0], [0.9, 1.5], [1.5, 2.1], [1.8, 2.5], [2.2, 3.0]]
+## Il terzo numero, se c'è, è il margine sul pavimento che si vede (nel gioco 0,35).
+const PROVE_SFUMA := [[0.0, 0.0], [0.9, 1.5], [1.5, 2.1], [1.8, 2.5], [2.2, 3.0], [1.8, 2.5, 0.1]]
 var _per_prova: Array[Dictionary] = []
 
 
@@ -570,7 +571,8 @@ func _conta_i_muri(passo: float) -> void:
 	var pavimento := float(_tu.call("_pavimento_in_vista"))
 	var soglie: Array[float] = []
 	for prova: Array in PROVE_SFUMA:
-		var q := clampf((pavimento - 0.35) / maxf(float(prova[1]), 0.001), 0.0, 1.0) if float(prova[1]) > 0.0 else 0.0
+		var margine := float(prova[2]) if prova.size() > 2 else 0.35
+		var q := clampf((pavimento - margine) / maxf(float(prova[1]), 0.001), 0.0, 1.0) if float(prova[1]) > 0.0 else 0.0
 		soglie.append(q * (float(prova[0]) + float(prova[1])) * 0.5)
 	var coperti_per_prova: Array[int] = []
 	coperti_per_prova.resize(PROVE_SFUMA.size())
@@ -990,8 +992,9 @@ func _fine(errore: String, aspetto_di_prima: int, modalita_di_prima: int) -> voi
 			% [roundi(IN_FACCIA * 100.0), _secondi_in_faccia, _tempo, _episodi.size(),
 			100.0 * _copertura_sommata / maxf(float(_fotogrammi_misurati), 1.0)])
 	for k in _per_prova.size():
-		print("  sfumatura %.1f-%.1f m: in faccia %.1f s, copertura media %.1f %%" % [float(PROVE_SFUMA[k][0]),
-				float(PROVE_SFUMA[k][1]), float(_per_prova[k]["secondi"]),
+		print("  sfumatura %.1f-%.1f m%s: in faccia %.1f s, copertura media %.1f %%" % [float(PROVE_SFUMA[k][0]),
+				float(PROVE_SFUMA[k][1]), (" (margine %.2f)" % float(PROVE_SFUMA[k][2])) if PROVE_SFUMA[k].size() > 2 else "",
+				float(_per_prova[k]["secondi"]),
 				100.0 * float(_per_prova[k]["somma"]) / maxf(float(_fotogrammi_misurati), 1.0)])
 	print("salti per sbloccarsi: %d%s" % [_salti.size(),
 			("  — " + ", ".join(PackedStringArray(_salti))) if not _salti.is_empty() else ""])
