@@ -64,21 +64,29 @@ static func pilone(getto: Giocattolo.Getto, raggio: float, alto: float, corpo: C
 		bordo: Color, posto: Transform3D, abbassa: float) -> void:
 	var base := posto * Giocattolo._su(-alto * 0.5)
 	var cima := alto - abbassa
-	var rocchi := maxi(2, roundi(cima / 1.6))
+	# **Tubi gonfi, non un bidone** (problema 7 di `PROBLEMI.md`, tappa 13 blocco D): con
+	# rocchi da 1,6 m gonfi del 2 % il pilone era un cilindro dritto a fasce, «un fusto».
+	# Un pilone gonfiabile è una pila di ciambelle: rocchi alti poco più del diametro, la
+	# pancia e la vita stretta alla cucitura, e la luce che gira sulla pancia (le normali
+	# molto più inclinate del profilo vero). La pancia vera arriva al massimo a cinque
+	# centimetri e mezzo fuori dalla collisione, base compresa, perché vista e fisica stanno
+	# entro sei (`prova_aspetto`): il tondo lo fa soprattutto la luce.
+	var rocchi := maxi(2, roundi(cima / maxf(raggio * 1.4, 0.9)))
 	var rocchio := cima / float(rocchi)
+	var pancia := clampf((0.055 - 0.013 * raggio) / raggio, 0.0, 0.10)
 	for k in rocchi:
 		var profilo := PackedVector2Array()
 		var normali := PackedVector2Array()
 		# Il rocchio si gonfia solo verso fuori: dove due rocchi si toccano le facce piatte
-		# fra uno spigolo e l'altro (venti lati) stanno ancora sulla collisione, e un dardo
-		# non si ferma mai nel vuoto davanti a lui (`prova_aspetto`).
+		# fra uno spigolo e l'altro stanno ancora sulla collisione, e un dardo non si ferma
+		# mai nel vuoto davanti a lui (`prova_aspetto`).
 		for t: float in QUOTE:
-			var gonfio := sin(t * PI)
-			profilo.append(Vector2(raggio * (1.013 + 0.022 * gonfio), rocchio * t))
-			normali.append(Vector2(1.0, -cos(t * PI) * 0.25).normalized())
+			var gonfio := pow(sin(t * PI), 0.6)
+			profilo.append(Vector2(raggio * (1.013 + pancia * gonfio), rocchio * t))
+			normali.append(Vector2(1.0, -cos(t * PI) * 0.7).normalized())
 		var tinta: Color = corpo if k % 2 == 0 else bordo
 		var primo := getto.vertici.size()
-		getto.tornio(profilo, normali, tinta, base * Giocattolo._su(rocchio * float(k)), 20)
+		getto.tornio(profilo, normali, tinta, base * Giocattolo._su(rocchio * float(k)), 24)
 		_pelle(getto, primo, QUOTE.size(), tinta)
 	var palla := raggio * 0.75
 	var sopra := getto.vertici.size()
@@ -159,6 +167,11 @@ static func _vasca(arena: Arena, materiale: Material) -> void:
 	if contorno.is_empty():
 		return
 	var getto := Giocattolo.Getto.new()
+	var fondo := -2.0
+	for zona: Dictionary in pianta["zone"]:
+		if float(zona["quota"]) < -1.0:
+			fondo = float(zona["quota"])
+	_tappeto_di_palline(getto, contorno, pianta, fondo, rng)
 	var profilo := _cerchio(1.0, 5)
 	var normali := _normali_cerchio(5)
 	var passo := 0.62
@@ -175,7 +188,8 @@ static func _vasca(arena: Arena, materiale: Material) -> void:
 			if rng.randf() < (0.66 if maxf(absf(p.x), absf(p.y)) < 10.0 else 0.2):
 				continue
 			var raggio := rng.randf_range(0.24, 0.29)
-			var su := rng.randf_range(0.0, 0.18)
+			# Sopra il tappeto, mezze dentro: le palle sciolte fanno il rilievo.
+			var su := rng.randf_range(0.08, 0.24)
 			var tinta: Color = [ROSSO, GIALLO, BLU, VIOLA, BIANCO][rng.randi() % 5]
 			var giro := Basis.from_euler(Vector3(rng.randf() * TAU, rng.randf() * TAU, rng.randf() * TAU))
 			getto.tornio(profilo, normali, tinta, Transform3D(giro.scaled(Vector3.ONE * raggio),
@@ -184,6 +198,57 @@ static func _vasca(arena: Arena, materiale: Material) -> void:
 	# Il punto di luce su tutte insieme: una vasca di palline opache sembra ghiaia.
 	_lucido(getto, 0, 0.5)
 	Giocattolo._posa(arena, getto.mesh(), materiale, "vasca di palline")
+
+
+## **Il tappeto di palline** (problema 7, tappa 13 blocco D): sotto le palle sciolte, il
+## fondo del catino tutto coperto di palline fitte, così fra l'una e l'altra non si vede più
+## il pavimento e la vasca è piena. Sfere vere, fitte così, sarebbero quattromila: più di
+## quattrocentomila triangoli. Qui ogni pallina è una cupola di sei triangoli su una griglia
+## a nido d'ape (i bordi di due vicine coincidono, e il fondo sparisce), con le normali di
+## una sfera: la luce la fa tonda. Altezza e colore a caso, sempre gli stessi.
+static func _tappeto_di_palline(getto: Giocattolo.Getto, contorno: PackedVector2Array,
+		pianta: Dictionary, fondo: float, rng: RandomNumberGenerator) -> void:
+	var passo := 0.46
+	var giro := passo / sqrt(3.0)
+	var primo := getto.vertici.size()
+	var riga := 0
+	var z := -14.8
+	while z < 14.8:
+		var x := -14.8 + (passo * 0.5 if riga % 2 == 1 else 0.0)
+		while x < 14.8:
+			var p := Vector2(x, z)
+			x += passo
+			if not _cupola_libera(p, giro, contorno, pianta):
+				continue
+			var tinta: Color = [ROSSO, GIALLO, BLU, VIOLA, BIANCO][rng.randi() % 5]
+			var cima := getto.vertici.size()
+			getto.vertici.append(Vector3(p.x, fondo + rng.randf_range(0.17, 0.24), p.y))
+			getto.normali.append(Vector3.UP)
+			getto.colori.append(tinta)
+			for k in 6:
+				var a := TAU * (float(k) + 0.5) / 6.0
+				var fuori := Vector3(cos(a), 0.0, sin(a))
+				getto.vertici.append(Vector3(p.x, fondo + 0.01, p.y) + fuori * giro)
+				getto.normali.append((fuori + Vector3.UP * 0.35).normalized())
+				getto.colori.append(tinta.darkened(0.25))
+			# In senso orario visto dall'alto: per Godot è il verso della faccia davanti.
+			for k in 6:
+				getto.indici.append_array([cima, cima + 1 + k, cima + 1 + (k + 1) % 6])
+		z += passo * sqrt(3.0) * 0.5
+		riga += 1
+	_lucido(getto, primo, 0.5)
+
+
+## Una cupola sta tutta nel catino, fuori dal box in mezzo e dalle rampe, e a dieci
+## centimetri dai bordi: una che sporgeva sotto il paraurti della faccia est ci stava in
+## pari (`tools/facce_doppie.gd`).
+static func _cupola_libera(p: Vector2, giro: float, contorno: PackedVector2Array,
+		pianta: Dictionary) -> bool:
+	for k in 7:
+		var q := p if k == 6 else p + Vector2(cos(TAU * k / 6.0), sin(TAU * k / 6.0)) * (giro + 0.1)
+		if not Geometry2D.is_point_in_polygon(q, contorno) or (absf(q.x) < 3.9 and absf(q.y) < 3.9) 				or Giocattolo._sopra_una_rampa(q, pianta):
+			return false
+	return true
 
 
 # ------------------------------------------------------------------ gli oggetti

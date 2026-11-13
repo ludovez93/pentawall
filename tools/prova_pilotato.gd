@@ -570,7 +570,7 @@ func _conta_i_muri(passo: float) -> void:
 	var pavimento := float(_tu.call("_pavimento_in_vista"))
 	var soglie: Array[float] = []
 	for prova: Array in PROVE_SFUMA:
-		var q := clampf((pavimento - 0.1) / maxf(float(prova[1]), 0.001), 0.0, 1.0) if float(prova[1]) > 0.0 else 0.0
+		var q := clampf((pavimento - 0.35) / maxf(float(prova[1]), 0.001), 0.0, 1.0) if float(prova[1]) > 0.0 else 0.0
 		soglie.append(q * (float(prova[0]) + float(prova[1])) * 0.5)
 	var coperti_per_prova: Array[int] = []
 	coperti_per_prova.resize(PROVE_SFUMA.size())

@@ -441,11 +441,13 @@ func _aggiorna_camera(delta: float) -> void:
 	if not is_equal_approx(_mescola, bersaglio):
 		_mescola = move_toward(_mescola, bersaglio, delta / TEMPO_CAMBIO)
 	var quota := smoothstep(0.0, 1.0, _mescola)
-	# I muri a ridosso della camera si diradano solo in terza persona (`Arena.sfuma`), e
-	# mai fin dove arriva il pavimento che si vede.
+	# I muri a ridosso della camera si diradano solo in terza persona (`Arena.sfuma`), solo
+	# quando si guarda da questa camera (non da quella di un attrezzo), e mai fin dove arriva
+	# il pavimento che si vede: 35 cm prima, perché sul pavimento c'è roba (il tappeto di
+	# palline del gonfiabile sta 24 cm sopra il fondo).
 	var sfuma := 0.0
-	if quota < 1.0:
-		sfuma = (1.0 - quota) * clampf((_pavimento_in_vista() - 0.1) / Arena.SFUMA_A, 0.0, 1.0)
+	if quota < 1.0 and _camera.current:
+		sfuma = (1.0 - quota) * clampf((_pavimento_in_vista() - 0.35) / Arena.SFUMA_A, 0.0, 1.0)
 	if absf(sfuma - _sfumatura) > 0.01 or (sfuma != _sfumatura and (sfuma == 0.0 or sfuma == 1.0)):
 		_sfumatura = sfuma
 		Arena.sfuma(sfuma)
