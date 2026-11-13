@@ -92,6 +92,7 @@ var moltiplicatore_punti := 1
 
 var _pendenza := 0.0
 var _mescola := 0.0             ## 0 = terza persona, 1 = prima
+var _sfumatura := -1.0
 var _in_prima := false
 var _ricarica := 0.0
 var _immunita := 0.0
@@ -440,6 +441,14 @@ func _aggiorna_camera(delta: float) -> void:
 	if not is_equal_approx(_mescola, bersaglio):
 		_mescola = move_toward(_mescola, bersaglio, delta / TEMPO_CAMBIO)
 	var quota := smoothstep(0.0, 1.0, _mescola)
+	# I muri a ridosso della camera si diradano solo in terza persona (`Arena.sfuma`), e
+	# mai fin dove arriva il pavimento che si vede.
+	var sfuma := 0.0
+	if quota < 1.0:
+		sfuma = (1.0 - quota) * clampf((_pavimento_in_vista() - 0.1) / Arena.SFUMA_A, 0.0, 1.0)
+	if absf(sfuma - _sfumatura) > 0.01 or (sfuma != _sfumatura and (sfuma == 0.0 or sfuma == 1.0)):
+		_sfumatura = sfuma
+		Arena.sfuma(sfuma)
 	_braccio.spring_length = lerpf(BRACCIO_TERZA, 0.0, quota)
 	_braccio.position = _spalla_libera(Vector3(lerpf(SPALLA_TERZA, 0.0, quota),
 			lerpf(_sopra_terza, 0.0, quota), 0.0))
@@ -483,6 +492,34 @@ func _aggiorna_camera(delta: float) -> void:
 	_arma.position = Vector3(0.38, -0.28, -0.45).lerp(Vector3(0.24, -0.27, -0.62), quota) \
 			+ Vector3(0.0, 0.015, 0.07) * calcio
 	_arma.rotation.x = 0.16 * calcio
+
+
+## **Il pavimento non si dirada** (tappa 13, blocco A). Di solito il pavimento più vicino
+## che si vede sta in basso nell'inquadratura a 2,7 m dalla camera; ma guardando in alto
+## la camera scende verso terra, e lì il pavimento sarebbe a ridosso: si diraderebbe e si
+## vedrebbe il vuoto sotto l'arena. Qui si cerca il pavimento più vicino lungo il bordo
+## basso dello schermo (a sinistra, in mezzo, a destra), passando oltre i muri diradati.
+func _pavimento_in_vista() -> float:
+	if Arena.SFUMA_A <= 0.0 or not is_inside_tree():
+		return INF
+	var spazio := get_world_3d().direct_space_state
+	var vista := get_viewport().get_visible_rect().size
+	var occhio := _camera.global_position
+	var minimo := INF
+	for x in [0.02, 0.5, 0.98]:
+		var verso := _camera.project_ray_normal(Vector2(x * vista.x, vista.y - 1.0))
+		var partenza := occhio
+		for tentativo in 3:
+			var domanda := PhysicsRayQueryParameters3D.create(partenza, occhio + verso * (Arena.SFUMA_A + 0.5),
+					Strati.SOLIDO, [get_rid()])
+			var urto := spazio.intersect_ray(domanda)
+			if urto.is_empty():
+				break
+			if (urto["normal"] as Vector3).y > 0.7:
+				minimo = minf(minimo, occhio.distance_to(urto["position"]))
+				break
+			partenza = (urto["position"] as Vector3) + verso * 0.02
+	return minimo
 
 
 ## **La spalla non attraversa i muri.** Dal telefono, il 04/10/2026: *«se sono

@@ -325,6 +325,7 @@ func _ready() -> void:
 	# i pezzi che aggiunge la calcolano sui vertici come tutti gli altri. L'arena-giocattolo
 	# lo fa a passi, un fotogramma l'uno quando si prepara dietro l'ingresso.
 	await Aspetto.veste(self)
+	_sfuma_da_vicino()
 	# Le bandiere della GARA nascono sempre, spente: così l'arena preparata dietro
 	# l'ingresso le scalda con tutto il resto, qualunque modalità si scelga dopo.
 	_bandiere = Bandiere.new()
@@ -383,6 +384,88 @@ func _luce_per_vertice() -> void:
 		var materiale := (nodo as MeshInstance3D).material_override as BaseMaterial3D
 		if materiale != null and materiale.shading_mode == BaseMaterial3D.SHADING_MODE_PER_PIXEL:
 			materiale.shading_mode = BaseMaterial3D.SHADING_MODE_PER_VERTEX
+
+
+## **I muri che riempivano lo schermo** (problema 5 di `PROBLEMI.md`, tappa 13 blocco A).
+## Correndo, la camera in terza persona sta 3,9 m dietro e 85 cm a destra: lungo un muro,
+## sotto una rampa o sotto una terrazza il pezzo più vicino copriva metà dello schermo (col
+## pilota nella palestra, 8,7 s su 60 sopra il 40 %). Come nei giochi in terza persona di
+## oggi, quello che sta a ridosso della camera si dirada a puntini e lascia vedere oltre:
+## invisibile sotto `SFUMA_DA`, pieno da `SFUMA_A`. I pezzi sono quelli fermi dell'arena,
+## presi qui prima che nascano corpi, palle e bandiere; e si diradano solo in terza persona
+## e mai fin dove arriva il pavimento che si vede (`sfuma`, lo chiama il giocatore): in
+## prima, addossati a un muro, ci si vedrebbe attraverso, e il pavimento diradato
+## mostrerebbe il vuoto sotto l'arena (`Giocatore._pavimento_in_vista`).
+const SFUMA_DA := 1.8
+const SFUMA_A := 2.5
+static var _sfumati: Array[Material] = []
+static var _quanto_sfuma := 1.0
+static var _sfumati_da := 0
+
+
+func _sfuma_da_vicino() -> void:
+	_non_sfumare_piu()
+	_sfumati_da = get_instance_id()
+	for nodo in find_children("*", "MeshInstance3D", true, false):
+		var pezzo := nodo as MeshInstance3D
+		var materiali: Array[Material] = [pezzo.material_override]
+		if pezzo.mesh != null:
+			for i in pezzo.mesh.get_surface_count():
+				materiali.append(pezzo.get_surface_override_material(i))
+				materiali.append(pezzo.mesh.surface_get_material(i))
+		for materiale in materiali:
+			if materiale == null or _sfumati.has(materiale):
+				continue
+			if materiale is BaseMaterial3D:
+				var base := materiale as BaseMaterial3D
+				if base.transparency == BaseMaterial3D.TRANSPARENCY_ALPHA:
+					continue
+				base.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_DITHER
+			elif not (materiale is ShaderMaterial and (materiale as ShaderMaterial).shader != null
+					and (materiale as ShaderMaterial).shader.code.contains("uniform float sfuma_da")):
+				continue
+			_sfumati.append(materiale)
+	sfuma(_quanto_sfuma)
+
+
+## Quanto si diradano i pezzi a ridosso della camera: 1 in terza persona, 0 in prima.
+static func sfuma(quanto: float) -> void:
+	_quanto_sfuma = quanto
+	var da := SFUMA_DA * quanto
+	# `smoothstep` con i due estremi uguali non è definito: il secondo resta sopra il primo.
+	var a := maxf(SFUMA_A * quanto, da + 0.001)
+	for materiale in _sfumati:
+		if materiale is BaseMaterial3D:
+			(materiale as BaseMaterial3D).distance_fade_min_distance = da
+			(materiale as BaseMaterial3D).distance_fade_max_distance = a
+		else:
+			(materiale as ShaderMaterial).set_shader_parameter(&"sfuma_da", da)
+			(materiale as ShaderMaterial).set_shader_parameter(&"sfuma_a", a)
+
+
+## Fin dove, davanti alla camera, i pezzi sono diradati: la mira comincia da lì. Senza
+## un'arena (gli attrezzi con l'angolo di prova) non c'è niente di diradato.
+static func sfumato_fino() -> float:
+	return SFUMA_DA * _quanto_sfuma if not _sfumati.is_empty() else 0.0
+
+
+## Alla fine dell'arena i materiali tornano come prima: alcuni sono di `Vestizione`, li
+## condivide tutto il gioco, e il palco dell'ingresso se ne fa una copia quando si apre.
+## Alla fine, non quando esce dall'albero: l'arena preparata dietro l'ingresso ne esce e
+## ci rientra al GIOCA.
+func _notification(cosa: int) -> void:
+	if cosa == NOTIFICATION_PREDELETE and _sfumati_da == get_instance_id():
+		_non_sfumare_piu()
+
+
+static func _non_sfumare_piu() -> void:
+	for materiale in _sfumati:
+		if materiale is BaseMaterial3D:
+			(materiale as BaseMaterial3D).distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_DISABLED
+		else:
+			(materiale as ShaderMaterial).set_shader_parameter(&"sfuma_da", 0.0)
+			(materiale as ShaderMaterial).set_shader_parameter(&"sfuma_a", 0.001)
+	_sfumati.clear()
 
 
 ## Un fotogramma di respiro fra due passi della costruzione, solo quando l'arena si

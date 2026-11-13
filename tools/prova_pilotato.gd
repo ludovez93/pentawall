@@ -242,6 +242,7 @@ func _un_fotogramma(passo: float) -> void:
 		_rosso = "caduto sotto l'arena in %s" % _dove(_tu.global_position)
 		return
 	_guarda_il_cartello()
+	_conta_i_muri(passo)
 	# Ogni cinque secondi, dove sta e dove va: il diario dice cosa faceva fra un fatto e
 	# l'altro.
 	if int(_tempo / 5.0) != int((_tempo - passo) / 5.0):
@@ -443,6 +444,140 @@ func _conta_chi_si_vede(passo: float) -> void:
 		_in_vista_15 += passo
 	if vicino <= Avversario.PORTATA_NOMI_APERTA:
 		_in_vista_40 += passo
+
+
+## **Il problema 5 di `PROBLEMI.md`** (tappa 13, blocco A): quanto schermo copre un solido
+## **più vicino del personaggio**. Una griglia di 16 × 9 raggi dalla camera; un raggio
+## conta se tocca un solido prima del petto e se quel solido non è un piano su cui si
+## cammina (normale con y sopra 0,7: pavimenti e piano delle rampe si guardano dall'alto e
+## non coprono niente). Un fotogramma ha il muro «in faccia» se ne è coperto il 40 %.
+## Ogni volta che succede, il diario dice per quanto, quale pezzo e dove stava la camera.
+const GRIGLIA_MURI := Vector2i(16, 9)
+const IN_FACCIA := 0.4
+var _secondi_in_faccia := 0.0
+var _copertura_sommata := 0.0
+var _fotogrammi_misurati := 0
+var _episodio := {}
+var _episodi: Array[Dictionary] = []
+## Le ampiezze della sfumatura messe a confronto sulla stessa strada: da, a (metri).
+const PROVE_SFUMA := [[0.0, 0.0], [0.9, 1.5], [1.5, 2.1], [1.8, 2.5], [2.2, 3.0]]
+var _per_prova: Array[Dictionary] = []
+
+
+func _conta_i_muri(passo: float) -> void:
+	var camera := _tu.camera()
+	var occhio := camera.global_position
+	var petto := occhio.distance_to(_tu.global_position + Vector3(0, 1.1, 0))
+	var spazio := _arena.get_world_3d().direct_space_state
+	var coperti := 0
+	var sopra := 0
+	var pezzi := {}
+	# Quello che sta a ridosso della camera è diradato (`Arena.sfuma`): metà dei puntini c'è
+	# a metà fra i due estremi, e lì il raggio passa oltre. Le altre ampiezze di prova si
+	# contano sulla stessa strada, con la stessa protezione del pavimento.
+	var da := Arena.sfumato_fino() * (Arena.SFUMA_DA + Arena.SFUMA_A) * 0.5 / Arena.SFUMA_DA
+	var pavimento := float(_tu.call("_pavimento_in_vista"))
+	var soglie: Array[float] = []
+	for prova: Array in PROVE_SFUMA:
+		var q := clampf((pavimento - 0.1) / maxf(float(prova[1]), 0.001), 0.0, 1.0) if float(prova[1]) > 0.0 else 0.0
+		soglie.append(q * (float(prova[0]) + float(prova[1])) * 0.5)
+	var coperti_per_prova: Array[int] = []
+	coperti_per_prova.resize(PROVE_SFUMA.size())
+	coperti_per_prova.fill(0)
+	for j in GRIGLIA_MURI.y:
+		for i in GRIGLIA_MURI.x:
+			var p := Vector2((i + 0.5) / GRIGLIA_MURI.x, (j + 0.5) / GRIGLIA_MURI.y) * _vista
+			var verso := camera.project_ray_normal(p)
+			# Tutti i solidi lungo il raggio fino al petto, in ordine.
+			var urti: Array[Dictionary] = []
+			var partenza := occhio
+			for tentativo in 5:
+				var domanda := PhysicsRayQueryParameters3D.create(partenza, occhio + verso * petto, Strati.SOLIDO)
+				var u := spazio.intersect_ray(domanda)
+				if u.is_empty():
+					break
+				urti.append(u)
+				partenza = (u["position"] as Vector3) + verso * 0.02
+			for k in PROVE_SFUMA.size():
+				for u in urti:
+					if occhio.distance_to(u["position"]) >= soglie[k]:
+						if (u["normal"] as Vector3).y <= 0.7:
+							coperti_per_prova[k] += 1
+						break
+			var urto := {}
+			for u in urti:
+				if occhio.distance_to(u["position"]) >= da:
+					urto = u
+					break
+			if urto.is_empty() or (urto["normal"] as Vector3).y > 0.7:
+				continue
+			coperti += 1
+			if (urto["normal"] as Vector3).y < -0.5:
+				sopra += 1
+			var nome := _nome_del_pezzo(urto["collider"])
+			pezzi[nome] = int(pezzi.get(nome, 0)) + 1
+	var copertura := float(coperti) / float(GRIGLIA_MURI.x * GRIGLIA_MURI.y)
+	if _per_prova.is_empty():
+		for k in PROVE_SFUMA.size():
+			_per_prova.append({"secondi": 0.0, "somma": 0.0})
+	for k in PROVE_SFUMA.size():
+		var c := float(coperti_per_prova[k]) / float(GRIGLIA_MURI.x * GRIGLIA_MURI.y)
+		_per_prova[k]["somma"] = float(_per_prova[k]["somma"]) + c
+		if c >= IN_FACCIA:
+			_per_prova[k]["secondi"] = float(_per_prova[k]["secondi"]) + passo
+	_copertura_sommata += copertura
+	_fotogrammi_misurati += 1
+	if copertura >= IN_FACCIA:
+		_secondi_in_faccia += passo
+		if _episodio.is_empty():
+			_episodio = {"da": _tempo, "fino": _tempo, "massimo": 0.0, "pezzi": {}, "sopra": 0,
+					"coperti": 0, "dove": _tu.global_position, "braccio": INF, "spalla": INF,
+					"sfuma": INF, "pavimento": INF}
+		_episodio["fino"] = _tempo
+		_episodio["massimo"] = maxf(float(_episodio["massimo"]), copertura)
+		_episodio["sopra"] = int(_episodio["sopra"]) + sopra
+		_episodio["coperti"] = int(_episodio["coperti"]) + coperti
+		for nome: String in pezzi:
+			_episodio["pezzi"][nome] = int(_episodio["pezzi"].get(nome, 0)) + int(pezzi[nome])
+		var braccio := _tu.get("_braccio") as SpringArm3D
+		_episodio["braccio"] = minf(float(_episodio["braccio"]), braccio.get_hit_length())
+		_episodio["spalla"] = minf(float(_episodio["spalla"]), braccio.position.x)
+		_episodio["sfuma"] = minf(float(_episodio["sfuma"]), Arena.sfumato_fino())
+		_episodio["pavimento"] = minf(float(_episodio["pavimento"]), pavimento)
+	elif not _episodio.is_empty():
+		_chiudi_episodio()
+
+
+func _chiudi_episodio() -> void:
+	var e := _episodio
+	_episodio = {}
+	_episodi.append(e)
+	var chi := ""
+	var quanti := 0
+	for nome: String in e["pezzi"]:
+		if int(e["pezzi"][nome]) > quanti:
+			quanti = int(e["pezzi"][nome])
+			chi = nome
+	_diario("muro in faccia per %.1f s (da %.1f), fino al %d %%: %s, sopra la camera %d %% · braccio %.1f m, spalla %.2f m, diradato fino a %.1f m (pavimento a %.1f), in %s"
+			% [float(e["fino"]) - float(e["da"]) + 1.0 / 30.0, float(e["da"]), roundi(float(e["massimo"]) * 100.0),
+			chi, roundi(100.0 * float(e["sopra"]) / maxf(float(e["coperti"]), 1.0)), float(e["braccio"]),
+			float(e["spalla"]), float(e["sfuma"]), float(e["pavimento"]), _dove(e["dove"])])
+
+
+func _nome_del_pezzo(corpo: Object) -> String:
+	if not (corpo is Node):
+		return "?"
+	var nodo := corpo as Node
+	if nodo.is_in_group(Arena.GRUPPO_RAMPE):
+		return "rampa"
+	if nodo.is_in_group(Arena.GRUPPO_SOFFITTI):
+		return "terrazza"
+	if nodo.has_meta(&"muro"):
+		var muri: Array = (_arena.get("_pianta") as Dictionary)["muri"]
+		return "muro «%s»" % String((muri[int(nodo.get_meta(&"muro"))] as Dictionary).get("nome", "?"))
+	if nodo.has_meta(&"zona"):
+		return "piano della zona %d" % int(nodo.get_meta(&"zona"))
+	return "%s %s %s" % [nodo.name, str(nodo.get_groups()), _dove((nodo as Node3D).global_position) if nodo is Node3D else ""]
 
 
 ## Un cartello nuovo al centro: `Comandi.annuncia` rimette il suo tempo a 1,6 s, quindi
@@ -753,6 +888,15 @@ func _fine(errore: String, aspetto_di_prima: int, modalita_di_prima: int) -> voi
 			pezzi.append("%s %d" % [String(riga["nome"]), int(riga["punti"])])
 		print("classifica a %.0f s: %s" % [_tempo, " · ".join(pezzi)])
 	print(_conto_dei_cartelli())
+	if not _episodio.is_empty():
+		_chiudi_episodio()
+	print("muri in faccia (più del %d %% dello schermo): %.1f s su %.1f in %d volte · copertura media %.1f %%"
+			% [roundi(IN_FACCIA * 100.0), _secondi_in_faccia, _tempo, _episodi.size(),
+			100.0 * _copertura_sommata / maxf(float(_fotogrammi_misurati), 1.0)])
+	for k in _per_prova.size():
+		print("  sfumatura %.1f-%.1f m: in faccia %.1f s, copertura media %.1f %%" % [float(PROVE_SFUMA[k][0]),
+				float(PROVE_SFUMA[k][1]), float(_per_prova[k]["secondi"]),
+				100.0 * float(_per_prova[k]["somma"]) / maxf(float(_fotogrammi_misurati), 1.0)])
 	print("salti per sbloccarsi: %d%s" % [_salti.size(),
 			("  — " + ", ".join(PackedStringArray(_salti))) if not _salti.is_empty() else ""])
 	if _rosso != "":

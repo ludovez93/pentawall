@@ -165,9 +165,11 @@ static func punto_finale(tratti: Array) -> Vector3:
 ## la mira ha sempre una risposta e il proiettile non ha mai una direzione nulla.
 static func punto_mirato(spazio: PhysicsDirectSpaceState3D, camera: Camera3D,
 		portata: float = PORTATA_MIRA, esclusi: Array[RID] = []) -> Vector3:
-	var origine := camera.global_position
 	var verso := -camera.global_transform.basis.z
-	var lontano := origine + verso * portata
+	var lontano := camera.global_position + verso * portata
+	# Quello che sta a ridosso della camera in terza persona è diradato (`Arena.sfuma`):
+	# si mira a quello che si vede oltre.
+	var origine := camera.global_position + verso * Arena.sfumato_fino()
 	if spazio == null:
 		return lontano
 	var domanda := PhysicsRayQueryParameters3D.create(origine, lontano, Strati.TIRO, esclusi)
