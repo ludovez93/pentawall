@@ -391,13 +391,27 @@ func _luce_per_vertice() -> void:
 ## sotto una rampa o sotto una terrazza il pezzo più vicino copriva metà dello schermo (col
 ## pilota nella palestra, 8,7 s su 60 sopra il 40 %). Come nei giochi in terza persona di
 ## oggi, quello che sta a ridosso della camera si dirada a puntini e lascia vedere oltre:
-## invisibile sotto `SFUMA_DA`, pieno da `SFUMA_A`. I pezzi sono quelli fermi dell'arena,
-## presi qui prima che nascano corpi, palle e bandiere; e si diradano solo in terza persona
-## e mai fin dove arriva il pavimento che si vede (`sfuma`, lo chiama il giocatore): in
-## prima, addossati a un muro, ci si vedrebbe attraverso, e il pavimento diradato
-## mostrerebbe il vuoto sotto l'arena (`Giocatore._pavimento_in_vista`).
+## invisibile sotto `SFUMA_DA`, pieno da `SFUMA_A`; solo in terza persona e mai fin dove
+## arriva il pavimento che si vede (`sfuma`, lo chiama il giocatore): in prima, addossati a
+## un muro, ci si vedrebbe attraverso, e il pavimento diradato mostrerebbe il vuoto sotto
+## l'arena (`Giocatore._pavimento_in_vista`). I pavimenti non si diradano mai.
+##
+## **Solo i pezzi vicini** (`avvicina`, 14/11/2026). Diradare vuol dire scartare pixel, e un
+## materiale che scarta pixel toglie all'iPhone il suo modo di non disegnare quello che sta
+## dietro: col diradato su tutti i materiali dell'arena la prima partita al telefono è
+## andata a 30 fotogrammi, scala al minimo, con 8 ms di lavoro su 33 (le partite di prima
+## stavano fra 51 e 60). Adesso ogni pezzo ha due materiali, il suo e una copia diradata, e
+## prende la copia solo quando la camera entra nella sua scatola allargata di `SFUMA_A`: di
+## solito il settore dei muri in cui si corre, non l'arena intera. Le copie hanno un gemello
+## spento, così la vetrina dell'ingresso ne compila lo shader prima della partita.
 const SFUMA_DA := 1.8
 const SFUMA_A := 2.5
+static var _sfumabili: Array[MeshInstance3D] = []
+static var _pieni: Array[Material] = []
+static var _diradati: Array[Material] = []
+static var _scatole: Array[AABB] = []
+static var _accesi := PackedByteArray()
+## Le copie diradate, e le decalcomanie, che scartano pixel comunque e si diradano sempre.
 static var _sfumati: Array[Material] = []
 static var _quanto_sfuma := 1.0
 static var _sfumati_da := 0
@@ -406,25 +420,36 @@ static var _sfumati_da := 0
 func _sfuma_da_vicino() -> void:
 	_non_sfumare_piu()
 	_sfumati_da = get_instance_id()
+	var copie := {}
 	for nodo in find_children("*", "MeshInstance3D", true, false):
 		var pezzo := nodo as MeshInstance3D
-		var materiali: Array[Material] = [pezzo.material_override]
-		if pezzo.mesh != null:
-			for i in pezzo.mesh.get_surface_count():
-				materiali.append(pezzo.get_surface_override_material(i))
-				materiali.append(pezzo.mesh.surface_get_material(i))
-		for materiale in materiali:
-			if materiale == null or _sfumati.has(materiale):
-				continue
-			if materiale is BaseMaterial3D:
-				var base := materiale as BaseMaterial3D
-				if base.transparency == BaseMaterial3D.TRANSPARENCY_ALPHA:
-					continue
-				base.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_DITHER
-			elif not (materiale is ShaderMaterial and (materiale as ShaderMaterial).shader != null
-					and (materiale as ShaderMaterial).shader.code.contains("uniform float sfuma_da")):
-				continue
-			_sfumati.append(materiale)
+		var pieno := pezzo.material_override
+		if pieno == null or pezzo.mesh == null:
+			continue
+		if pezzo.get_parent() is StaticBody3D and pezzo.get_parent().has_meta(&"zona"):
+			continue
+		if pieno is ShaderMaterial:
+			if (pieno as ShaderMaterial).shader != null 					and (pieno as ShaderMaterial).shader.code.contains("uniform float sfuma_da") 					and not _sfumati.has(pieno):
+				_sfumati.append(pieno)
+			continue
+		if not (pieno is BaseMaterial3D) 				or (pieno as BaseMaterial3D).transparency == BaseMaterial3D.TRANSPARENCY_ALPHA:
+			continue
+		if not copie.has(pieno):
+			var copia := pieno.duplicate() as BaseMaterial3D
+			copia.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_DITHER
+			copie[pieno] = copia
+			_sfumati.append(copia)
+			var gemello := MeshInstance3D.new()
+			gemello.mesh = pezzo.mesh
+			gemello.material_override = copia
+			gemello.visible = false
+			add_child(gemello)
+		_sfumabili.append(pezzo)
+		_pieni.append(pieno)
+		_diradati.append(copie[pieno])
+		_scatole.append((pezzo.global_transform * pezzo.get_aabb()).grow(SFUMA_A))
+	_accesi.resize(_sfumabili.size())
+	_accesi.fill(0)
 	sfuma(_quanto_sfuma)
 
 
@@ -443,29 +468,43 @@ static func sfuma(quanto: float) -> void:
 			(materiale as ShaderMaterial).set_shader_parameter(&"sfuma_a", a)
 
 
+## Ogni fotogramma, dalla camera di chi gioca: la copia diradata ai pezzi vicini, il
+## materiale pieno a tutti gli altri.
+static func avvicina(occhio: Vector3) -> void:
+	var acceso := _quanto_sfuma > 0.0
+	for i in _sfumabili.size():
+		var vicino := 1 if acceso and _scatole[i].has_point(occhio) else 0
+		if vicino != _accesi[i] and is_instance_valid(_sfumabili[i]):
+			_accesi[i] = vicino
+			_sfumabili[i].material_override = _diradati[i] if vicino == 1 else _pieni[i]
+
+
 ## Fin dove, davanti alla camera, i pezzi sono diradati: la mira comincia da lì. Senza
 ## un'arena (gli attrezzi con l'angolo di prova) non c'è niente di diradato.
 static func sfumato_fino() -> float:
 	return SFUMA_DA * _quanto_sfuma if not _sfumati.is_empty() else 0.0
 
 
-## Alla fine dell'arena i materiali tornano come prima: alcuni sono di `Vestizione`, li
-## condivide tutto il gioco, e il palco dell'ingresso se ne fa una copia quando si apre.
-## Alla fine, non quando esce dall'albero: l'arena preparata dietro l'ingresso ne esce e
-## ci rientra al GIOCA.
+## Alla fine dell'arena, non quando esce dall'albero: quella preparata dietro l'ingresso ne
+## esce e ci rientra al GIOCA.
 func _notification(cosa: int) -> void:
 	if cosa == NOTIFICATION_PREDELETE and _sfumati_da == get_instance_id():
 		_non_sfumare_piu()
 
 
+## Le decalcomanie tornano piene (il loro materiale lo rifà l'arena dopo, ma per sicurezza),
+## e le liste si svuotano: le copie diradate muoiono con l'arena.
 static func _non_sfumare_piu() -> void:
 	for materiale in _sfumati:
-		if materiale is BaseMaterial3D:
-			(materiale as BaseMaterial3D).distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_DISABLED
-		else:
+		if materiale is ShaderMaterial:
 			(materiale as ShaderMaterial).set_shader_parameter(&"sfuma_da", 0.0)
 			(materiale as ShaderMaterial).set_shader_parameter(&"sfuma_a", 0.001)
 	_sfumati.clear()
+	_sfumabili.clear()
+	_pieni.clear()
+	_diradati.clear()
+	_scatole.clear()
+	_accesi.resize(0)
 
 
 ## Un fotogramma di respiro fra due passi della costruzione, solo quando l'arena si

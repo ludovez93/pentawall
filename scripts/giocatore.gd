@@ -451,6 +451,8 @@ func _aggiorna_camera(delta: float) -> void:
 	if absf(sfuma - _sfumatura) > 0.01 or (sfuma != _sfumatura and (sfuma == 0.0 or sfuma == 1.0)):
 		_sfumatura = sfuma
 		Arena.sfuma(sfuma)
+	if _camera.current:
+		Arena.avvicina(_camera.global_position)
 	_braccio.spring_length = lerpf(BRACCIO_TERZA, 0.0, quota)
 	_braccio.position = _spalla_libera(Vector3(lerpf(SPALLA_TERZA, 0.0, quota),
 			lerpf(_sopra_terza, 0.0, quota), 0.0))

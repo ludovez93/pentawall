@@ -554,6 +554,7 @@ var _episodi: Array[Dictionary] = []
 ## Il terzo numero, se c'è, è il margine sul pavimento che si vede (nel gioco 0,35).
 const PROVE_SFUMA := [[0.0, 0.0], [0.9, 1.5], [1.5, 2.1], [1.8, 2.5], [2.2, 3.0], [1.8, 2.5, 0.1]]
 var _per_prova: Array[Dictionary] = []
+var _diradati_sommati := 0
 
 
 func _conta_i_muri(passo: float) -> void:
@@ -619,6 +620,11 @@ func _conta_i_muri(passo: float) -> void:
 		if c >= IN_FACCIA:
 			_per_prova[k]["secondi"] = float(_per_prova[k]["secondi"]) + passo
 	_copertura_sommata += copertura
+	# Quanti pezzi portano la copia diradata (`Arena.avvicina`): è il costo sulla scheda.
+	var accesi := 0
+	for acceso in Arena._accesi:
+		accesi += acceso
+	_diradati_sommati += accesi
 	_fotogrammi_misurati += 1
 	if copertura >= IN_FACCIA:
 		_secondi_in_faccia += passo
@@ -991,6 +997,8 @@ func _fine(errore: String, aspetto_di_prima: int, modalita_di_prima: int) -> voi
 	print("muri in faccia (più del %d %% dello schermo): %.1f s su %.1f in %d volte · copertura media %.1f %%"
 			% [roundi(IN_FACCIA * 100.0), _secondi_in_faccia, _tempo, _episodi.size(),
 			100.0 * _copertura_sommata / maxf(float(_fotogrammi_misurati), 1.0)])
+	print("  pezzi con la copia diradata: in media %.1f su %d" % [
+			float(_diradati_sommati) / maxf(float(_fotogrammi_misurati), 1.0), Arena._sfumabili.size()])
 	for k in _per_prova.size():
 		print("  sfumatura %.1f-%.1f m%s: in faccia %.1f s, copertura media %.1f %%" % [float(PROVE_SFUMA[k][0]),
 				float(PROVE_SFUMA[k][1]), (" (margine %.2f)" % float(PROVE_SFUMA[k][2])) if PROVE_SFUMA[k].size() > 2 else "",
