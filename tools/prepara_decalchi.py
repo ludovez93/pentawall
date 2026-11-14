@@ -14,6 +14,8 @@ Le caselle (in pixel, sul foglio da 1024):
   TRIBUNA         0, 384 -  512, 512      PORTICO  512, 384 - 1024, 512
   stella          0, 512 -  256, 768      cinque   256, 512 -  512, 768
   frecce        512, 512 -  768, 768      fulmine  768, 512 - 1024, 768
+  GORGOLÌ         0, 768 -  512, 896      TRULLALLÀ 512, 768 - 1024, 896
+  GNAMBOLLA       0, 896 -  512, 1024     (i tre marchi inventati dei cartelloni, tappa 14)
 
 Uso (dalla cartella `gioco/`):  python tools/prepara_decalchi.py
 """
@@ -121,7 +123,10 @@ def main() -> None:
     verde = Image.new("L", (LATO, LATO), 0)
     for testo, casella in [("PENTAWALL", (0, 0, 1024, 256)), ("OCRA", (0, 256, 512, 384)),
                            ("TURBO", (512, 256, 1024, 384)), ("TRIBUNA", (0, 384, 512, 512)),
-                           ("PORTICO", (512, 384, 1024, 512))]:
+                           ("PORTICO", (512, 384, 1024, 512)),
+                           # I tre marchi inventati dei cartelloni (tappa 14).
+                           ("GORGOLÌ", (0, 768, 512, 896)), ("TRULLALLÀ", (512, 768, 1024, 896)),
+                           ("GNAMBOLLA", (0, 896, 512, 1024))]:
         pieno, contorno = maschera_testo(testo, casella)
         incolla(rosso, verde, pieno, contorno, casella[:2])
     s = stella(256)

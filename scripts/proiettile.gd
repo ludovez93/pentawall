@@ -276,8 +276,9 @@ static func _corredo() -> void:
 		_pelle_scia.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 
 	_pelle_guscio.albedo_color = colore_riservato * 1.9
-	var scia := colore_riservato * 1.25
-	scia.a = 0.5
+	# La scia è chiara (tappa 14): il dardo arancione si perdeva sui pannelli arancioni,
+	# e adesso lo stacca la scia, non il colore.
+	var scia := Color(1.0, 0.97, 0.88, 0.78)
 	_pelle_scia.albedo_color = scia
 
 

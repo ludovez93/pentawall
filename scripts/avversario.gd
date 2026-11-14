@@ -241,6 +241,7 @@ var spinta := 1.0
 var radar := false
 var _corpo: Corpo
 var _targhetta: Label3D
+var _anello: MeshInstance3D
 var _fantasma := false
 
 
@@ -1036,6 +1037,13 @@ func _costruisci() -> void:
 	a_misura_fissa(_targhetta)
 	_targhetta.position = Vector3(0, ALTEZZA_CORPO + 0.32, 0)
 	_aspetto.add_child(_targhetta)
+	# L'anello lime a terra e la targhetta scura dietro il nome (tappa 14), coi corpi a
+	# cartone dell'arena aperta: «BRACE» era bianco sul cielo.
+	if Aspetto.corpi_a_cartone():
+		_anello = Corpo.anello_a_terra(Color(ALONI[alone_scelto]["colore"]))
+		_aspetto.add_child(_anello)
+		_targhetta.outline_size = 46
+		_targhetta.outline_modulate = Color(0.04, 0.06, 0.18, 0.92)
 
 	# La canna del gioco: da qui parte il dardo, come sempre. Il lampo alla bocca lo
 	# fa il blaster del corpo, che sta nella mano e si muove con lei.
@@ -1120,7 +1128,9 @@ func _aggiorna_i_contorni() -> void:
 		var nome := clampf((PORTATA_NOMI_APERTA - distanza) / DISSOLVENZA_ALONE, 0.0, 1.0)
 		_targhetta.visible = nome > 0.0 and not _fantasma
 		_targhetta.modulate.a = 0.95 * nome
-		_targhetta.outline_modulate.a = 0.85 * nome
+		_targhetta.outline_modulate.a = (0.92 if _anello != null else 0.85) * nome
+		if _anello != null:
+			_anello.visible = _targhetta.visible
 
 
 ## Un corpo vero al posto della capsula (tappa 7). `contorni` sono i gusci del

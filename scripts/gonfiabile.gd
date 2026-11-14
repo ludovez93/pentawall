@@ -53,6 +53,9 @@ static func veste(arena: Arena) -> void:
 	_vasca(arena, materiale)
 	await arena._respiro()
 	_oggetti(arena, materiale)
+	await arena._respiro()
+	# Tribune, cartelloni e tabellone fuori dal perimetro (tappa 14).
+	Tribune.costruisci(arena, materiale)
 
 
 # ------------------------------------------------------------------ le colonne

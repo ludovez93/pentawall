@@ -659,7 +659,8 @@ func _costruisci() -> void:
 		# I punti saltano fuori dove succede, in Bebas col contorno navy: sono l'unica
 		# scritta che vive sulla scena nuda, e senza contorno sul cielo chiaro sparisce.
 		# 50 (era 37, tappa 12, D3): a 37 sul telefono erano 14 punti d'altezza in piena azione.
-		var etichetta := _etichetta(50, Color.WHITE, 10)
+		# In oro e più grande (tappa 14): l'oro è il colore dei punti presi.
+		var etichetta := _etichetta(62, ORO, 12)
 		etichetta.add_theme_font_override("font", carattere_titolo())
 		etichetta.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		etichetta.visible = false

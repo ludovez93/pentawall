@@ -17,6 +17,12 @@ extends Node3D
 const DURATA := 0.42
 const STELLA := 2.2      ## metri, al massimo
 const SBUFFO := 0.95
+## **La stella si misura sullo schermo** (tappa 14): 2,2 metri a tre metri di distanza
+## coprivano mezza schermata, a venti erano un puntino. Adesso la stella aperta sta fra
+## questa quota dell'altezza dello schermo e quella massima, a qualunque distanza — in
+## partita gli effetti sono piccoli, ma si devono vedere.
+const QUOTA_MINIMA := 0.17
+const QUOTA_MASSIMA := 0.26
 const ORO := Color(1.0, 0.86, 0.30)
 
 static var _pelle_stella: StandardMaterial3D = null
@@ -64,12 +70,24 @@ func _process(delta: float) -> void:
 ## si gonfiano andando di lato e in su, e poi si sgonfiano.
 func _muovi() -> void:
 	var t := _vita / DURATA
-	var stella := STELLA * (smoothstep(0.0, 0.14, t) * (1.0 - smoothstep(0.35, 0.8, t)))
+	var cresce := _a_misura_di_schermo()
+	var stella := STELLA * cresce * (smoothstep(0.0, 0.14, t) * (1.0 - smoothstep(0.35, 0.8, t)))
 	(_stella.mesh as QuadMesh).size = Vector2(stella, stella)
 	for k in _sbuffi.size():
-		var misura := SBUFFO * sin(clampf(t * 1.15, 0.0, 1.0) * PI) * (0.8 + 0.2 * float(k))
+		var misura := SBUFFO * cresce * sin(clampf(t * 1.15, 0.0, 1.0) * PI) * (0.8 + 0.2 * float(k))
 		(_sbuffi[k].mesh as QuadMesh).size = Vector2(misura, misura)
-		_sbuffi[k].position = _versi[k] * (0.25 + 0.9 * t)
+		_sbuffi[k].position = _versi[k] * (0.25 + 0.9 * t) * cresce
+
+
+## Di quanto crescono o calano stella e sbuffi perché la stella aperta stia fra
+## `QUOTA_MINIMA` e `QUOTA_MASSIMA` dell'altezza dello schermo. Senza camera, uno.
+func _a_misura_di_schermo() -> float:
+	var camera := get_viewport().get_camera_3d() if is_inside_tree() else null
+	if camera == null:
+		return 1.0
+	var distanza := maxf(camera.global_position.distance_to(global_position), 0.5)
+	var schermo := 2.0 * distanza * tan(deg_to_rad(camera.fov) * 0.5)
+	return clampf(STELLA, QUOTA_MINIMA * schermo, QUOTA_MASSIMA * schermo) / STELLA
 
 
 func _quadro(pelle: Material) -> MeshInstance3D:

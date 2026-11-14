@@ -347,7 +347,7 @@ static func _tabellone(arena: Node3D) -> Node3D:
 			# A due facce (vedi `_insegna`): da dietro la copre lo schermo.
 			riga.double_sided = true
 			riga.alpha_cut = Label3D.ALPHA_CUT_DISCARD
-			riga.text = "PENTAWALL" if k == 0 else "5 MURI"
+			riga.text = "PENTAWALL" if k == 0 else "ARENA"
 			lato.add_child(riga)
 		# La cornice al neon attorno allo schermo.
 		for bordo in [
@@ -425,8 +425,10 @@ static func arreda_angolo(arena: Node3D) -> void:
 		_bordo(arena, cassone["centro"], cassone["misura"], float(cassone["alto"]) + 0.02)
 
 	# L'insegna dell'angolo: sul muro che chiude verso l'angolo, faccia a ovest,
-	# dove la si vede appena partiti. Dice la regola del gioco in due parole.
-	_insegna(arena, "5 MURI", Vector3(-13.45, 5.0, -28.0), -90.0, Vector2(6.0, 1.9), 1.5)
+	# dove la si vede appena partiti. Dice la regola del gioco in due parole: qui si
+	# fanno punti (fino alla tappa 14 diceva «5 MURI», ma il rimbalzo non è il soggetto:
+	# `DECISIONI.md` § 20).
+	_insegna(arena, "A PUNTI", Vector3(-13.45, 5.0, -28.0), -90.0, Vector2(6.0, 1.9), 1.5)
 
 	# L'insegna grande del cuore diventa un oggetto: pannello scuro, cornice al
 	# neon, e la scritta che c'era già davanti.

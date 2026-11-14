@@ -607,6 +607,9 @@ func _costruisci() -> void:
 	# una sfera gialla per casco. Per il motore resta la capsula di sopra.
 	_corpo = Corpo.crea("TU")
 	_corpo_visibile.add_child(_corpo)
+	# L'anello bianco a terra di chi gioca (tappa 14), coi corpi a cartone.
+	if Aspetto.corpi_a_cartone():
+		_corpo_visibile.add_child(Corpo.anello_a_terra(Color(0.97, 0.97, 1.0)))
 
 	# Il blaster della prima persona: lo stesso giocattolo che il corpo tiene in
 	# mano, davanti agli occhi. Sta nell'anima del gioco del 1999 e resta.

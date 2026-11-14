@@ -61,10 +61,25 @@ const ALTEZZA_CORPO := 1.8
 ## è scelto sui colori della sua tuta.
 const CARTONE := "res://assets/models/kenney/mini/"
 const ALTEZZA_CARTONE := 0.6713
+## NEBBIA era `character-female-f`, che ha già uno zainetto suo sulla schiena: bucava
+## quello col numero (tappa 14). Adesso è `female-a`, e le sei teste sono tutte diverse:
+## berretto, pelato, capelli lunghi neri, codini, crocchia e occhiali, ciuffo.
 const FACCE := {
 	"TU": "character-male-c", "BRACE": "character-male-b", "QUARZO": "character-female-e",
-	"LAMPO": "character-female-b", "NEBBIA": "character-female-f", "TORO": "character-male-d",
+	"LAMPO": "character-female-b", "NEBBIA": "character-female-a", "TORO": "character-male-d",
 }
+## **I numeri sulla schiena** (tappa 14): il 7 di TU l'ha scelto Ludovico il 14/11/2026,
+## gli altri sono di lavorazione.
+const NUMERI := {"TU": 7, "BRACE": 3, "QUARZO": 9, "LAMPO": 11, "NEBBIA": 5, "TORO": 8}
+## Lo zaino, nelle unità del modello (alto 0,67): misura, quota del centro sopra l'osso
+## del busto, e quanto sta dietro l'osso la schiena.
+const ZAINO := Vector3(0.27, 0.215, 0.13)
+const ZAINO_QUOTA := 0.03
+const ZAINO_SCHIENA := 0.055
+const ZAINO_PATTA := 0.056
+const DARDO_ZAINO := Color(1.0, 0.45, 0.10)
+const PUNTA_ZAINO := Color(0.10, 0.14, 0.34)
+
 ## La corsa del cartone: il passo della sua libreria si mescola a questa velocità (a occhio
 ## sugli scatti: è una prova).
 const VELOCITA_PASSO_CARTONE := 3.0
@@ -167,6 +182,7 @@ var _materiali_veri := {}
 ## A cartone il modello è scalato di `_scala`, e le crescite dei materiali (contorno,
 ## sagoma) stanno nello spazio del modello: si dividono per lei.
 var _cartone := false
+var _scritte_di_schiena: Array[Label3D] = []
 var _scala := 1.0
 
 
@@ -449,6 +465,9 @@ func fantasma(acceso: bool) -> void:
 			pezzo.material_override = _materiali_veri.get(pezzo)
 	if not acceso:
 		_materiali_veri.clear()
+	# Numero e nome sulla schiena sono scritte, non pezzi: da fantasma spariscono.
+	for scritta in _scritte_di_schiena:
+		scritta.visible = not acceso
 
 
 func e_fantasma() -> bool:
@@ -749,6 +768,7 @@ func _costruisci_a_cartone() -> void:
 			Vector3.ONE * MISURA_BLASTER_CARTONE), PRESA_CARTONE)
 	attacco.add_child(_blaster)
 	_prepara_il_lampo_bocca()
+	_zaino_sulla_schiena()
 
 	var lettore := _modello.find_child("AnimationPlayer", true, false) as AnimationPlayer
 	var libreria := lettore.get_animation_library(&"")
@@ -768,6 +788,111 @@ func _costruisci_a_cartone() -> void:
 	_torsione.quote = [1.0]
 	_scheletro.add_child(_torsione)
 	_scheletro.modifier_callback_mode_process = Skeleton3D.MODIFIER_CALLBACK_MODE_PROCESS_MANUAL
+
+
+## **Lo zaino porta-dardi, col numero e il nome** (tappa 14, blocco A). La schiena è
+## quello che chi gioca guarda per tutta la partita, ed era un blocco liscio: adesso porta
+## uno zaino nei colori della squadra con tre dardi che spuntano, il numero grande e il
+## nome sopra — la maglia numerata di chi gioca a punti. Lo zaino è una mesh sola nel
+## getto di `Giocattolo` (colori sui vertici, il materiale dei moduli); numero e nome sono
+## due scritte senza luce. Tutto appeso all'osso del busto: si piega con la mira.
+func _zaino_sulla_schiena() -> void:
+	var dati: Dictionary = PERSONAGGI.get(chi, PERSONAGGI["BRACE"])
+	var attacco := BoneAttachment3D.new()
+	attacco.bone_name = "torso"
+	attacco.name = "Schiena"
+	_scheletro.add_child(attacco)
+
+	var tinta: Color = dati["tuta"]
+	var secondo: Color = dati["secondo"]
+	var getto := Giocattolo.Getto.new()
+	var centro := Vector3(0.0, ZAINO_QUOTA, -(ZAINO_SCHIENA + ZAINO.z * 0.5))
+	var cima := centro.y + ZAINO.y * 0.5
+	# Il sacco, la patta di sopra che sporge, la tasca bassa e le due cinghie ai lati.
+	getto.scatola(ZAINO, 0.028, tinta, Transform3D(Basis(), centro), 2, 0.3)
+	getto.scatola(Vector3(ZAINO.x + 0.016, ZAINO_PATTA, ZAINO.z + 0.016), 0.016, PUNTA_ZAINO,
+			Transform3D(Basis(), Vector3(0.0, cima - ZAINO_PATTA * 0.5 + 0.004, centro.z)), 2)
+	for lato in [-1.0, 1.0]:
+		getto.scatola(Vector3(0.026, ZAINO.y * 0.78, ZAINO.z * 0.7), 0.01, secondo,
+				Transform3D(Basis(), Vector3(lato * (ZAINO.x * 0.5 + 0.004), centro.y - 0.012, centro.z)), 1)
+	# I tre dardi: gambo arancio del dardo, punta scura. Spuntano dalla patta a ventaglio,
+	# piegati all'indietro perché non entrino nella testa.
+	for k in 3:
+		var piega := Basis(Vector3.RIGHT, deg_to_rad(-24.0)) 				* Basis(Vector3.FORWARD, deg_to_rad(-16.0 + 16.0 * float(k)))
+		var piede := Vector3(-0.062 + 0.062 * float(k), cima - 0.01, centro.z - 0.012)
+		getto.tondo(0.017, 0.11, 0.005, DARDO_ZAINO, Transform3D(piega, piede), 8)
+		getto.tondo(0.024, 0.034, 0.01, PUNTA_ZAINO,
+				Transform3D(piega, piede + piega * Vector3(0.0, 0.1, 0.0)), 8)
+	var sacco := MeshInstance3D.new()
+	sacco.name = "Zaino"
+	sacco.mesh = getto.mesh()
+	# Una pelle per corpo, non una per tutti: contorno, radar e fantasma appendono le loro
+	# passate al materiale, e con una pelle sola il contorno di un avversario finiva
+	# sullo zaino di tutti. Lo shader è lo stesso dei moduli dell'arena.
+	sacco.material_override = Giocattolo._materiale_dei_moduli()
+	sacco.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	attacco.add_child(sacco)
+
+	var faccia := centro.z - ZAINO.z * 0.5 - 0.003
+	var chiaro := Color(0.97, 0.97, 1.0)
+	var numero := _scritta_di_schiena(str(int(NUMERI.get(chi, 0))), 0.125,
+			chiaro if tinta.get_luminance() < 0.6 else Color(0.06, 0.09, 0.22),
+			Color(0.04, 0.06, 0.16) if tinta.get_luminance() < 0.6 else chiaro)
+	numero.name = "Numero"
+	numero.position = Vector3(0.0, centro.y - ZAINO_PATTA * 0.5 - 0.004, faccia)
+	attacco.add_child(numero)
+	var nome := _scritta_di_schiena(chi, 0.042, chiaro, Color(0.04, 0.06, 0.16))
+	nome.name = "Nome"
+	nome.position = Vector3(0.0, cima - ZAINO_PATTA * 0.5 + 0.004, faccia - 0.009)
+	attacco.add_child(nome)
+
+
+## Una scritta sulla schiena, alta `alta` unità del modello: guarda all'indietro, senza
+## luce, col contorno scuro, una faccia sola (da davanti la copre il corpo).
+func _scritta_di_schiena(testo: String, alta: float, colore: Color, bordo: Color) -> Label3D:
+	var scritta := Label3D.new()
+	scritta.text = testo
+	scritta.font = Comandi.carattere_titolo()
+	scritta.font_size = 96
+	scritta.pixel_size = alta / 96.0
+	scritta.outline_size = 14
+	scritta.modulate = colore
+	scritta.outline_modulate = bordo
+	scritta.shaded = false
+	scritta.double_sided = false
+	scritta.alpha_cut = Label3D.ALPHA_CUT_DISCARD
+	scritta.rotation.y = PI
+	_scritte_di_schiena.append(scritta)
+	return scritta
+
+
+## **L'anello a terra** (tappa 14): un cerchio piatto sotto i piedi, lime sotto ogni
+## avversario e bianco sotto chi gioca. Da lontano un avversario era una figurina contro
+## le rocce: l'anello dice «qui c'è qualcuno» prima che si legga il corpo. Senza luce e
+## senza ombra, lo stesso tipo di pelle degli anelli del rimbalzo: niente da compilare.
+static func anello_a_terra(colore: Color) -> MeshInstance3D:
+	if _forma_anello == null:
+		_forma_anello = TorusMesh.new()
+		_forma_anello.inner_radius = 0.66
+		_forma_anello.outer_radius = 0.86
+		_forma_anello.rings = 28
+		_forma_anello.ring_segments = 4
+	var pelle := StandardMaterial3D.new()
+	pelle.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	pelle.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	pelle.albedo_color = Color(colore.r, colore.g, colore.b, 0.92)
+	pelle.disable_receive_shadows = true
+	var anello := MeshInstance3D.new()
+	anello.name = "AnelloATerra"
+	anello.mesh = _forma_anello
+	anello.material_override = pelle
+	anello.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	anello.scale = Vector3(1.0, 0.12, 1.0)
+	anello.position = Vector3(0.0, 0.035, 0.0)
+	return anello
+
+
+static var _forma_anello: TorusMesh = null
 
 
 ## Lo stesso albero dei corpi di oggi, con quello che il cartone ha: corsa (riposo, passo,

@@ -1258,12 +1258,17 @@ func _segui_i_potenziamenti() -> void:
 ## Il tabellone sopra il catino: durante la partita il tempo e chi comanda, a
 ## partita finita chi ha vinto, fuori dalla partita il nome del gioco.
 func _scrivi_il_tabellone() -> void:
-	if _tabellone == null:
-		return
+	var tribune := get_node_or_null("tribune")
 	if not _sfida:
-		Vestizione.aggiorna_tabellone(_tabellone, "PENTAWALL", "5 MURI")
+		Vestizione.aggiorna_tabellone(_tabellone, "PENTAWALL", "ARENA")
+		Tribune.scrivi(tribune, "PENTAWALL", [])
 		return
 	var righe := classifica()
+	# I tabelloni grandi delle tribune (tappa 14): la modalità, il tempo e i primi tre.
+	Tribune.scrivi(tribune, "FINE" if _finita else "%s  %s" % [
+			String(Modalita.NOMI[modalita()]), tempo_scritto()], righe)
+	if _tabellone == null:
+		return
 	var capo := "" if righe.is_empty() else "1° %s · %s" % [String(righe[0]["nome"]),
 			Comandi.valore_di(righe[0])]
 	if _finita:

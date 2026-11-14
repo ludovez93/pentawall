@@ -32,6 +32,9 @@ const CASELLE := {
 	"TRIBUNA": Rect2(0.0, 0.375, 0.5, 0.125), "PORTICO": Rect2(0.5, 0.375, 0.5, 0.125),
 	"stella": Rect2(0.0, 0.5, 0.25, 0.25), "cinque": Rect2(0.25, 0.5, 0.25, 0.25),
 	"frecce": Rect2(0.5, 0.5, 0.25, 0.25), "fulmine": Rect2(0.75, 0.5, 0.25, 0.25),
+	# I tre marchi inventati dei cartelloni (tappa 14, `Tribune.CARTELLONI`).
+	"GORGOLI": Rect2(0.0, 0.75, 0.5, 0.125), "TRULLALLA": Rect2(0.5, 0.75, 0.5, 0.125),
+	"GNAMBOLLA": Rect2(0.0, 0.875, 0.5, 0.125),
 }
 ## Il segno di ogni ala sui suoi muri e sui suoi blocchi; il fulmine è del TURBO.
 const SEGNI := {"ocra": "stella", "mattone": "fulmine", "tribuna": "cinque", "moquette": "frecce"}
@@ -80,6 +83,15 @@ const CATINO := Color(0.38, 0.50, 1.0)
 const IN_ALTO := Color(0.90, 0.90, 1.0)
 const RAMPA := Color(1.0, 0.72, 0.20)
 const CORDOLO := Color(1.0, 0.86, 0.30)
+## **L'arena più calma** (tappa 14), nel PARCO GONFIABILE: i pavimenti erano la cosa più
+## chiara e più larga dello schermo (lavanda a 163-167 su 255, rampe gialle a 160-176), e
+## personaggi e segnali ci sparivano sopra. Qui il campo scende di un terzo e le rampe
+## lasciano il giallo, che è vicino all'oro dei punti, per un ocra spento: il colore pieno
+## resta ai bordi, ai segni e a chi gioca.
+const CAMPO_CALMO := Color(0.40, 0.46, 0.80)
+const CATINO_CALMO := Color(0.26, 0.34, 0.76)
+const IN_ALTO_CALMO := Color(0.66, 0.68, 0.88)
+const RAMPA_CALMA := Color(0.74, 0.50, 0.20)
 
 ## Le rocce del canyon: strati di terracotta, la cima più chiara.
 const ROCCE := [Color(0.86, 0.42, 0.22), Color(0.93, 0.54, 0.28), Color(0.80, 0.34, 0.20)]
@@ -482,6 +494,8 @@ static func _pavimenti(arena: Node3D) -> void:
 			continue
 		var quota := float(zone[int(figlio.get_meta(&"zona"))]["quota"])
 		var colore := CATINO if quota < -1.0 else (IN_ALTO if quota > 1.0 else CAMPO)
+		if Aspetto.scelta() == Aspetto.GONFIABILE:
+			colore = CATINO_CALMO if quota < -1.0 else (IN_ALTO_CALMO if quota > 1.0 else CAMPO_CALMO)
 		if not pronti.has(colore):
 			var m := StandardMaterial3D.new()
 			m.albedo_texture = tessuto
@@ -515,7 +529,7 @@ static func _rampe(arena: Node3D, materiale: Material) -> void:
 		# bordi col fondo dello scivolo.
 		# Nel PARCO GONFIABILE (tappa 11, C3b) lo scivolo e un materasso ad aria a cuscini.
 		if Aspetto.scelta() == Aspetto.GONFIABILE:
-			Gonfiabile.scivolo(getto, misura, corpo.transform, RAMPA, BLU)
+			Gonfiabile.scivolo(getto, misura, corpo.transform, RAMPA_CALMA, BLU)
 		else:
 			getto.scatola(misura - Vector3(0.02, 0.0, 0.0), 0.1, RAMPA, corpo.transform)
 			for lato in [-1.0, 1.0]:
@@ -659,6 +673,11 @@ static func _fuori(arena: Node3D, materiale: Material) -> void:
 	for k in quante:
 		var angolo := TAU * float(k) / float(quante) + rng.randf_range(-0.08, 0.08)
 		var distanza := rng.randf_range(68.0, 87.0)
+		# Nel PARCO GONFIABILE il canyon sta undici metri più in là (tappa 14): fuori
+		# dal perimetro ci sono le tribune, e una roccia ci entrava dentro fino a coprire
+		# il tabellone. Gli stessi tiri a caso, la stessa figura.
+		if Aspetto.scelta() == Aspetto.GONFIABILE:
+			distanza += 11.0
 		var centro := Vector2(cos(angolo), sin(angolo)) * distanza
 		var lontano := clampf((distanza - 68.0) / 36.0, 0.0, 1.0) * 0.2
 		_roccia(getti[_quadrante(centro)], centro, rng.randf_range(14.5, 20.6),
