@@ -301,6 +301,43 @@ func _muovi_le_etichette(delta: float) -> void:
 		var ingombro := _ingombro_delle_scritte()
 		if ingombro.has_area() and ingombro.intersects(etichetta.get_global_rect()):
 			etichetta.global_position.y = ingombro.end.y
+	_zittisci_i_nomi_sotto(camera)
+
+
+## Quanto tace un nome che finisce sotto una scritta. Si rinnova a ogni fotogramma finché
+## la scritta è lì; dopo, il nome torna in un decimo di secondo.
+const NOME_SOTTO_UNA_SCRITTA := 0.1
+
+
+## **Due scritte non si coprono mai**, nemmeno coi nomi sopra le teste. Il nome di chi è
+## stato colpito taceva già; quello di chi gli stava accanto no, e il «+25 · DIRETTO» ci
+## passava sopra: QUARZO accanto a BRACE, nei fogli e3 ed f1 della tappa 14 (15/11/2026).
+## Ora tace ogni nome che finirebbe sotto un'etichetta dei punti o sotto la parola grande.
+func _zittisci_i_nomi_sotto(camera: Camera3D) -> void:
+	if camera == null or not is_inside_tree():
+		return
+	var scritte: Array[Rect2] = []
+	for voce in _etichette_volanti:
+		var etichetta: Label = voce["etichetta"]
+		if float(voce["vita"]) > 0.0 and etichetta.visible:
+			# Un poco più larga: un nome che ci entra al prossimo fotogramma tace già adesso.
+			scritte.append(etichetta.get_global_rect().grow(8.0))
+	var ingombro := _ingombro_delle_scritte()
+	if ingombro.has_area():
+		scritte.append(ingombro)
+	if scritte.is_empty():
+		return
+	for nodo in get_tree().get_nodes_in_group(Avversario.GRUPPO):
+		var avversario := nodo as Avversario
+		if avversario == null:
+			continue
+		var nome := avversario.rettangolo_del_nome(camera)
+		if not nome.has_area():
+			continue
+		for scritta in scritte:
+			if scritta.intersects(nome):
+				avversario.zittisci_il_nome(NOME_SOTTO_UNA_SCRITTA)
+				break
 
 
 ## Il posto che si prendono il cartello al centro, o la parola grande con la sua striscia:

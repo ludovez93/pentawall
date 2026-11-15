@@ -1121,6 +1121,37 @@ static func a_misura_fissa(etichetta: Label3D) -> void:
 	etichetta.outline_size = 22
 
 
+## Il nome tace almeno per `per` secondi. Lo chiedono i comandi quando un'etichetta dei
+## punti, o la parola grande, ci finirebbe sopra: due scritte non si coprono mai.
+func zittisci_il_nome(per: float) -> void:
+	_nome_zitto = maxf(_nome_zitto, per)
+
+
+## Dove sta il nome sullo schermo, nelle coordinate di `unproject_position`, che sono
+## quelle dei comandi. Il motore disegna un punto del carattere grande `pixel_size` metri;
+## a misura fissa lo scala con la profondità, e allora la misura sullo schermo non dipende
+## dalla distanza. Vuoto se il nome non c'è o sta dietro la camera.
+func rettangolo_del_nome(camera: Camera3D) -> Rect2:
+	if _targhetta == null or _targhetta.font == null or not _targhetta.is_inside_tree():
+		return Rect2()
+	var punto := _targhetta.global_position
+	if camera.is_position_behind(punto):
+		return Rect2()
+	var vista := camera.get_viewport().get_visible_rect().size
+	var lato := vista.x if camera.keep_aspect == Camera3D.KEEP_WIDTH else vista.y
+	var per_punto := _targhetta.pixel_size * lato / (2.0 * tan(deg_to_rad(camera.fov) * 0.5))
+	if not _targhetta.fixed_size:
+		per_punto /= maxf(-(camera.global_transform.affine_inverse() * punto).z, 0.01)
+	var testo := _targhetta.font.get_string_size(_targhetta.text, HORIZONTAL_ALIGNMENT_LEFT, -1,
+			_targhetta.font_size)
+	var misura := (testo + Vector2.ONE * float(_targhetta.outline_size)) * per_punto
+	var dove := camera.unproject_position(punto)
+	# Col nome appoggiato sopra la testa (corpi a cartone) il punto è il bordo di sotto.
+	var sopra := misura.y if _targhetta.vertical_alignment == VERTICAL_ALIGNMENT_BOTTOM \
+			else misura.y * 0.5
+	return Rect2(dove.x - misura.x * 0.5, dove.y - sopra, misura.x, misura.y)
+
+
 ## La pelle del contorno: la capsula vista **da dentro** e cresciuta di poco, senza
 ## luci di scena addosso — così il contorno è identico nella grotta verde e nel
 ## tempio rosso, esattamente come il dardo. Resta **sotto la soglia del bagliore**:

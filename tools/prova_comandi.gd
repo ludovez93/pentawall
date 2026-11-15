@@ -438,6 +438,41 @@ func _la_parola_grande() -> void:
 			fuoco.visible and disegno.visible and not visuale.visible,
 			"fuoco %s, mirino %s, visuale %s" % [fuoco.visible, disegno.visible, visuale.visible])
 	_comandi.parola("")
+
+	# I nomi sopra le teste: un'etichetta dei punti che ci passerebbe sopra li fa tacere,
+	# anche quando non sono di chi è stato colpito (QUARZO accanto a BRACE, fogli e3 ed f1
+	# della tappa 14). Un avversario fermo dodici metri avanti, col nome vicino al centro.
+	_comandi.annuncia("")
+	var vicino := Avversario.crea(root, camera.project_position(schermo * 0.5, 12.0) - Vector3(0, 1.0, 0),
+			1, "QUARZO")
+	vicino.set_physics_process(false)
+	await process_frame
+	await process_frame
+	var nome := vicino.rettangolo_del_nome(camera)
+	_conta("il nome sopra la testa ha il suo posto sullo schermo, vicino al centro",
+			nome.has_area() and nome.get_center().distance_to(schermo * 0.5) < 200.0
+			and nome.size.x < 300.0, str(nome))
+	_conta("senza scritte attorno il nome non tace", float(vicino.get("_nome_zitto")) <= 0.0,
+			"tace ancora per %.2f s" % float(vicino.get("_nome_zitto")))
+	var targhetta := vicino.get("_targhetta") as Label3D
+	_comandi.punti_dal_mondo(targhetta.global_position, 25, 0)
+	await process_frame
+	await process_frame
+	_conta("un'etichetta dei punti che gli passa sopra lo fa tacere",
+			float(vicino.get("_nome_zitto")) > 0.0 and not targhetta.visible,
+			"tace per %.2f s, visibile %s" % [float(vicino.get("_nome_zitto")), targhetta.visible])
+	await create_timer(Comandi.VITA_ETICHETTA + 0.25).timeout
+	await process_frame
+	_conta("finita l'etichetta, il nome torna", float(vicino.get("_nome_zitto")) <= 0.0,
+			"tace ancora per %.2f s" % float(vicino.get("_nome_zitto")))
+	# Controprova: un'etichetta dall'altra parte dello schermo non lo tocca.
+	_comandi.punti_dal_mondo(camera.project_position(Vector2(schermo.x * 0.12, schermo.y * 0.3), 12.0), 25, 0)
+	await process_frame
+	await process_frame
+	_conta("controprova: un'etichetta lontana non zittisce il nome",
+			float(vicino.get("_nome_zitto")) <= 0.0,
+			"tace per %.2f s" % float(vicino.get("_nome_zitto")))
+	vicino.queue_free()
 	camera.queue_free()
 
 
