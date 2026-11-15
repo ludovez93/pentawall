@@ -311,6 +311,10 @@ func riga(motivo := "") -> String:
 		_calcolo_somma / n, _fisica_somma / float(maxi(_fisica_giri, 1)),
 		_disegno_somma / n, _gpu_somma / n, int(round(float(_chiamate_somma) / n)),
 		_lavoro_somma / float(maxi(_lavoro_giri, 1))]
+	# La tela vera (tappa 14, blocco B): i pixel della finestra di Godot. `schermo` sono i
+	# punti della pagina e `dpr` la densità: da soli non dicono quanti pixel si disegnano.
+	var tela := DisplayServer.window_get_size()
+	testo += "&tela=%dx%d" % [tela.x, tela.y]
 	# La variante dell'aspetto (tappa 10): le partite di misura si confrontano per
 	# variante, e la zero è l'arena di prima.
 	testo += "&aspetto=%d" % Aspetto.scelta()

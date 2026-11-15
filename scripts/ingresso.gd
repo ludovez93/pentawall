@@ -80,6 +80,13 @@ func _ready() -> void:
 				"String(new URLSearchParams(window.location.search).get('aspetto') || '')", true)
 		if aspetto is String and (aspetto as String).is_valid_int():
 			Aspetto.scegli(int(aspetto))
+		# La scala della scena dall'indirizzo (`?scala=0.8`, tappa 14): la prova della
+		# risoluzione sul telefono. Senza, non cambia niente.
+		var scala: Variant = JavaScriptBridge.eval(
+				"String(new URLSearchParams(window.location.search).get('scala') || '')", true)
+		Resa.scala_chiesta = 0.0
+		if scala is String and (scala as String).is_valid_float():
+			Resa.scala_chiesta = float(scala)
 		# La modalità dall'indirizzo (`?modo=gara`), per chi misura dal browser.
 		var modo: Variant = JavaScriptBridge.eval(
 				"String(new URLSearchParams(window.location.search).get('modo') || '')", true)

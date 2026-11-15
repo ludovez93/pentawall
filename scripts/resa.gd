@@ -57,11 +57,26 @@ var _lavoro_ms := 0.0
 var _lavori := 0
 
 
+## **La scala chiesta dall'indirizzo** (`?scala=0.8`, tappa 14, blocco B): la prova della
+## risoluzione sul telefono senza ricompilare. Zero vuol dire «nessuna richiesta», e
+## allora vale `SCALA_TELEFONO` come sempre. La discesa automatica resta accesa: se il
+## telefono non regge la scala chiesta, la sonda lo dice col suo campo `scala`.
+static var scala_chiesta := 0.0
+
+
 static func regola(viewport: Viewport) -> void:
 	if not Giocatore.a_pollice():
 		return
 	viewport.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
-	viewport.scaling_3d_scale = SCALA_TELEFONO
+	viewport.scaling_3d_scale = scala_di_partenza()
+
+
+## La scala da cui parte la scena: quella chiesta dall'indirizzo, fra la minima e uno, o
+## quella del telefono.
+static func scala_di_partenza() -> float:
+	if scala_chiesta > 0.0:
+		return clampf(scala_chiesta, SCALA_MINIMA, 1.0)
+	return SCALA_TELEFONO
 
 
 ## La scala in uso, per la riga della sonda.
