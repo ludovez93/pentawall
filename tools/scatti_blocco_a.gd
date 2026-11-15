@@ -9,8 +9,8 @@ extends SceneTree
 ## `scala` è la scala della scena (0.65 quella del telefono di oggi, 1.0 piena). Con
 ## `prova` fotografa solo le inquadrature candidate, senza comporre.
 ## Gli scatti escono in `scatti/` come `A14-<scala>.png` (e `A14-prova-<n>.png`).
-## Con `schiene`, `sequenza <nome>`, `presa <nome>`, `dondolio <nome>`, `parola <nome>`,
-## `doppio <nome>` e `podio <nome> [secondo]` al posto di `prova` fa le serie di fotogrammi
+## Con `schiene`, `sequenza <nome>`, `presa <nome>`, `lampo <nome>`, `dondolio <nome>`,
+## `parola <nome>`, `doppio <nome>` e `podio <nome> [secondo]` al posto di `prova` fa le serie di fotogrammi
 ## dei blocchi C, D, E e F (`S14-<nome>-…-NN.png`): si mettono in striscia con
 ## `tools/striscia.py`.
 
@@ -84,12 +84,13 @@ func _lavora() -> void:
 		Aspetto.scegli(di_prima)
 		quit()
 		return
-	if argomenti.size() > 1 and argomenti[1] in ["parola", "doppio", "podio", "dondolio"]:
+	if argomenti.size() > 1 and argomenti[1] in ["parola", "doppio", "podio", "dondolio", "lampo"]:
 		var nome: String = argomenti[2] if argomenti.size() > 2 else "dopo"
 		match argomenti[1]:
 			"parola": await _parola(arena, giocatore, nome)
 			"doppio": await _doppio(arena, giocatore, nome)
 			"dondolio": await _dondolio(arena, giocatore, nome)
+			"lampo": await _lampo(arena, giocatore, nome)
 			"podio": await _podio(arena, nome, argomenti.size() > 3 and argomenti[3] == "secondo")
 		Aspetto.scegli(di_prima)
 		quit()
@@ -277,6 +278,26 @@ func _doppio(arena: Node, giocatore: Giocatore, nome: String) -> void:
 		print("doppio %s: sfera in %s" % [nome, dove])
 		return
 	print("doppio %s: LA SFERA NON C'È" % nome)
+
+
+## **Il lampo alla canna, visto da chi gioca** (tappa 14, blocco E). Il proprio non si vede:
+## coi corpi a cartone la testa di chi gioca copre il blaster dalla camera sopra la spalla
+## (visto nella serie del colpo, 15/11/2026). Si vede quello degli avversari: qui il primo
+## avversario dell'inquadratura si gira verso chi gioca e gli si accende il lampo dello
+## sparo, senza dardo. Sei fotogrammi di fila.
+func _lampo(arena: Node, giocatore: Giocatore, nome: String) -> void:
+	_disarmati = true
+	_disponi(arena, giocatore, INQUADRATURE[0])
+	var bot := _messi[0] as Avversario
+	bot.bersaglio = giocatore
+	await _fermi(30)
+	giocatore.set("_immunita", 0.0)
+	await _fermi(2)
+	bot.corpo().spara()
+	for i in 6:
+		await _fermi(1)
+		await _scatta("S14-%s-lampo-%02d.png" % [nome, i])
+	print("lampo %s: fatto" % nome)
 
 
 ## **Quello che dondola** (tappa 14, blocco D): i palloni appesi, visti dal ballatoio

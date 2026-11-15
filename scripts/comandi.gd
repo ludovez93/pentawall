@@ -991,7 +991,9 @@ func _costruisci_la_parola() -> void:
 	_striscia.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	_striscia.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_striscia.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_striscia.add_theme_stylebox_override("panel", lamella(NAVY, 0.88, 10, 22))
+	# Quasi piena: sopra i cartelloni delle tribune, a 0,88 le loro scritte si leggevano
+	# attraverso (visto a 3×, 15/11/2026).
+	_striscia.add_theme_stylebox_override("panel", lamella(NAVY, 0.95, 10, 22))
 	_striscia.visible = false
 	add_child(_striscia)
 	var riga := HBoxContainer.new()

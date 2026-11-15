@@ -942,6 +942,10 @@ func _registra() -> void:
 	DirAccess.make_dir_recursive_absolute(_video)
 	for vecchio in DirAccess.get_files_at(_video):
 		DirAccess.remove_absolute(_video + "/" + vecchio)
+	# I fotogrammi non sono roba del gioco: senza questo file il motore li importa tutti al
+	# prossimo avvio, duemila immagini, e li mette pure nell'esportazione. La pulizia qui
+	# sopra lo porta via ogni volta: si rimette (15/11/2026, un quarto d'ora di esportazione).
+	FileAccess.open(_video + "/.gdignore", FileAccess.WRITE).close()
 	var n := 0
 	while not _finito:
 		await RenderingServer.frame_post_draw

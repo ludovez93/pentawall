@@ -1177,7 +1177,13 @@ func _aggiorna_i_contorni() -> void:
 			# Una misura minima sullo schermo, come il nome: oltre i quindici metri
 			# l'anello cresce con la distanza, o a trenta è un filo che non si vede.
 			var largo := clampf(distanza / ANELLO_PIENO_FINO_A, 1.0, 2.6)
-			_anello.scale = Vector3(largo, 0.12 * largo, largo)
+			# E si alza: da lontano la camera guarda l'anello quasi di taglio, e largo
+			# quanto si vuole resta un filo di mezzo punto (visto sullo scatto a trenta
+			# metri, 15/11/2026). Fin dove è piatto è il disegno di sempre; oltre diventa
+			# un cordolo alto fino a venticinque centimetri, appoggiato a terra.
+			var alto := 0.12 * largo * (1.0 + 4.0 * clampf(distanza / ANELLO_PIENO_FINO_A - 1.0, 0.0, 1.0))
+			_anello.scale = Vector3(largo, alto, largo)
+			_anello.position.y = maxf(0.035, 0.1 * alto)
 
 
 ## Un corpo vero al posto della capsula (tappa 7). `contorni` sono i gusci del
