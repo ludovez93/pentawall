@@ -91,15 +91,26 @@ const CORDOLO := Color(1.0, 0.86, 0.30)
 const CAMPO_CALMO := Color(0.43, 0.46, 0.69)
 const CATINO_CALMO := Color(0.29, 0.35, 0.65)
 const IN_ALTO_CALMO := Color(0.66, 0.67, 0.82)
-const RAMPA_CALMA := Color(0.74, 0.50, 0.20)
-## Di quanto scendono saturazione e luce del **corpo** dei pannelli (i bordi no): arancio,
-## blu, rosso e viola pieni su superfici di dieci metri erano la cosa più satura dello
-## schermo, e chi gioca deve esserlo lui.
+const RAMPA_CALMA := Color(0.88, 0.52, 0.24)
+## **Il corpo dei pannelli è indaco scuro** (tappa 14): arancio, blu, rosso e viola pieni su
+## superfici di dieci metri erano la cosa più satura dello schermo. Spegnerli non basta —
+## un arancione spento è marrone, e l'arena sembrava di cartone. Il corpo va nella
+## famiglia scura del campo della pubblicità di riferimento (blu-viola profondo), con un
+## filo del colore dell'ala perché le ali si distinguano ancora; il colore pieno dell'ala
+## sta sui bordi, sui cappelli e sulle cornici.
+const INDACO := Color(0.17, 0.16, 0.42)
+const QUOTA_ALA := 0.14
+
+
+static func corpo_calmo(colore: Color) -> Color:
+	return INDACO.lerp(colore, QUOTA_ALA)
+
+
+## Un colore pieno un poco più spento: le maglie del pubblico, che riempie e non gareggia.
 const CALMA_SATURAZIONE := 0.64
 const CALMA_LUCE := 0.70
 
 
-## Un colore pieno portato a corpo di pannello nel PARCO GONFIABILE.
 static func calmo(colore: Color) -> Color:
 	return Color.from_hsv(colore.h, colore.s * CALMA_SATURAZIONE, colore.v * CALMA_LUCE, colore.a)
 
@@ -270,7 +281,9 @@ static func _modulo(getto: Getto, m: Dictionary, posto: Transform3D,
 	var corpo: Color = coppia[0]
 	var bordo: Color = coppia[1]
 	if Aspetto.scelta() == Aspetto.GONFIABILE:
-		corpo = calmo(corpo)
+		# Il colore dell'ala passa al bordo, e il corpo va nell'indaco scuro dell'arena.
+		bordo = VIOLA if bordo == GIALLO else (corpo if bordo == BLU else bordo)
+		corpo = corpo_calmo(corpo)
 	var lx := float(m["misura"][0])
 	var lz := float(m["misura"][1])
 	var alto := float(m["alto"])

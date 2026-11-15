@@ -57,7 +57,7 @@ const MAGLIE := [Color(0.13, 0.36, 0.95), Color(0.84, 0.12, 0.20), Color(0.98, 0
 ## In quanti gruppi è diviso il pubblico, quanto dura il tifo in secondi e quanto salta.
 const GRUPPI := 3
 const TIFO := 1.3
-const SALTO := 0.26
+const SALTO := 0.42
 ## I festoni: quanto pendono le bandierine e ogni quanto ce n'è una.
 const BANDIERINA := Vector2(0.9, 1.3)
 

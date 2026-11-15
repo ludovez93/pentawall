@@ -36,6 +36,7 @@ const DISSOLVENZA_ALONE := 3.5
 ## Fin dove si legge il nome: nell'arena aperta dalla tappa 11 (blocco C2), in tutte le arene
 ## dalla tappa 12 (D1, 12/11/2026).
 const PORTATA_NOMI_APERTA := 40.0
+const ANELLO_PIENO_FINO_A := 15.0
 
 ## Lo spessore del contorno si misura **sullo schermo, non nel mondo**: `grow`
 ## lavora in metri, quindi da vicino diventerebbe un tubo e da lontano un filo.
@@ -242,6 +243,7 @@ var radar := false
 var _corpo: Corpo
 var _targhetta: Label3D
 var _anello: MeshInstance3D
+var _nome_zitto := 0.0
 var _fantasma := false
 
 
@@ -264,6 +266,7 @@ func _ready() -> void:
 ## Il contorno si aggiorna con il disegno, non con la fisica: dipende da dove sta
 ## la camera, e la camera si muove a ogni fotogramma.
 func _process(delta: float) -> void:
+	_nome_zitto = maxf(_nome_zitto - delta, 0.0)
 	_aggiorna_i_contorni()
 	if _scalino > 0.0:
 		_scalino = move_toward(_scalino, 0.0, delta * Gradino.VISTA)
@@ -329,6 +332,9 @@ func incassa(muri: int, da: Object = null) -> bool:
 	if _immunita > 0.0:
 		return false
 	_immunita = IMMUNITA
+	# Sopra chi è stato colpito sale l'etichetta dei punti: il suo nome tace finché dura,
+	# perché due scritte non si coprono mai (tappa 14).
+	_nome_zitto = Comandi.VITA_ETICHETTA
 	if _corpo != null:
 		_corpo.colpito()
 	var valgono := Balistica.punti_del_colpo(muri)
@@ -1130,11 +1136,16 @@ func _aggiorna_i_contorni() -> void:
 		# Il nome ha la sua misura fissa sullo schermo e si legge fino a quaranta metri, in
 		# tutte le arene (tappa 12, D1): chi ci gioca si vede da lontano. Il contorno no.
 		var nome := clampf((PORTATA_NOMI_APERTA - distanza) / DISSOLVENZA_ALONE, 0.0, 1.0)
-		_targhetta.visible = nome > 0.0 and not _fantasma and (_corpo == null or _corpo.si_vede())
+		var corpo_in_vista := _corpo == null or _corpo.si_vede()
+		_targhetta.visible = nome > 0.0 and not _fantasma and corpo_in_vista and _nome_zitto <= 0.0
 		_targhetta.modulate.a = 0.95 * nome
 		_targhetta.outline_modulate.a = (0.92 if _anello != null else 0.85) * nome
 		if _anello != null:
-			_anello.visible = _targhetta.visible
+			_anello.visible = nome > 0.0 and not _fantasma and corpo_in_vista
+			# Una misura minima sullo schermo, come il nome: oltre i quindici metri
+			# l'anello cresce con la distanza, o a trenta è un filo che non si vede.
+			var largo := clampf(distanza / ANELLO_PIENO_FINO_A, 1.0, 2.6)
+			_anello.scale = Vector3(largo, 0.12 * largo, largo)
 
 
 ## Un corpo vero al posto della capsula (tappa 7). `contorni` sono i gusci del
