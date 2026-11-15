@@ -54,6 +54,13 @@ const MAGLIE := [Color(0.13, 0.36, 0.95), Color(0.84, 0.12, 0.20), Color(0.98, 0
 		Color(0.90, 0.30, 0.64), Color(0.92, 0.92, 0.95), Color(0.15, 0.15, 0.18),
 		Color(0.62, 0.34, 0.95)]
 
+## In quanti gruppi è diviso il pubblico, quanto dura il tifo in secondi e quanto salta.
+const GRUPPI := 3
+const TIFO := 1.3
+const SALTO := 0.26
+## I festoni: quanto pendono le bandierine e ogni quanto ce n'è una.
+const BANDIERINA := Vector2(0.9, 1.3)
+
 const GRADONE_SCURO := Color(0.13, 0.16, 0.40)
 const GRADONE_CHIARO := Color(0.18, 0.22, 0.52)
 const NAVY := Color(0.06, 0.08, 0.22)
@@ -76,6 +83,11 @@ static func costruisci(arena: Arena, materiale: Material) -> Node3D:
 	arena.add_child(radice)
 	var getto := Giocattolo.Getto.new()
 	var foglio := Giocattolo.Foglio.new()
+	# Il pubblico in tre gruppi mescolati: quando qualcuno fa punti saltano sfasati, e
+	# sembra una folla invece di un blocco che si alza. Tre chiamate di disegno.
+	var folla: Array[Giocattolo.Getto] = []
+	for g in GRUPPI:
+		folla.append(Giocattolo.Getto.new())
 	var rng := RandomNumberGenerator.new()
 	rng.seed = SEME
 	# Il filo esterno del perimetro: mezza pianta più lo spessore del muro.
@@ -85,9 +97,12 @@ static func costruisci(arena: Arena, materiale: Material) -> Node3D:
 		var dove_tabellone := float(TABELLONE_LUNGO.get(k, 0.0))
 		_fascia(getto, foglio, giro, bordo + FASCIA_FUORI)
 		_gradoni(getto, giro, bordo + GRADONI_FUORI)
-		_pubblico(getto, giro, bordo + GRADONI_FUORI, dove_tabellone, rng)
+		_pubblico(folla, giro, bordo + GRADONI_FUORI, dove_tabellone, rng)
 		_tabellone(radice, getto, giro, bordo + GRADONI_FUORI, dove_tabellone, k)
-	_posa(radice, getto.mesh(), materiale, "gradoni e pubblico")
+		_festone(radice, giro, bordo + GRADONI_FUORI, materiale, k, rng)
+	_posa(radice, getto.mesh(), materiale, "gradoni")
+	for g in GRUPPI:
+		_posa(radice, folla[g].mesh(), materiale, "pubblico %d" % g)
 	var pelle := ShaderMaterial.new()
 	pelle.shader = load(Giocattolo.DECALCO)
 	pelle.set_shader_parameter("foglio", load(Giocattolo.DECALCHI))
@@ -111,6 +126,29 @@ static func scrivi(radice: Node, testa: String, righe: Array) -> void:
 				testo = "%d  %s  %s" % [i + 1, String(righe[i]["nome"]),
 						Comandi.valore_di(righe[i])]
 			_scrivi_riga(tabellone, i + 1, testo)
+
+
+## Il pubblico salta: lo chiama l'arena quando la classifica cambia.
+static func tifa(radice: Node) -> void:
+	if radice != null:
+		radice.set_meta("tifo", TIFO)
+
+
+## Quello che si muove sulle tribune, a ogni fotogramma: i festoni che dondolano sempre,
+## e i tre gruppi del pubblico che saltano sfasati finché dura il tifo. Sono nodi interi
+## che si spostano: nessuno shader, niente da ricalcolare.
+static func muovi(radice: Node, tempo: float, delta: float) -> void:
+	if radice == null:
+		return
+	var tifo := maxf(float(radice.get_meta("tifo", 0.0)) - delta, 0.0)
+	radice.set_meta("tifo", tifo)
+	for figlio in radice.get_children():
+		var nome := String(figlio.name)
+		if nome.begins_with("festone"):
+			(figlio as Node3D).rotation.x = 0.16 * sin(tempo * 1.7 + float(figlio.get_index()))
+		elif nome.begins_with("pubblico"):
+			var sfasa := float(nome.to_int()) * 2.1
+			(figlio as Node3D).position.y = SALTO * minf(tifo / 0.3, 1.0) 					* absf(sin(tempo * 9.0 + sfasa)) if tifo > 0.0 else 0.0
 
 
 ## Quante figurine ci sono sulle tribune: serve al collaudo.
@@ -168,7 +206,7 @@ static func _gradoni(getto: Giocattolo.Getto, giro: Basis, fuori: float) -> void
 
 ## Il pubblico: una figurina per posto, a caso ma sempre uguale. Dove sta il tabellone i
 ## posti restano vuoti.
-static func _pubblico(getto: Giocattolo.Getto, giro: Basis, fuori: float, tabellone: float,
+static func _pubblico(folla: Array[Giocattolo.Getto], giro: Basis, fuori: float, tabellone: float,
 		rng: RandomNumberGenerator) -> void:
 	var conta := 0
 	for fila in FILE:
@@ -178,7 +216,8 @@ static func _pubblico(getto: Giocattolo.Getto, giro: Basis, fuori: float, tabell
 		while x < LUNGA * 0.5 - 0.6:
 			var libero := absf(x - tabellone) > TABELLONE.x * 0.5 + 0.5
 			if libero and rng.randf() > POSTI_VUOTI:
-				_spettatore(getto, Transform3D(giro * Basis(Vector3.UP, rng.randf_range(-0.3, 0.3)),
+				_spettatore(folla[rng.randi() % GRUPPI],
+						Transform3D(giro * Basis(Vector3.UP, rng.randf_range(-0.3, 0.3)),
 						giro * Vector3(x, quota, z)), rng)
 				conta += 1
 			x += PASSO_POSTO + rng.randf_range(-0.08, 0.12)
@@ -191,7 +230,8 @@ static var _conta := 0
 ## Una figurina seduta che guarda il campo (+Z del suo posto): busto nella maglia, testa,
 ## capelli, e una su tre con le braccia alzate.
 static func _spettatore(getto: Giocattolo.Getto, posto: Transform3D, rng: RandomNumberGenerator) -> void:
-	var maglia: Color = MAGLIE[rng.randi() % MAGLIE.size()]
+	# Le maglie un poco più spente dei sei in campo: il pubblico riempie, non gareggia.
+	var maglia: Color = Giocattolo.calmo(MAGLIE[rng.randi() % MAGLIE.size()]).lightened(0.12)
 	var pelle: Color = PELLI[rng.randi() % PELLI.size()]
 	var capelli: Color = CAPELLI[rng.randi() % CAPELLI.size()]
 	var alto := rng.randf_range(0.92, 1.08)
@@ -242,8 +282,40 @@ static func _tabellone(radice: Node3D, getto: Giocattolo.Getto, giro: Basis, fuo
 		riga.shaded = false
 		riga.double_sided = false
 		riga.alpha_cut = Label3D.ALPHA_CUT_DISCARD
-		riga.text = "SCONTRO" if k == 0 else ""
+		riga.text = "PENTAWALL" if k == 0 else ""
 		nodo.add_child(riga)
+
+
+## Un festone di bandierine in cima al muro di fondo, da un capo all'altro: un nodo solo
+## con l'origine sul filo, così dondola girando attorno al filo stesso.
+static func _festone(radice: Node3D, giro: Basis, fuori: float, materiale: Material, lato: int,
+		rng: RandomNumberGenerator) -> void:
+	var getto := Giocattolo.Getto.new()
+	var quante := int(LUNGA / (BANDIERINA.x + 0.25))
+	for i in quante:
+		var x := -LUNGA * 0.5 + (BANDIERINA.x + 0.25) * (float(i) + 0.5)
+		var tinta: Color = MAGLIE[i % MAGLIE.size()]
+		# Un triangolo a punta in giù, a due facce.
+		for verso in [1.0, -1.0]:
+			var primo := getto.vertici.size()
+			getto.vertici.append_array(PackedVector3Array([
+					Vector3(x - BANDIERINA.x * 0.5, 0, 0), Vector3(x + BANDIERINA.x * 0.5, 0, 0),
+					Vector3(x, -BANDIERINA.y, 0)]))
+			for v in 3:
+				getto.normali.append(Vector3(0, 0, verso))
+				getto.colori.append(tinta)
+			getto.indici.append_array(PackedInt32Array([primo, primo + 1, primo + 2])
+					if verso > 0.0 else PackedInt32Array([primo, primo + 2, primo + 1]))
+	# Appeso sotto la fascia arancio in cima al muro di fondo, davanti alla sua faccia.
+	var cima := PRIMA_FILA + GRADINO * float(FILE) + 1.85
+	var nodo := MeshInstance3D.new()
+	nodo.name = "festone_%d" % lato
+	nodo.mesh = getto.mesh()
+	nodo.material_override = materiale
+	nodo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	nodo.transform = Transform3D(giro, giro * Vector3(0, cima,
+			-(fuori + PASSO_FILA * float(FILE) - 0.14)))
+	radice.add_child(nodo)
 
 
 static func _posa(radice: Node3D, mesh: ArrayMesh, materiale: Material, nome: String) -> void:

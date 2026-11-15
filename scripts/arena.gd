@@ -202,6 +202,10 @@ const TINTE := {
 }
 
 const SPONDA := Color(0.09, 0.60, 0.64)
+## Nel PARCO GONFIABILE la lastra della sponda è più scura e più spenta (tappa 14): il
+## ciano pieno resta alla cornice, che è il segno. La lastra intera a pieno colore era la
+## forma più grossa e più accesa dello schermo.
+const SPONDA_CALMA := Color(0.10, 0.34, 0.42)
 const NEON_SPONDA := Color(0.30, 0.99, 0.95)
 
 const CANDIDATI := [
@@ -274,6 +278,7 @@ var _sonda: Sonda
 ## basta per un cronometro che cambia una volta al secondo).
 var _tabellone: Node3D
 var _prossimo_tabellone := 0.0
+var _tempo_vivo := 0.0
 ## Le palle colorate (tappa 8, blocco H).
 var _potenziamenti: Potenziamenti
 ## Le sagome del tuo RADAR sono accese (tappa 11, blocco B).
@@ -635,7 +640,8 @@ func _costruisci() -> void:
 	for s in _pianta["sponde"]:
 		var faccia := Vector2(float(s["faccia"][0]), float(s["faccia"][1]))
 		var dove := Vector3(float(s["centro"][0]), float(s["quota"]), float(s["centro"][1]))
-		Muratura.sponda(self, dove, faccia, _giro_sponda(s), SPONDA, NEON_SPONDA)
+		Muratura.sponda(self, dove, faccia, _giro_sponda(s),
+				SPONDA_CALMA if Aspetto.scelta() == Aspetto.GONFIABILE else SPONDA, NEON_SPONDA)
 
 	for b in _pianta["bersagli"]:
 		var dove := Vector3(float(b["dove"][0]), float(b["quota"]), float(b["dove"][1]))
@@ -1130,6 +1136,10 @@ func _scrivi_il_dardo() -> void:
 func _process(delta: float) -> void:
 	_aggiorna_righe()
 	_respiro_degli_anelli(delta)
+	# Quello che si muove sempre (tappa 14): i palloni appesi, i festoni e il tifo.
+	_tempo_vivo += delta
+	Giocattolo.dondola(self, _tempo_vivo)
+	Tribune.muovi(get_node_or_null("tribune"), _tempo_vivo, delta)
 	_prossimo_tabellone -= delta
 	if _prossimo_tabellone <= 0.0:
 		_prossimo_tabellone = 0.25
@@ -1265,8 +1275,9 @@ func _scrivi_il_tabellone() -> void:
 		return
 	var righe := classifica()
 	# I tabelloni grandi delle tribune (tappa 14): la modalità, il tempo e i primi tre.
-	Tribune.scrivi(tribune, "FINE" if _finita else "%s  %s" % [
-			String(Modalita.NOMI[modalita()]), tempo_scritto()], righe)
+	# In testa la modalità e basta: il tempo sta già nel cronometro in alto, e scritto
+	# anche qui, a un dito da lui, sembrava un pezzo dei comandi.
+	Tribune.scrivi(tribune, "FINE" if _finita else String(Modalita.NOMI[modalita()]), righe)
 	if _tabellone == null:
 		return
 	var capo := "" if righe.is_empty() else "1° %s · %s" % [String(righe[0]["nome"]),
@@ -1671,6 +1682,11 @@ func posizione_mia() -> int:
 func _aggiorna_la_classifica() -> void:
 	if _comandi != null:
 		_comandi.classifica(classifica_da_mostrare())
+	# Il tabellone e l'elenco dicono la stessa cosa nello stesso momento (tappa 14), e
+	# quando i punti cambiano il pubblico delle tribune salta.
+	_scrivi_il_tabellone()
+	if _sfida and not _finita:
+		Tribune.tifa(get_node_or_null("tribune"))
 
 
 # ------------------------------------------------------------- chi attacca chi

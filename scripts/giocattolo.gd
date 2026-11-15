@@ -88,10 +88,20 @@ const CORDOLO := Color(1.0, 0.86, 0.30)
 ## personaggi e segnali ci sparivano sopra. Qui il campo scende di un terzo e le rampe
 ## lasciano il giallo, che è vicino all'oro dei punti, per un ocra spento: il colore pieno
 ## resta ai bordi, ai segni e a chi gioca.
-const CAMPO_CALMO := Color(0.40, 0.46, 0.80)
-const CATINO_CALMO := Color(0.26, 0.34, 0.76)
-const IN_ALTO_CALMO := Color(0.66, 0.68, 0.88)
+const CAMPO_CALMO := Color(0.43, 0.46, 0.69)
+const CATINO_CALMO := Color(0.29, 0.35, 0.65)
+const IN_ALTO_CALMO := Color(0.66, 0.67, 0.82)
 const RAMPA_CALMA := Color(0.74, 0.50, 0.20)
+## Di quanto scendono saturazione e luce del **corpo** dei pannelli (i bordi no): arancio,
+## blu, rosso e viola pieni su superfici di dieci metri erano la cosa più satura dello
+## schermo, e chi gioca deve esserlo lui.
+const CALMA_SATURAZIONE := 0.64
+const CALMA_LUCE := 0.70
+
+
+## Un colore pieno portato a corpo di pannello nel PARCO GONFIABILE.
+static func calmo(colore: Color) -> Color:
+	return Color.from_hsv(colore.h, colore.s * CALMA_SATURAZIONE, colore.v * CALMA_LUCE, colore.a)
 
 ## Le rocce del canyon: strati di terracotta, la cima più chiara.
 const ROCCE := [Color(0.86, 0.42, 0.22), Color(0.93, 0.54, 0.28), Color(0.80, 0.34, 0.20)]
@@ -259,6 +269,8 @@ static func _modulo(getto: Getto, m: Dictionary, posto: Transform3D,
 	var coppia: Array = COPPIE.get(String(m.get("tinta", "")), COPPIE["ocra"])
 	var corpo: Color = coppia[0]
 	var bordo: Color = coppia[1]
+	if Aspetto.scelta() == Aspetto.GONFIABILE:
+		corpo = calmo(corpo)
 	var lx := float(m["misura"][0])
 	var lz := float(m["misura"][1])
 	var alto := float(m["alto"])
@@ -440,14 +452,16 @@ static func _decalchi(arena: Node3D, pianta: Dictionary, pannelli: Array[Diction
 		if nome.begins_with("perimetro"):
 			if int(p["riga"]) != 1:
 				continue
+			# Il nome del gioco sta in un posto solo, sul perimetro sud (tappa 14): era su
+			# ogni perimetro e su ogni faccia del catino, come un marchio da cantiere.
 			match int(p["colonna"]):
 				3: cosa = NOMI_ALA.get(nome, "PENTAWALL")
-				1, 5: cosa = "PENTAWALL"
+				1, 5: cosa = "PENTAWALL" if nome == "perimetro sud" else "stella"
 				_: cosa = "cinque"
 		elif nome.begins_with("catino, faccia"):
 			if int(p["riga"]) != 1 or fuori.dot(-Vector3(centro.x, 0.0, centro.z)) > 0.0:
 				continue
-			cosa = "PENTAWALL"
+			cosa = "stella"
 		elif bool(p["principale"]) and minf(float(p["largo"]), float(p["alto"])) >= 1.2:
 			cosa = SEGNI.get(String(m.get("tinta", "")), "stella")
 		else:
@@ -866,6 +880,20 @@ static func _palloni(arena: Node3D, materiale: Material) -> void:
 			getto.tondo(0.05, 60.0, 0.02, Color(0.20, 0.22, 0.34), Transform3D(Basis(),
 					posto + Vector3(cos(a) * 1.2, raggio * 0.85, sin(a) * 1.2)), 6)
 	_posa(arena, getto.mesh(), materiale, "palloni")
+
+
+## **I palloni dondolano** (tappa 14): appesi a cavi lunghi sessanta metri, oscillano
+## piano attorno a un punto alto sopra l'arena. È il nodo intero che gira, di pochi
+## millesimi di giro: nessun pezzo in più e nessuno shader.
+const PERNO_PALLONI := Vector3(0.0, 85.0, 0.0)
+
+
+static func dondola(arena: Node3D, tempo: float) -> void:
+	var palloni := arena.get_node_or_null("palloni") as Node3D
+	if palloni == null:
+		return
+	var giro := Basis(Vector3.RIGHT, 0.011 * sin(tempo * 0.9)) 			* Basis(Vector3.BACK, 0.008 * sin(tempo * 0.63 + 1.3))
+	palloni.transform = Transform3D(giro, PERNO_PALLONI - giro * PERNO_PALLONI)
 
 
 ## **La sponda sopra la buca** (`sdraiata: soffitto`, a 11,9 metri sul catino) è gioco,
