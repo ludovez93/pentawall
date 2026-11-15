@@ -78,13 +78,28 @@ const DENTRO = `(() => {
       const disegni = await pagina.evaluate(() => window.__pw.ultimi);
       if (disegni < 10) da = 0; else if (da === 0) da = Date.now(); else if (Date.now() - da > 3000) break;
     }
-    const prima = await pagina.evaluate(() => window.__pw.fotogrammi);
     await pagina.touchscreen.tap(Number(process.env.PW_X || 140), Number(process.env.PW_Y || 225));
     const tGioca = Date.now();
-    // La partita: tre secondi di conto alla rovescia, poi la sonda scrive ogni dieci.
-    await pagina.waitForTimeout(9000);
-    await pagina.screenshot({ path: `${CARTELLA}/scala-${scala === '-' ? 'senza' : scala.replace('.', '')}.png` });
-    await pagina.waitForTimeout(Math.max(0, SECONDI * 1000 - 9000));
+    // GIOCA entra appena l'arena è pronta dietro l'ingresso, e nel browser del PC ci vuole
+    // (compila gli shader a due fotogrammi al secondo): la partita è cominciata quando arriva
+    // la prima riga della sonda dall'arena, dieci secondi dopo il fischio.
+    // Intanto uno scatto al secondo, tenendo gli ultimi: quello buono è di otto secondi e
+    // mezzo prima della riga, cioè a metà del conto alla rovescia. Lì chi gioca sta ancora
+    // alla partenza e nessuno gli ha sparato: è la stessa inquadratura a ogni scala.
+    const scatti = [];
+    while (Date.now() - tGioca < 480000 && !righe.some((r) => /scena=arena/.test(r))) {
+      // Mentre l'arena si prepara la pagina sta ferma anche per secondi: uno scatto che
+      // non arriva si salta, non ferma la prova.
+      const immagine = await pagina.screenshot({ timeout: 5000 }).catch(() => null);
+      if (immagine) scatti.push({ quando: Date.now(), immagine });
+      if (scatti.length > 16) scatti.shift();
+      await pagina.waitForTimeout(900);
+    }
+    const tPartita = Date.now();
+    const prima = Math.max(0, (await pagina.evaluate(() => window.__pw.fotogrammi)) - 240);
+    const buono = scatti.reduce((a, b) => (Math.abs(b.quando - (tPartita - 8500)) < Math.abs(a.quando - (tPartita - 8500)) ? b : a), scatti[0]);
+    if (buono) require('fs').writeFileSync(`${CARTELLA}/scala-${scala === '-' ? 'senza' : scala.replace('.', '')}.png`, buono.immagine);
+    await pagina.waitForTimeout(SECONDI * 1000);
     const dati = await pagina.evaluate(() => window.__pw);
     await contesto.close();
 
@@ -105,7 +120,7 @@ const DENTRO = `(() => {
     const giusta = prima_riga !== '' && Math.abs(Number(campo(prima_riga, 'scala')) - attesa) < 0.006
       && campo(prima_riga, 'tela') === `${tela[0]}x${tela[1]}`;
     if (!vista || !giusta) rossi += 1;
-    console.log(`\n[scala ${scala}] ${indirizzo}  (pronta in ${((tGioca - t0) / 1000).toFixed(0)} s, densità ${DENSITA})`);
+    console.log(`\n[scala ${scala}] ${indirizzo}  (ingresso in ${((tGioca - t0) / 1000).toFixed(0)} s, prima riga dall'arena dopo altri ${((tPartita - tGioca) / 1000).toFixed(0)} s, densità ${DENSITA})`);
     console.log(`  ${vista ? 'ok  ' : 'NO  '} la scheda disegna la scena a ${scena} (tela ${tela.join('x')} × ${attesa})`);
     console.log('       misure di gl.viewport in partita: '
       + partita.slice(0, 8).map(([k, m]) => `${k} (${m.volte} volte, fotogrammi ${m.primo}-${m.ultimo})`).join(' · '));

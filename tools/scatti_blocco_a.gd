@@ -289,14 +289,28 @@ func _lampo(arena: Node, giocatore: Giocatore, nome: String) -> void:
 	_disarmati = true
 	_disponi(arena, giocatore, INQUADRATURE[0])
 	var bot := _messi[0] as Avversario
-	bot.bersaglio = giocatore
-	await _fermi(30)
+	# Fermo e girato a mano verso chi gioca: con la caccia accesa non sa dov'è, e gli
+	# mostrerebbe la schiena. Il corpo si mette in posa col braccio teso.
+	bot.set_physics_process(false)
+	var verso := giocatore.global_position - _posti[0]
+	bot.rotation.y = atan2(-verso.x, -verso.z)
+	for i in 30:
+		bot.corpo().aggiorna(Vector3.ZERO, true, 0.0, 1.0 / 30.0)
+		await _fermi(1)
 	giocatore.set("_immunita", 0.0)
 	await _fermi(2)
+	# Il lampo dura sei centesimi: a trenta fotogrammi al secondo è il fotogramma stesso
+	# dello sparo. Si fotografa quello, senza aspettarne un altro.
 	bot.corpo().spara()
 	for i in 6:
-		await _fermi(1)
 		await _scatta("S14-%s-lampo-%02d.png" % [nome, i])
+		await _fermi(1)
+	# E quello di chi gioca, dallo stesso posto: quattro fotogrammi dal colpo.
+	giocatore.set("_ricarica", 0.0)
+	giocatore.spara()
+	for i in 4:
+		await _scatta("S14-%s-lampotuo-%02d.png" % [nome, i])
+		await _fermi(1)
 	print("lampo %s: fatto" % nome)
 
 
