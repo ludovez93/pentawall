@@ -366,6 +366,10 @@ func _la_parola_grande() -> void:
 	# Controprova: senza la parola la stessa etichetta sta dove cade il colpo, cioè lì sopra.
 	_comandi.annuncia("")
 	_comandi.punti_dal_mondo(punto, 25, 0)
+	var appena_nata: Label = ((_comandi.get("_etichette_volanti") as Array)[1] as Dictionary)["etichetta"]
+	_conta("l'etichetta dei punti nasce già al suo posto, non nell'angolo dello schermo",
+			appena_nata.get_global_rect().get_center().distance_to(schermo * 0.5 - Vector2(0, 90)) < 160.0,
+			"centro %s" % appena_nata.get_global_rect().get_center())
 	await create_timer(0.25).timeout
 	await process_frame
 	etichetta = ((_comandi.get("_etichette_volanti") as Array)[1] as Dictionary)["etichetta"]
@@ -392,9 +396,10 @@ func _la_parola_grande() -> void:
 	var riquadro := _comandi.get("_riquadro_faccia") as Control
 	var foto := _comandi.get("_faccia") as TextureRect
 	var scritta := _comandi.get("_nome_striscia") as Label
-	_comandi.annuncia("SEI PRIMO")
-	_conta("al sorpasso la striscia mostra la faccia e il nome di chi gioca",
-			riquadro.visible and foto.texture == Comandi.faccia_di("TU") and scritta.text == "TU",
+	_comandi.annuncia("SEI PRIMO", "75 PUNTI")
+	_conta("al sorpasso la striscia mostra la faccia e il nome di chi gioca, e i suoi punti in oro",
+			riquadro.visible and foto.texture == Comandi.faccia_di("TU") and scritta.text == "TU"
+			and (_comandi.get("_dettaglio_striscia") as Label).text == "75 PUNTI",
 			"riquadro %s, nome «%s»" % [riquadro.visible, scritta.text])
 	_comandi.parola("2° POSTO", 3.6, {"chi": "BRACE", "testo": "VINCE BRACE", "punti": "350 PUNTI"}, true)
 	_conta("al podio quella di chi ha vinto, coi suoi punti",

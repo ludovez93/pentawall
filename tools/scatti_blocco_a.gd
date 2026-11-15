@@ -9,9 +9,10 @@ extends SceneTree
 ## `scala` è la scala della scena (0.65 quella del telefono di oggi, 1.0 piena). Con
 ## `prova` fotografa solo le inquadrature candidate, senza comporre.
 ## Gli scatti escono in `scatti/` come `A14-<scala>.png` (e `A14-prova-<n>.png`).
-## Con `schiene`, `sequenza <nome>`, `presa <nome>`, `parola <nome>`, `doppio <nome>` e
-## `podio <nome> [secondo]` al posto di `prova` fa le serie di fotogrammi dei blocchi C, E
-## e F (`S14-<nome>-…-NN.png`): si mettono in striscia con `tools/striscia.py`.
+## Con `schiene`, `sequenza <nome>`, `presa <nome>`, `dondolio <nome>`, `parola <nome>`,
+## `doppio <nome>` e `podio <nome> [secondo]` al posto di `prova` fa le serie di fotogrammi
+## dei blocchi C, D, E e F (`S14-<nome>-…-NN.png`): si mettono in striscia con
+## `tools/striscia.py`.
 
 const CARTELLA := "res://scatti"
 
@@ -83,11 +84,12 @@ func _lavora() -> void:
 		Aspetto.scegli(di_prima)
 		quit()
 		return
-	if argomenti.size() > 1 and argomenti[1] in ["parola", "doppio", "podio"]:
+	if argomenti.size() > 1 and argomenti[1] in ["parola", "doppio", "podio", "dondolio"]:
 		var nome: String = argomenti[2] if argomenti.size() > 2 else "dopo"
 		match argomenti[1]:
 			"parola": await _parola(arena, giocatore, nome)
 			"doppio": await _doppio(arena, giocatore, nome)
+			"dondolio": await _dondolio(arena, giocatore, nome)
 			"podio": await _podio(arena, nome, argomenti.size() > 3 and argomenti[3] == "secondo")
 		Aspetto.scegli(di_prima)
 		quit()
@@ -246,7 +248,7 @@ func _parola(arena: Node, giocatore: Giocatore, nome: String) -> void:
 
 
 ## **I punti doppi presi da te** (tappa 14, blocco F): chi gioca passa sulla sfera dei
-## punti doppi. Venticinque fotogrammi, uno ogni due: la parola, e poi la pillola.
+## punti doppi. Trenta fotogrammi, uno ogni due o tre: la parola, e poi la pillola.
 func _doppio(arena: Node, giocatore: Giocatore, nome: String) -> void:
 	for bot in arena.call("avversari"):
 		(bot as Node3D).global_position = Vector3(30.0, 0.0, 20.0)
@@ -268,12 +270,34 @@ func _doppio(arena: Node, giocatore: Giocatore, nome: String) -> void:
 		await physics_frame
 		giocatore.global_position = guarda
 		giocatore.velocity = Vector3.ZERO
-		for i in 25:
-			await _scatta("S14-%s-doppio-%02d.png" % [nome, i])
+		for i in 60:
 			await process_frame
+			if i % 2 == 0:
+				await _scatta("S14-%s-doppio-%02d.png" % [nome, i / 2])
 		print("doppio %s: sfera in %s" % [nome, dove])
 		return
 	print("doppio %s: LA SFERA NON C'È" % nome)
+
+
+## **Quello che dondola** (tappa 14, blocco D): i palloni appesi, visti dal ballatoio
+## (dieci fotogrammi, uno ogni dodici: tre secondi e mezzo, mezzo giro della loro
+## oscillazione), e i festoni in cima alla tribuna, visti dal posto dello scatto (dieci
+## fotogrammi, uno ogni sei). Gli avversari stanno fermi dall'altra parte dell'arena.
+func _dondolio(arena: Node, giocatore: Giocatore, nome: String) -> void:
+	for bot in arena.call("avversari"):
+		(bot as Node3D).global_position = Vector3(30.0, 0.0, 20.0)
+		(bot as Node).set_physics_process(false)
+	for serie in [["palloni", Vector3(7.25, 7.0, 30.5), 0.0, 5.0, 12],
+			["festoni", (INQUADRATURE[0] as Dictionary)["posto"], 62.0, 3.0, 6]]:
+		for i in 10:
+			for f in int(serie[4]):
+				giocatore.global_position = serie[1]
+				giocatore.velocity = Vector3.ZERO
+				giocatore.punta(float(serie[2]), float(serie[3]))
+				giocatore.set("_immunita", 0.0)
+				await process_frame
+			await _scatta("S14-%s-%s-%02d.png" % [nome, serie[0], i])
+	print("dondolio %s: fatto" % nome)
 
 
 ## **La fine della partita** (tappa 14, blocco F): chi gioca primo (o secondo, con

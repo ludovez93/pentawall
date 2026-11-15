@@ -1237,7 +1237,8 @@ func _su_potenziamento_preso(chi: Node3D, tipo: String) -> void:
 			if bot.bersaglio == chi:
 				bot.punta_a(_chi_attaccare(bot))
 	if chi == _giocatore:
-		_comandi.annuncia(String(dati["nome"]) + "!")
+		# I punti doppi presi da te sono una parola grande: sotto, la striscia dice cosa.
+		_comandi.annuncia(String(dati["nome"]) + "!", String(dati["nome"]))
 		Suoni.potenziamento(true)
 	else:
 		Suoni.potenziamento(false)
@@ -1393,7 +1394,7 @@ func _guarda_la_classifica(delta: float) -> void:
 	if _posizione_annunciata > 0:
 		var da_zero := (_bandiere_di(_giocatore) if _gara else int(punteggi()[0])) == 0
 		if adesso == 1:
-			_comandi.annuncia("SEI PRIMO")
+			_comandi.annuncia("SEI PRIMO", "" if _gara else "%d PUNTI" % int(punteggi()[0]))
 		elif _posizione_annunciata == 1 and not da_zero:
 			_comandi.annuncia("TI HANNO SUPERATO")
 	_posizione_annunciata = adesso
@@ -1881,9 +1882,12 @@ const FESTA_BASSA := 2.2
 const FESTA_SALITA := 1.2
 ## Nei primi decimi un tocco non la salta: è ancora il pollice che stava giocando.
 const FESTA_SORDA := 0.7
-## Il posto del primo: il tratto libero davanti alla gradinata ovest, col tabellone grande
-## della tribuna alle spalle. Tutti e tre guardano a est, verso il campo.
-const POSTO_FESTA := Vector3(-31.0, 0.0, -12.0)
+## Il posto del primo: il tratto libero davanti alla gradinata ovest, verso sud. Tutti e
+## tre guardano a est, verso il campo, e dietro hanno solo pubblico. Più a nord la parola
+## finiva sopra il tabellone grande della tribuna (due scritte una sull'altra), o la camera
+## aveva in faccia la sponda del blocco accanto: visto negli scatti del 15/11/2026. Fra i
+## due c'è la piastra a terra, che è una sponda: il podio non ci sta sopra.
+const POSTO_FESTA := Vector3(-31.0, 0.0, 12.8)
 const GIRO_FESTA := -PI * 0.5
 ## Il secondo e il terzo rispetto al primo: mezzo passo indietro, uno per lato.
 const POSTI_FESTA := [Vector3.ZERO, Vector3(-0.7, 0.0, 1.75), Vector3(-0.7, 0.0, -1.75)]
@@ -1891,11 +1895,11 @@ const POSTI_FESTA := [Vector3.ZERO, Vector3(-0.7, 0.0, 1.75), Vector3(-0.7, 0.0,
 ## teste, che scivola di lato di sessanta centimetri; guarda sopra le teste, così i tre
 ## stanno nella metà bassa dello schermo e parola e striscia sopra di loro, sul pubblico.
 ## Alta: sopra il campo, con le due tribune sullo sfondo.
-const CAMERA_FESTA := Vector3(5.6, 1.3, 0.9)
-const DERIVA_FESTA := Vector3(0.0, 0.0, -0.6)
-const MIRA_FESTA := Vector3(0.0, 2.0, 0.0)
-const CAMERA_FESTA_ALTA := Vector3(30.0, 22.0, 12.0)
-const MIRA_FESTA_ALTA := Vector3(-2.0, 3.0, 0.0)
+const CAMERA_FESTA := Vector3(5.0, 1.3, 1.0)
+const DERIVA_FESTA := Vector3(0.0, 0.0, -0.5)
+const MIRA_FESTA := Vector3(0.0, 2.05, 0.0)
+const CAMERA_FESTA_ALTA := Vector3(33.0, 25.0, 17.0)
+const MIRA_FESTA_ALTA := Vector3(3.0, 0.0, -9.0)
 const CAMPO_FESTA := 52.0
 const CAMPO_FESTA_ALTO := 60.0
 ## I tre scoppi di coriandoli, in secondi dall'inizio.
@@ -1930,7 +1934,7 @@ func _apri_la_festa(righe: Array, posizione: int, tempo: String) -> void:
 			continue
 		var chi := corpo as Node3D
 		if chi != _giocatore:
-			chi.call("in_festa", true)
+			chi.call("in_festa", true, i == 0)
 		chi.global_position = POSTO_FESTA + POSTI_FESTA[i]
 		chi.rotation.y = GIRO_FESTA
 		_festeggiati.append({"corpo": chi, "posto": i, "nome": String(righe[i]["nome"])})

@@ -150,8 +150,8 @@ const MAIUSCOLA := 0.7
 const BORDO_PAROLA := 0.055
 ## **La striscia** sotto la parola: la faccia e il nome di chi ha fatto la cosa. Il piano
 ## la voleva in basso al centro, ma lì c'è la schiena di chi gioca col suo numero.
-const STRISCIA_IN_PARTITA := 40.0
-const STRISCIA_DEL_PODIO := 56.0
+const STRISCIA_IN_PARTITA := 48.0
+const STRISCIA_DEL_PODIO := 60.0
 ## Le sei facce: fotografie dei corpi a cartone, fatte con `tools/scatti_facce.gd`.
 const FACCIA := "res://assets/ui/faccia_%s.png"
 
@@ -244,6 +244,10 @@ func punti_dal_mondo(dove: Vector3, punti: int, muri: int, bonus := false) -> vo
 	etichetta.text = TESTO_FERMATO if senza_punti and not bonus else testo_del_colpo(punti, muri, bonus)
 	etichetta.visible = true
 	etichetta.modulate.a = 1.0
+	# Al suo posto subito, non al prossimo giro: il colpo arriva dopo il giro dei comandi,
+	# e per un fotogramma l'etichetta si vedeva dov'era rimasta (la prima volta nell'angolo
+	# in alto a sinistra, sopra l'ESCI: visto nella striscia del sorpasso, 15/11/2026).
+	_muovi_le_etichette(0.0)
 
 
 ## Il testo del colpo. Dice **di sponda**, non quanti muri: dal 05/10/2026 un colpo di
@@ -506,7 +510,9 @@ func _disegna_il_segnalino(dove: Vector2) -> void:
 
 ## L'annuncio grosso al centro, in una lamella: cosa è appena successo e quanto vale.
 ## **Le cifre sono oro**, il resto bianco (il disegno del misto 1, momenti 2 e 4).
-func annuncia(testo: String) -> void:
+## `dettaglio` serve solo agli annunci che diventano una parola grande: è quello che la
+## striscia dice in oro accanto al nome («75 PUNTI»).
+func annuncia(testo: String, dettaglio := "") -> void:
 	_testo_avviso = testo
 	# Il sorpasso e i punti doppi presi da te sono una parola grande, non una riga
 	# (tappa 14, blocco F): il cartello tace, il testo annunciato resta quello di sempre.
@@ -514,7 +520,7 @@ func annuncia(testo: String) -> void:
 		_avviso.text = ""
 		_pannello_avviso.visible = false
 		_tempo_avviso = DURATA_PAROLA
-		parola(String(PAROLE[testo]), DURATA_PAROLA, {"chi": "TU"})
+		parola(String(PAROLE[testo]), DURATA_PAROLA, {"chi": "TU", "punti": dettaglio})
 		return
 	# Un cartello nuovo prende il posto della parola: due scritte non si coprono mai.
 	_spegni_la_parola()
@@ -577,10 +583,10 @@ func parola(testo: String, durata := DURATA_PAROLA, striscia := {}, del_podio :=
 		_riquadro_faccia.custom_minimum_size = Vector2(alta - 6.0, alta - 6.0)
 		(_riquadro_faccia.get_theme_stylebox("panel") as StyleBoxFlat).border_color = Corpo.colore_di(chi)
 		_nome_striscia.text = String(striscia.get("testo", chi))
-		_nome_striscia.add_theme_font_size_override("font_size", int(alta * 0.72))
+		_nome_striscia.add_theme_font_size_override("font_size", int(alta * 0.74))
 		_dettaglio_striscia.text = String(striscia.get("punti", ""))
 		_dettaglio_striscia.visible = _dettaglio_striscia.text != ""
-		_dettaglio_striscia.add_theme_font_size_override("font_size", int(alta * 0.78))
+		_dettaglio_striscia.add_theme_font_size_override("font_size", int(alta * 0.74))
 	_anima_la_parola()
 
 
@@ -1013,7 +1019,8 @@ func _costruisci_la_parola() -> void:
 	_riquadro_faccia.add_child(_faccia)
 	riga.add_child(_riquadro_faccia)
 
-	_nome_striscia = _etichetta(28, Color.WHITE)
+	_nome_striscia = _etichetta(34, Color.WHITE)
+	_nome_striscia.add_theme_font_override("font", carattere_titolo())
 	_nome_striscia.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	riga.add_child(_nome_striscia)
 	_dettaglio_striscia = _etichetta(30, ORO)

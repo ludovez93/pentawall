@@ -247,6 +247,7 @@ var _nome_zitto := 0.0
 var _fantasma := false
 ## La festa del podio (tappa 14, blocco F): fermo, senza contorno, e salta sul posto.
 var _festa := false
+var _festa_senza_nome := false
 var _quota_targhetta := 0.0
 
 
@@ -373,9 +374,11 @@ func corpo() -> Corpo:
 ## **La festa del podio** (tappa 14, blocco F): a partita finita i primi tre non giocano
 ## più e si guardano da vicino. La fisica si ferma (il corpo lo muove l'arena, con
 ## `festeggia`) e il contorno lime si spegne: dice «avversario», e lì non serve più.
-## Nome e anello a terra restano.
-func in_festa(accesa: bool) -> void:
+## Nome e anello a terra restano; chi ha vinto il nome non lo porta (`senza_nome`): lo
+## dice la striscia sotto la parola, e sopra la sua testa ci finirebbe dietro.
+func in_festa(accesa: bool, senza_nome := false) -> void:
 	_festa = accesa
+	_festa_senza_nome = accesa and senza_nome
 	set_physics_process(not accesa)
 	velocity = Vector3.ZERO
 	if _corpo != null:
@@ -1166,7 +1169,7 @@ func _aggiorna_i_contorni() -> void:
 		# tutte le arene (tappa 12, D1): chi ci gioca si vede da lontano. Il contorno no.
 		var nome := clampf((PORTATA_NOMI_APERTA - distanza) / DISSOLVENZA_ALONE, 0.0, 1.0)
 		var corpo_in_vista := _corpo == null or _corpo.si_vede()
-		_targhetta.visible = nome > 0.0 and not _fantasma and corpo_in_vista and _nome_zitto <= 0.0
+		_targhetta.visible = nome > 0.0 and not _fantasma and corpo_in_vista and _nome_zitto <= 0.0 				and not _festa_senza_nome
 		_targhetta.modulate.a = 0.95 * nome
 		_targhetta.outline_modulate.a = (0.92 if _anello != null else 0.85) * nome
 		if _anello != null:
