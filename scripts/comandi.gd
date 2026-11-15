@@ -1006,6 +1006,9 @@ func _costruisci_la_parola() -> void:
 	_faccia = TextureRect.new()
 	_faccia.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_faccia.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	# La fotografia è larga 256 e sul telefono si vede a una ventina di punti: senza le
+	# sue copie rimpicciolite sgranerebbe.
+	_faccia.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_faccia.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_riquadro_faccia.add_child(_faccia)
 	riga.add_child(_riquadro_faccia)

@@ -383,6 +383,28 @@ func _la_parola_grande() -> void:
 			_comandi.testo_parola() == "" and _comandi.testo_annunciato() == "",
 			"parola «%s», annunciato «%s»" % [_comandi.testo_parola(), _comandi.testo_annunciato()])
 
+	# Le facce della striscia: ci sono tutte e sei, e la striscia mostra quella giusta.
+	var mancano := ""
+	for nome: String in Corpo.PERSONAGGI:
+		if Comandi.faccia_di(nome) == null:
+			mancano += " " + nome
+	_conta("le sei facce della striscia ci sono (`assets/ui/faccia_<nome>.png`)", mancano == "", mancano)
+	var riquadro := _comandi.get("_riquadro_faccia") as Control
+	var foto := _comandi.get("_faccia") as TextureRect
+	var scritta := _comandi.get("_nome_striscia") as Label
+	_comandi.annuncia("SEI PRIMO")
+	_conta("al sorpasso la striscia mostra la faccia e il nome di chi gioca",
+			riquadro.visible and foto.texture == Comandi.faccia_di("TU") and scritta.text == "TU",
+			"riquadro %s, nome «%s»" % [riquadro.visible, scritta.text])
+	_comandi.parola("2° POSTO", 3.6, {"chi": "BRACE", "testo": "VINCE BRACE", "punti": "350 PUNTI"}, true)
+	_conta("al podio quella di chi ha vinto, coi suoi punti",
+			riquadro.visible and foto.texture == Comandi.faccia_di("BRACE") and scritta.text == "VINCE BRACE"
+			and (_comandi.get("_dettaglio_striscia") as Label).text == "350 PUNTI",
+			"riquadro %s, nome «%s»" % [riquadro.visible, scritta.text])
+	_comandi.parola("PROVA", 1.0, {"chi": "NESSUNO"})
+	_conta("controprova: senza la fotografia il riquadro non c'è, e resta il nome",
+			not riquadro.visible and scritta.text == "NESSUNO", "riquadro %s" % riquadro.visible)
+
 	# La parola del podio è più grande, e sta ancora nello schermo e sotto il cronometro.
 	_comandi.parola("HAI VINTO", 3.6, {"chi": "TU", "testo": "TU", "punti": "325 PUNTI"}, true)
 	await process_frame

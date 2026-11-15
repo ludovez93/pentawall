@@ -9,6 +9,9 @@ extends SceneTree
 ## `scala` è la scala della scena (0.65 quella del telefono di oggi, 1.0 piena). Con
 ## `prova` fotografa solo le inquadrature candidate, senza comporre.
 ## Gli scatti escono in `scatti/` come `A14-<scala>.png` (e `A14-prova-<n>.png`).
+## Con `schiene`, `sequenza <nome>`, `presa <nome>`, `parola <nome>`, `doppio <nome>` e
+## `podio <nome> [secondo]` al posto di `prova` fa le serie di fotogrammi dei blocchi C, E
+## e F (`S14-<nome>-…-NN.png`): si mettono in striscia con `tools/striscia.py`.
 
 const CARTELLA := "res://scatti"
 
@@ -77,6 +80,15 @@ func _lavora() -> void:
 		return
 	if argomenti.size() > 1 and argomenti[1] == "sequenza":
 		await _sequenza(arena, giocatore, argomenti[2] if argomenti.size() > 2 else "dopo")
+		Aspetto.scegli(di_prima)
+		quit()
+		return
+	if argomenti.size() > 1 and argomenti[1] in ["parola", "doppio", "podio"]:
+		var nome: String = argomenti[2] if argomenti.size() > 2 else "dopo"
+		match argomenti[1]:
+			"parola": await _parola(arena, giocatore, nome)
+			"doppio": await _doppio(arena, giocatore, nome)
+			"podio": await _podio(arena, nome, argomenti.size() > 3 and argomenti[3] == "secondo")
 		Aspetto.scegli(di_prima)
 		quit()
 		return
@@ -187,6 +199,99 @@ func _sequenza(arena: Node, giocatore: Giocatore, nome: String) -> void:
 		print("sequenza %s: fatta" % nome)
 		return
 	print("sequenza %s: NESSUN COLPO A SEGNO" % nome)
+
+
+## **Il sorpasso** (tappa 14, blocco F): chi gioca è secondo a dieci punti dal primo, e il
+## colpo a segno lo porta in testa. È il caso vero: «SEI PRIMO!» arriva insieme al
+## «+25 · DIRETTO». Venticinque fotogrammi, uno ogni due (un secondo e sei decimi).
+func _parola(arena: Node, giocatore: Giocatore, nome: String) -> void:
+	var quadro: Dictionary = INQUADRATURE[0]
+	_disarmati = true
+	_disponi(arena, giocatore, quadro)
+	await _fermi(20)
+	giocatore.set("_immunita", 0.0)
+	for colpo in 8:
+		var righe: Array = arena.get("_concorrenti")
+		for i in righe.size():
+			righe[i]["punti"] = [50, 60, 40, 30, 20, 10][i]
+		arena.set("_posizione_annunciata", 2)
+		arena.set("_attesa_annuncio", 0.0)
+		arena.call("_aggiorna_la_classifica")
+		var mira := _posti[0] + Vector3.UP * 1.0 - (giocatore.global_position + Vector3.UP * 1.6)
+		var lontano := Vector2(mira.x, mira.z).length()
+		var spalla := rad_to_deg(atan2(Giocatore.SPALLA_TERZA, lontano + Giocatore.BRACCIO_TERZA))
+		var scarto := 1.5 * float((colpo + 1) / 2) * (1.0 if colpo % 2 == 0 else -1.0)
+		giocatore.punta(rad_to_deg(atan2(-mira.x, -mira.z)) + spalla + scarto,
+				rad_to_deg(atan2(mira.y, lontano)) - 2.0)
+		await _fermi(3)
+		giocatore.spara()
+		var fotogrammi: Array[Image] = []
+		var a_segno := false
+		for i in 50:
+			await _fermi(1)
+			await RenderingServer.frame_post_draw
+			if i % 2 == 0:
+				fotogrammi.append(root.get_texture().get_image())
+			if not a_segno and _punti_miei(arena) == 75:
+				a_segno = true
+				_messi.remove_at(0)
+				_posti.remove_at(0)
+		if not a_segno:
+			continue
+		for i in fotogrammi.size():
+			fotogrammi[i].save_png("%s/S14-%s-parola-%02d.png" % [CARTELLA, nome, i])
+		print("parola %s: fatta" % nome)
+		return
+	print("parola %s: NESSUN COLPO A SEGNO" % nome)
+
+
+## **I punti doppi presi da te** (tappa 14, blocco F): chi gioca passa sulla sfera dei
+## punti doppi. Venticinque fotogrammi, uno ogni due: la parola, e poi la pillola.
+func _doppio(arena: Node, giocatore: Giocatore, nome: String) -> void:
+	for bot in arena.call("avversari"):
+		(bot as Node3D).global_position = Vector3(30.0, 0.0, 20.0)
+		(bot as Node).set_physics_process(false)
+	var potenziamenti: Node = arena.get("_potenziamenti")
+	for s: Dictionary in potenziamenti.get("_sfere"):
+		if String(s["tipo"]) != "doppio":
+			continue
+		s["attesa"] = 0.0
+		var dove: Vector3 = s["dove"]
+		var guarda := dove + Vector3(0, 0, 4.5)
+		giocatore.global_position = guarda
+		giocatore.velocity = Vector3.ZERO
+		giocatore.punta(0.0, PENDENZA)
+		giocatore.set("_immunita", 0.0)
+		await _riposa(8)
+		giocatore.global_position = dove
+		await physics_frame
+		await physics_frame
+		giocatore.global_position = guarda
+		giocatore.velocity = Vector3.ZERO
+		for i in 25:
+			await _scatta("S14-%s-doppio-%02d.png" % [nome, i])
+			await process_frame
+		print("doppio %s: sfera in %s" % [nome, dove])
+		return
+	print("doppio %s: LA SFERA NON C'È" % nome)
+
+
+## **La fine della partita** (tappa 14, blocco F): chi gioca primo (o secondo, con
+## `secondo`), il tempo scade e si fotografa un fotogramma ogni quattro per cinque secondi
+## — la festa del podio e poi il riquadro con RIGIOCA.
+func _podio(arena: Node, nome: String, secondo: bool) -> void:
+	var righe: Array = arena.get("_concorrenti")
+	for i in righe.size():
+		righe[i]["punti"] = ([300, 325, 250, 150, 100, 50] if secondo
+				else [325, 300, 250, 150, 100, 50])[i]
+	arena.call("_aggiorna_la_classifica")
+	await _riposa(6)
+	await _scatta("S14-%s-podio-00.png" % nome)
+	arena.call("_finisci_la_partita")
+	for i in range(1, 38):
+		await _riposa(3)
+		await _scatta("S14-%s-podio-%02d.png" % [nome, i])
+	print("podio %s: fatto" % nome)
 
 
 ## **La presa di un potenziamento**, dieci fotogrammi di fila: chi gioca si mette a tre

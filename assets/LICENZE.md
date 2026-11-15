@@ -19,6 +19,7 @@ Tutto libero, verificato all'origine il 12/09/2026 e il 03/10/2026 (i suoni). Ni
 | `materials/ambientcg/WoodFloor051/*` | il parquet dei pavimenti delle ali | ambientCG | CC0 1.0 | ambientcg.com/view?id=WoodFloor051 |
 | `materials/pubblico.gdshader` | colori e tifo del pubblico | nostro | — | — |
 | `ui/*.svg` | le icone dei pulsanti (fuoco, salto, uscita) | nostre | — | disegnate il 03/10/2026 |
+| `ui/faccia_*.png` | le sei facce della striscia sotto la parola grande: fotografie dei nostri personaggi (i corpi di Kenney, CC0) | nostre | — | `tools/scatti_facce.gd`, 15/11/2026 |
 | `models/quaternius/base/Maschera_Divisa_*.png` | scarpe, guanti e inserti della divisa, ricavati dalle ossa dei corpi | nostre | — | `tools/genera_maschere_divisa.py`, 03/10/2026 |
 | `audio/sparo.ogg` | scatto di un blaster giocattolo vero + scoppio + tonfo, sommati | qubodup (OpenGameArt «Toy Double Barrel Shotgun Sounds»), «Pop Effect Sounds» (OpenGameArt), Kenney «Impact Sounds» | CC0 1.0 | opengameart.org/content/toy-double-barrel-shotgun-sounds · opengameart.org/content/pop-effect-sounds · kenney.nl/assets/impact-sounds |
 | `audio/rimbalzo.ogg`, `incassato.ogg`, `passo_0…4.ogg` | «tock» di legno, tonfo sordo, passi su parquet | Kenney «Impact Sounds» | CC0 1.0 | kenney.nl/assets/impact-sounds |
