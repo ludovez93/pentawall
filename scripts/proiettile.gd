@@ -25,7 +25,7 @@ const VELOCITA_VELOCE := 24.0
 static var velocita := VELOCITA_VELOCE
 const VITA_MASSIMA := 6.0      ## secondi, rete di sicurezza se non colpisce mai niente
 const RAGGIO := 0.1            ## metri: un dardo grosso, si deve vedere
-const SCIA_MASSIMA := 3.4      ## metri di scia dietro al dardo (era 2,6: segnale di velocità)
+const SCIA_MASSIMA := 2.4      ## metri di scia dietro al dardo: corta e chiara (tappa 14; era 3,4)
 const FRAZIONE_MINIMA := 0.009 ## quota minima di altezza schermo occupata (~0,9%)
 const INGRANDIMENTO_MASSIMO := 5.0
 

@@ -718,7 +718,9 @@ func _prepara_il_lampo_bocca() -> void:
 	# proprio lì e deve essere lui la cosa più luminosa.
 	_lampo_bocca = MeshInstance3D.new()
 	var disco := QuadMesh.new()
-	disco.size = Vector2(0.34, 0.34)
+	# Più largo dalla tappa 14 (era 0,34): in terza persona il lampo deve vedersi da dietro
+	# la spalla, e dura sempre sei centesimi.
+	disco.size = Vector2(0.62, 0.62)
 	_lampo_bocca.mesh = disco
 	_lampo_bocca.material_override = _pelle_lampo_bocca()
 	_lampo_bocca.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF

@@ -18,7 +18,7 @@ const CARTELLA := "res://scatti"
 ## le altre servono con `prova`, per sceglierla guardando.
 const INQUADRATURE := [
 	{"posto": Vector3(-18.5, 0.0, -11.0), "giro": 50.0,
-			"avversari": [Vector2(6.0, -3.4), Vector2(7.5, -6.2), Vector2(3.4, 4.6), Vector2(12.0, 3.0)]},
+			"avversari": [Vector2(6.0, -3.4), Vector2(7.8, -7.6), Vector2(3.4, 4.6), Vector2(12.0, 3.0)]},
 	{"posto": Vector3(-18.5, 0.0, -11.0), "giro": 60.0,
 			"avversari": [Vector2(8.0, 1.6), Vector2(6.0, -3.4), Vector2(11.5, 5.0)]},
 	{"posto": Vector3(-20.0, 0.0, -8.0), "giro": 55.0,
@@ -37,6 +37,7 @@ const PARTITA := 14.0
 
 var _messi: Array[Node3D] = []
 var _posti: Array[Vector3] = []
+var _disarmati := false
 
 
 func _initialize() -> void:
@@ -69,6 +70,16 @@ func _lavora() -> void:
 		quit()
 		return
 	await _riposa(int(PARTITA * 30.0))
+	if argomenti.size() > 1 and argomenti[1] == "presa":
+		await _presa(arena, giocatore, argomenti[2] if argomenti.size() > 2 else "dopo")
+		Aspetto.scegli(di_prima)
+		quit()
+		return
+	if argomenti.size() > 1 and argomenti[1] == "sequenza":
+		await _sequenza(arena, giocatore, argomenti[2] if argomenti.size() > 2 else "dopo")
+		Aspetto.scegli(di_prima)
+		quit()
+		return
 	if prova:
 		for i in INQUADRATURE.size():
 			_disponi(arena, giocatore, INQUADRATURE[i])
@@ -133,6 +144,82 @@ func _schiene(arena: Node, giocatore: Giocatore) -> void:
 		await _scatta("C14-schiene-%dm.png" % int(lontano))
 
 
+## **Le sequenze** (tappa 14, blocchi E e F): il movimento si guarda in movimento, su
+## fotogrammi di fila e non su uno solo (`LEARNED.md` § 75). Due serie, nella stessa
+## inquadratura dello scatto: il colpo (quattordici fotogrammi di fila dallo sparo: lampo
+## alla canna, scia, stella, punti, scatto della camera, anello della ricarica) e il
+## dopo (dieci fotogrammi, uno ogni due: il pubblico che salta, festoni e palloni).
+## Escono come `S14-<nome>-colpo-NN.png` e `S14-<nome>-tifo-NN.png`.
+func _sequenza(arena: Node, giocatore: Giocatore, nome: String) -> void:
+	var quadro: Dictionary = INQUADRATURE[0]
+	_disarmati = true
+	_disponi(arena, giocatore, quadro)
+	await _fermi(20)
+	giocatore.set("_immunita", 0.0)
+	for colpo in 8:
+		var prima := _punti_miei(arena)
+		var mira := _posti[0] + Vector3.UP * 1.0 - (giocatore.global_position + Vector3.UP * 1.6)
+		var lontano := Vector2(mira.x, mira.z).length()
+		var spalla := rad_to_deg(atan2(Giocatore.SPALLA_TERZA, lontano + Giocatore.BRACCIO_TERZA))
+		var scarto := 1.5 * float((colpo + 1) / 2) * (1.0 if colpo % 2 == 0 else -1.0)
+		giocatore.punta(rad_to_deg(atan2(-mira.x, -mira.z)) + spalla + scarto,
+				rad_to_deg(atan2(mira.y, lontano)) - 2.0)
+		await _fermi(3)
+		giocatore.spara()
+		var fotogrammi: Array[Image] = []
+		var a_segno := false
+		for i in 14:
+			await _fermi(1)
+			await RenderingServer.frame_post_draw
+			fotogrammi.append(root.get_texture().get_image())
+			if _punti_miei(arena) == prima + 25:
+				a_segno = true
+		if not a_segno:
+			continue
+		for i in fotogrammi.size():
+			fotogrammi[i].save_png("%s/S14-%s-colpo-%02d.png" % [CARTELLA, nome, i])
+		_messi.remove_at(0)
+		_posti.remove_at(0)
+		giocatore.punta(float(quadro["giro"]), PENDENZA)
+		for i in 10:
+			await _fermi(2)
+			await _scatta("S14-%s-tifo-%02d.png" % [nome, i])
+		print("sequenza %s: fatta" % nome)
+		return
+	print("sequenza %s: NESSUN COLPO A SEGNO" % nome)
+
+
+## **La presa di un potenziamento**, dieci fotogrammi di fila: chi gioca si mette a tre
+## metri dalla prima sfera accesa e ci corre dentro. Escono come `S14-<nome>-presa-NN.png`.
+func _presa(arena: Node, giocatore: Giocatore, nome: String) -> void:
+	for bot in arena.call("avversari"):
+		(bot as Node3D).global_position = Vector3(30.0, 0.0, 20.0)
+		(bot as Node).set_physics_process(false)
+	var potenziamenti: Node = arena.get("_potenziamenti")
+	for s: Dictionary in potenziamenti.get("_sfere"):
+		if float(s["attesa"]) > 0.0:
+			continue
+		var dove: Vector3 = s["dove"]
+		var guarda := dove + Vector3(0, 0, 4.5)
+		giocatore.global_position = guarda
+		giocatore.velocity = Vector3.ZERO
+		giocatore.punta(0.0, PENDENZA)
+		giocatore.set("_immunita", 0.0)
+		await _riposa(6)
+		await _scatta("S14-%s-presa-00.png" % nome)
+		# Ci passa sopra per un giro di fisica, e torna a guardare da quattro metri.
+		giocatore.global_position = dove
+		await physics_frame
+		await physics_frame
+		giocatore.global_position = guarda
+		giocatore.velocity = Vector3.ZERO
+		for i in range(1, 10):
+			await process_frame
+			await _scatta("S14-%s-presa-%02d.png" % [nome, i])
+		print("presa %s: sfera %s in %s" % [nome, s["tipo"], dove])
+		return
+
+
 ## Mette chi gioca e gli avversari al loro posto nell'inquadratura.
 func _disponi(arena: Node, giocatore: Giocatore, quadro: Dictionary) -> void:
 	var posto: Vector3 = quadro["posto"]
@@ -168,6 +255,10 @@ func _fermi(fotogrammi: int) -> void:
 			if is_instance_valid(_messi[i]):
 				_messi[i].global_position = _posti[i]
 				(_messi[i] as CharacterBody3D).velocity = Vector3.ZERO
+				# Nelle sequenze gli avversari non tirano: chi gioca resta senza protezione
+				# (protetto lampeggia), e un colpo preso lo porterebbe via.
+				if _disarmati:
+					_messi[i].set("_ricarica", 9.0)
 		await process_frame
 
 

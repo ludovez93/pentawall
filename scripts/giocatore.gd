@@ -56,6 +56,7 @@ const CAMPO_PRIMA := 62.0
 const LENTEZZA_PRIMA := 0.82    ## in prima si mira meglio e ci si muove peggio
 const TEMPO_CAMBIO := 0.16
 
+const SCATTO_CAMPO := 2.5       ## gradi di campo in meno al colpo a segno
 const CADENZA := 0.42           ## fuoco manuale: un tocco, un colpo (DECISIONI.md 6)
 const PENDENZA_MASSIMA := 1.4   ## radianti di inclinazione della testa (~80°)
 
@@ -172,6 +173,9 @@ func _physics_process(delta: float) -> void:
 func _process(delta: float) -> void:
 	_ricarica = maxf(_ricarica - delta, 0.0)
 	_immunita = maxf(_immunita - delta, 0.0)
+	# L'anello della ricarica attorno al tasto rosso (tappa 14).
+	if comandi != null and comandi.has_method("ricarica"):
+		comandi.call("ricarica", _ricarica / CADENZA)
 	_aggiorna_camera(delta)
 	_aggiorna_linea()
 	if _corpo != null:
@@ -469,6 +473,10 @@ func _aggiorna_camera(delta: float) -> void:
 		var forza := AMPIEZZA_SCOSSA * (_scossa / SCOSSA)
 		_camera.h_offset = randf_range(-forza, forza)
 		_camera.v_offset = randf_range(-forza, forza)
+		# E lo scatto (tappa 14): il campo si stringe di due gradi e mezzo e torna, nello
+		# stesso decimo di secondo. Il centro dello schermo resta dov'è, quindi la mira,
+		# che parte dal mirino, non si sposta.
+		_camera.fov -= SCATTO_CAMPO * (_scossa / SCOSSA)
 	else:
 		_camera.h_offset = 0.0
 		_camera.v_offset = 0.0

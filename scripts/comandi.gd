@@ -89,6 +89,8 @@ var _stili_quadrato: Array[StyleBoxFlat] = []
 const DURATA_MARCATORE := 0.3
 const DURATA_VIGNETTA := 0.55
 const VITA_ETICHETTA := 1.0
+const SALTO_ETICHETTA := 0.55
+const DURATA_SALTO := 0.14
 const SALITA_ETICHETTA := 70.0   ## punti di schermo percorsi salendo
 const ETICHETTE_IN_RISERVA := 6  ## costruite all'apertura, mai in partita
 
@@ -122,6 +124,8 @@ const LARGO_PALLINI := 212.0
 ## scritta coprirebbe chi l'ha preso.
 var _alza_etichette := 70.0 if Aspetto.corpi_a_cartone() else 26.0
 var _prossima_etichetta := 0
+var _quota_ricarica := 0.0
+var _tasto_fuoco: Button
 
 
 func _ready() -> void:
@@ -148,6 +152,17 @@ func _process(delta: float) -> void:
 	_vignetta = maxf(_vignetta - delta, 0.0)
 	_muovi_le_etichette(delta)
 	_disegno.queue_redraw()
+
+
+## **L'anello della ricarica** (tappa 14): quanto manca al prossimo colpo, da uno appena
+## sparato a zero. Lo dice chi gioca a ogni fotogramma; lo disegna `_disegna`, attorno al
+## tasto rosso — un arco bianco che si chiude in senso orario, e sparisce quando è pronto.
+func ricarica(quota: float) -> void:
+	_quota_ricarica = clampf(quota, 0.0, 1.0)
+
+
+func quota_ricarica() -> float:
+	return _quota_ricarica
 
 
 ## Il marcatore sul mirino: un colpo è andato a segno.
@@ -216,6 +231,11 @@ func _muovi_le_etichette(delta: float) -> void:
 		etichetta.position = dove - etichetta.size * 0.5 \
 				- Vector2(0.0, _alza_etichette + SALITA_ETICHETTA * quota)
 		etichetta.modulate.a = clampf((1.0 - quota) * 2.2, 0.0, 1.0)
+		# I punti saltano (tappa 14): nascono grandi una volta e mezza e tornano alla loro
+		# misura in poco più di un decimo di secondo.
+		var eta := VITA_ETICHETTA - float(voce["vita"])
+		etichetta.pivot_offset = etichetta.size * 0.5
+		etichetta.scale = Vector2.ONE * (1.0 + SALTO_ETICHETTA * (1.0 - smoothstep(0.0, DURATA_SALTO, eta)))
 		# **Due scritte non si coprono mai** (tappa 14): il cartello al centro ha il suo
 		# posto, e un'etichetta dei punti che ci finirebbe sopra passa sotto di lui. Era
 		# «SEI PRIMO» sopra «+25 · DIRETTO», nello stesso colpo che porta in testa.
@@ -609,6 +629,15 @@ func _disegna() -> void:
 			var v: Vector2 = (verso as Vector2).normalized()
 			_disegno.draw_line(centro + v * (apertura - 1.5), centro + v * (apertura + 17.5), anima, 8.0)
 			_disegno.draw_line(centro + v * apertura, centro + v * (apertura + 16.0), tinta, 4.0)
+
+	# L'anello della ricarica attorno al tasto rosso: fuori dal tasto, mai sopra l'icona.
+	if _tasto_fuoco != null and _tasto_fuoco.visible and _quota_ricarica > 0.0:
+		var tasto := _tasto_fuoco.get_global_rect()
+		var mezzo := tasto.get_center() - _disegno.global_position
+		var raggio := tasto.size.x * 0.5 + 15.0
+		_disegno.draw_arc(mezzo, raggio, 0.0, TAU, 64, Color(NAVY.r, NAVY.g, NAVY.b, 0.7), 13.0, true)
+		_disegno.draw_arc(mezzo, raggio, -PI * 0.5, -PI * 0.5 + TAU * (1.0 - _quota_ricarica), 64,
+				Color(1, 1, 1, 0.97), 9.0, true)
 
 	if _dito_sinistro != -1:
 		_disegno.draw_arc(_centro_leva, RAGGIO_LEVA, 0.0, TAU, 40, Color(1, 1, 1, 0.28), 3.0)
@@ -1025,6 +1054,8 @@ func _accendi_la_partita() -> void:
 		if not pieni.has(pulsante.text):
 			pulsante.visible = false
 			continue
+		if pulsante.text == "FUOCO":
+			_tasto_fuoco = pulsante
 		var lato := pulsante.offset_right - pulsante.offset_left
 		var coprente: float = coprenza[pulsante.text]
 		for stato in ["normal", "hover", "focus"]:

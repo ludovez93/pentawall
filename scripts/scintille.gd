@@ -235,13 +235,19 @@ func _fai_ricomparsa() -> CPUParticles3D:
 
 
 func _fai_presa() -> CPUParticles3D:
-	var p := _base(24, 0.55, 0.12, true)
+	# Venti coriandoli nel colore del potenziamento (tappa 14: erano ventiquattro granelli
+	# morbidi che salivano): quadretti netti che schizzano in su e ricadono, in meno di
+	# mezzo secondo.
+	var p := _base(20, 0.48, 0.17, false)
 	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
 	p.emission_sphere_radius = 0.3
-	p.spread = 180.0
-	p.initial_velocity_min = 2.0
-	p.initial_velocity_max = 3.5
-	p.gravity = Vector3(0, 1.5, 0)
+	p.direction = Vector3.UP
+	p.spread = 70.0
+	p.initial_velocity_min = 3.5
+	p.initial_velocity_max = 6.0
+	p.gravity = Vector3(0, -9.0, 0)
+	p.angular_velocity_min = -360.0
+	p.angular_velocity_max = 360.0
 	p.damping_min = 2.0
 	p.damping_max = 3.0
 	return p
