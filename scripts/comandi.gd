@@ -127,6 +127,50 @@ var _prossima_etichetta := 0
 var _quota_ricarica := 0.0
 var _tasto_fuoco: Button
 
+## **La parola grande** (tappa 14, blocco F). Il sorpasso e i punti doppi presi da te non
+## sono più una riga nella lamella: sono una parola sola, in oro col bordo navy, nella
+## fascia alta fra il cronometro e il mirino. Salta fuori grande una volta e mezza, torna
+## alla sua misura e sfuma negli ultimi tre decimi. Il cartello di sempre le lascia il
+## posto, e `testo_annunciato()` continua a dire il testo di prima: lo leggono i collaudi
+## e il pilota.
+const PAROLE := {"SEI PRIMO": "SEI PRIMO!", "PUNTI DOPPI!": "DOPPIO!"}
+const DURATA_PAROLA := 1.5
+const SFUMA_PAROLA := 0.3
+const SALTO_PAROLA := 0.5
+const DURATA_SALTO_PAROLA := 0.16
+## Quanto è alta: in partita le maiuscole sono 91 punti su 720, un ottavo dello schermo
+## (la misura di «YOU WIN» nella pubblicità di riferimento); alla festa del podio, dove
+## mirino ed etichette dei punti non ci sono, di più.
+const PAROLA_IN_PARTITA := 130
+const PAROLA_DEL_PODIO := 170
+## La quota della cima delle maiuscole: sotto la lamella del cronometro, che finisce a 78.
+const CIMA_PAROLA := 96.0
+## Nel Bebas le maiuscole sono alte sette decimi del corpo, e il bordo è un diciottesimo.
+const MAIUSCOLA := 0.7
+const BORDO_PAROLA := 0.055
+## **La striscia** sotto la parola: la faccia e il nome di chi ha fatto la cosa. Il piano
+## la voleva in basso al centro, ma lì c'è la schiena di chi gioca col suo numero.
+const STRISCIA_IN_PARTITA := 40.0
+const STRISCIA_DEL_PODIO := 56.0
+## Le sei facce: fotografie dei corpi a cartone, fatte con `tools/scatti_facce.gd`.
+const FACCIA := "res://assets/ui/faccia_%s.png"
+
+var _parola: Label
+var _tempo_parola := 0.0
+var _durata_parola := 0.0
+var _parola_larga := 0.0
+var _parola_alta := 0.0
+var _scaldo_parola := 0
+var _striscia: PanelContainer
+var _riquadro_faccia: PanelContainer
+var _faccia: TextureRect
+var _nome_striscia: Label
+var _dettaglio_striscia: Label
+## La festa del podio: quello che ha spento, per riaccendere solo quello.
+var _in_festa := false
+var _spenti_dalla_festa: Array[CanvasItem] = []
+static var _facce := {}
+
 
 func _ready() -> void:
 	layer = 10
@@ -148,6 +192,16 @@ func _process(delta: float) -> void:
 		_fischio.modulate.a = clampf(_tempo_fischio / 0.5, 0.0, 1.0)
 		if _tempo_fischio <= 0.0:
 			_fischio.text = ""
+	if _tempo_parola > 0.0:
+		_tempo_parola -= delta
+		if _tempo_parola <= 0.0:
+			_spegni_la_parola()
+		else:
+			_anima_la_parola()
+	elif _scaldo_parola > 0:
+		_scaldo_parola -= 1
+		if _scaldo_parola == 0:
+			_parola.visible = false
 	_marcatore = maxf(_marcatore - delta, 0.0)
 	_vignetta = maxf(_vignetta - delta, 0.0)
 	_muovi_le_etichette(delta)
@@ -238,11 +292,21 @@ func _muovi_le_etichette(delta: float) -> void:
 		etichetta.scale = Vector2.ONE * (1.0 + SALTO_ETICHETTA * (1.0 - smoothstep(0.0, DURATA_SALTO, eta)))
 		# **Due scritte non si coprono mai** (tappa 14): il cartello al centro ha il suo
 		# posto, e un'etichetta dei punti che ci finirebbe sopra passa sotto di lui. Era
-		# «SEI PRIMO» sopra «+25 · DIRETTO», nello stesso colpo che porta in testa.
-		if _pannello_avviso != null and _pannello_avviso.visible:
-			var cartello := _pannello_avviso.get_global_rect().grow(6.0)
-			if cartello.intersects(etichetta.get_global_rect()):
-				etichetta.global_position.y = cartello.end.y
+		# «SEI PRIMO» sopra «+25 · DIRETTO», nello stesso colpo che porta in testa. Lo
+		# stesso con la parola grande e la sua striscia.
+		var ingombro := _ingombro_delle_scritte()
+		if ingombro.has_area() and ingombro.intersects(etichetta.get_global_rect()):
+			etichetta.global_position.y = ingombro.end.y
+
+
+## Il posto che si prendono il cartello al centro, o la parola grande con la sua striscia:
+## un rettangolo vuoto quando non c'è né l'uno né l'altra.
+func _ingombro_delle_scritte() -> Rect2:
+	if _pannello_avviso != null and _pannello_avviso.visible:
+		return _pannello_avviso.get_global_rect().grow(6.0)
+	if _parola == null or _tempo_parola <= 0.0:
+		return Rect2()
+	return ingombro_della_parola()
 
 
 func _unhandled_input(evento: InputEvent) -> void:
@@ -444,6 +508,16 @@ func _disegna_il_segnalino(dove: Vector2) -> void:
 ## **Le cifre sono oro**, il resto bianco (il disegno del misto 1, momenti 2 e 4).
 func annuncia(testo: String) -> void:
 	_testo_avviso = testo
+	# Il sorpasso e i punti doppi presi da te sono una parola grande, non una riga
+	# (tappa 14, blocco F): il cartello tace, il testo annunciato resta quello di sempre.
+	if PAROLE.has(testo):
+		_avviso.text = ""
+		_pannello_avviso.visible = false
+		_tempo_avviso = DURATA_PAROLA
+		parola(String(PAROLE[testo]), DURATA_PAROLA, {"chi": "TU"})
+		return
+	# Un cartello nuovo prende il posto della parola: due scritte non si coprono mai.
+	_spegni_la_parola()
 	_avviso.text = "[center]%s[/center]" % cifre_in_oro(testo)
 	# Un testo a colori non dice da solo quanto è largo (la sua misura minima è zero, e
 	# dentro una lamella finirebbe spezzato): la larghezza la misura il carattere.
@@ -457,6 +531,142 @@ func annuncia(testo: String) -> void:
 ## Quello che l'annuncio dice adesso, senza i colori: lo leggono i collaudi.
 func testo_annunciato() -> String:
 	return _testo_avviso
+
+
+## **La parola grande**, con la sua striscia. `striscia` dice di chi è la faccia (`chi`, il
+## nome del concorrente), cosa c'è scritto accanto (`testo`: se manca, il nome) e, in oro,
+## un numero (`punti`); vuota, niente striscia. `del_podio` è la misura della festa di
+## fine partita. Una parola vuota la spegne.
+func parola(testo: String, durata := DURATA_PAROLA, striscia := {}, del_podio := false) -> void:
+	if testo == "":
+		_spegni_la_parola()
+		return
+	var misura := PAROLA_DEL_PODIO if del_podio else PAROLA_IN_PARTITA
+	var font := carattere_titolo()
+	_parola_alta = float(misura) * MAIUSCOLA
+	# Il bordo: nel motore la misura del contorno vale un quarto di punto per lato.
+	var bordo := bordo_della_parola(misura)
+	_parola.add_theme_font_size_override("font_size", misura)
+	_parola.add_theme_constant_override("outline_size", int(round(bordo * 4.0)))
+	_parola.text = testo
+	# La riga è più alta delle maiuscole: si mette in modo che la loro cima stia a
+	# `CIMA_PAROLA`, e da lì cresce quando salta fuori — in giù e ai lati, mai sul cronometro.
+	var sopra := font.get_ascent(misura) - _parola_alta
+	_parola.offset_top = CIMA_PAROLA - sopra
+	_parola.offset_bottom = _parola.offset_top + font.get_height(misura)
+	_parola_larga = font.get_string_size(testo, HORIZONTAL_ALIGNMENT_LEFT, -1, misura).x
+	_parola.pivot_offset = Vector2(_parola_larga * 0.5, sopra)
+	_parola.visible = true
+	_scaldo_parola = 0
+	_durata_parola = maxf(durata, SFUMA_PAROLA)
+	_tempo_parola = _durata_parola
+
+	var chi := String(striscia.get("chi", ""))
+	_striscia.visible = chi != ""
+	if chi != "":
+		var alta := STRISCIA_DEL_PODIO if del_podio else STRISCIA_IN_PARTITA
+		_striscia.custom_minimum_size.y = alta
+		_striscia.offset_top = CIMA_PAROLA + _parola_alta + bordo + 4.0
+		_striscia.offset_bottom = _striscia.offset_top
+		# La faccia nel suo riquadro, col bordo nel colore della tuta: il colore dice chi
+		# è, il fondo lo dà il vestito dell'interfaccia (LEARNED § 73). Senza la
+		# fotografia il riquadro non c'è, e resta il nome.
+		var foto := faccia_di(chi)
+		_riquadro_faccia.visible = foto != null
+		_faccia.texture = foto
+		_riquadro_faccia.custom_minimum_size = Vector2(alta - 6.0, alta - 6.0)
+		(_riquadro_faccia.get_theme_stylebox("panel") as StyleBoxFlat).border_color = Corpo.colore_di(chi)
+		_nome_striscia.text = String(striscia.get("testo", chi))
+		_nome_striscia.add_theme_font_size_override("font_size", int(alta * 0.72))
+		_dettaglio_striscia.text = String(striscia.get("punti", ""))
+		_dettaglio_striscia.visible = _dettaglio_striscia.text != ""
+		_dettaglio_striscia.add_theme_font_size_override("font_size", int(alta * 0.78))
+	_anima_la_parola()
+
+
+## La parola grande che si vede adesso, o niente: la leggono i collaudi.
+func testo_parola() -> String:
+	return _parola.text if _parola != null and _tempo_parola > 0.0 else ""
+
+
+## Quanto è spesso il bordo navy di una parola alta `misura`, in punti dello schermo.
+static func bordo_della_parola(misura: int) -> float:
+	return roundf(float(misura) * BORDO_PAROLA)
+
+
+## Il posto che si prendono la parola e la sua striscia, a misura ferma (il salto
+## dell'inizio dura un decimo e mezzo): serve alle etichette dei punti, che ci passano
+## sotto, e al collaudo, che controlla che non tocchi né il cronometro né il mirino.
+func ingombro_della_parola() -> Rect2:
+	var bordo := bordo_della_parola(_parola.get_theme_font_size("font_size"))
+	var mezzo := _disegno.size.x * 0.5
+	var cima := CIMA_PAROLA - bordo
+	var fondo := CIMA_PAROLA + _parola_alta + bordo
+	var largo := _parola_larga + bordo * 2.0
+	if _striscia.visible:
+		fondo = _striscia.offset_top + _striscia.custom_minimum_size.y
+		largo = maxf(largo, _striscia.size.x)
+	return Rect2(mezzo - largo * 0.5, cima, largo, fondo - cima).grow(4.0)
+
+
+func _anima_la_parola() -> void:
+	var eta := _durata_parola - _tempo_parola
+	var esce := clampf(_tempo_parola / SFUMA_PAROLA, 0.0, 1.0)
+	_parola.modulate.a = esce
+	_parola.scale = Vector2.ONE * (1.0 + SALTO_PAROLA * (1.0 - smoothstep(0.0, DURATA_SALTO_PAROLA, eta)))
+	# La striscia arriva quando la parola è tornata alla sua misura.
+	_striscia.modulate.a = esce * smoothstep(0.10, 0.24, eta)
+	# Le pillole dei potenziamenti stanno nella stessa fascia: tacciono finché c'è la
+	# parola, e tornano mentre lei sfuma («DOPPIO!», poi la pillola coi secondi).
+	if _pillole != null:
+		_pillole.modulate.a = 1.0 - esce
+
+
+func _spegni_la_parola() -> void:
+	_tempo_parola = 0.0
+	if _parola == null:
+		return
+	_parola.visible = false
+	_striscia.visible = false
+	if _pillole != null:
+		_pillole.modulate.a = 1.0
+
+
+## La fotografia di un concorrente, letta una volta; niente se il file non c'è.
+static func faccia_di(nome: String) -> Texture2D:
+	if not _facce.has(nome):
+		var percorso := FACCIA % nome.to_lower()
+		_facce[nome] = load(percorso) if ResourceLoader.exists(percorso) else null
+	return _facce[nome]
+
+
+## **La festa del podio** (tappa 14, blocco F): a partita finita, dove ci sono le tribune,
+## per qualche secondo si guardano i primi tre e non si gioca. Mirino, leva, tasti e
+## colonna della classifica si spengono; restano il cronometro e la posizione, come il
+## tabellone di una ripresa. Spenta, si riaccende solo quello che aveva spento lei (la
+## classifica la riaccende la partita che riparte).
+func festa(accesa: bool) -> void:
+	if accesa == _in_festa:
+		return
+	_in_festa = accesa
+	if not accesa:
+		for nodo in _spenti_dalla_festa:
+			if is_instance_valid(nodo) and nodo != _classifica:
+				nodo.visible = true
+		_spenti_dalla_festa.clear()
+		return
+	var da_spegnere: Array = [_disegno, _classifica]
+	for figlio in get_children():
+		if figlio is Button:
+			da_spegnere.append(figlio)
+	for nodo in da_spegnere:
+		if nodo != null and (nodo as CanvasItem).visible:
+			(nodo as CanvasItem).visible = false
+			_spenti_dalla_festa.append(nodo as CanvasItem)
+
+
+func in_festa() -> bool:
+	return _in_festa
 
 
 static var _numeri: RegEx = null
@@ -511,7 +721,7 @@ func pulsante_di_scena(testo: String, colore: Color, azione: Callable) -> Button
 ## in ordine. La posizione arriva dal dato e non dall'ordine delle righe, perché
 ## in partita se ne mostrano quattro su sei: le prime tre e la tua.
 func classifica(righe: Array) -> void:
-	_classifica.visible = true
+	_classifica.visible = not _in_festa
 	for i in _righe_classifica.size():
 		var riga: Dictionary = _righe_classifica[i]
 		var pannello: PanelContainer = riga["pannello"]
@@ -735,6 +945,7 @@ func _costruisci() -> void:
 	_avviso.add_theme_font_size_override("normal_font_size", 63)
 	_avviso.add_theme_color_override("default_color", Color.WHITE)
 	_pannello_avviso.add_child(_avviso)
+	_costruisci_la_parola()
 
 	_pulsante("FUOCO", Vector2(-190, -190), Vector2(150, 150), Color(0.95, 0.3, 0.35),
 			func() -> void: _fuoco = true)
@@ -757,6 +968,55 @@ func _costruisci() -> void:
 	# esattamente il momento in cui non si può (misurato il 27/08/2026).
 	_costruisci_la_classifica()
 	_classifica.visible = false
+
+
+## La parola grande e la sua striscia nascono qui, spente, come tutto il resto: in
+## partita cambiano testo e misura, non i nodi.
+func _costruisci_la_parola() -> void:
+	_parola = _etichetta(PAROLA_IN_PARTITA, ORO, 28)
+	_parola.add_theme_font_override("font", carattere_titolo())
+	_parola.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_parola.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_parola.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_parola.visible = false
+	add_child(_parola)
+
+	_striscia = PanelContainer.new()
+	_striscia.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_striscia.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_striscia.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_striscia.add_theme_stylebox_override("panel", lamella(NAVY, 0.88, 10, 22))
+	_striscia.visible = false
+	add_child(_striscia)
+	var riga := HBoxContainer.new()
+	riga.add_theme_constant_override("separation", 12)
+	riga.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_striscia.add_child(riga)
+
+	_riquadro_faccia = PanelContainer.new()
+	_riquadro_faccia.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_riquadro_faccia.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var cornice := StyleBoxFlat.new()
+	cornice.bg_color = NAVY_CHIARO
+	cornice.set_corner_radius_all(3)
+	cornice.set_border_width_all(3)
+	cornice.set_content_margin_all(3)
+	cornice.anti_aliasing = true
+	_riquadro_faccia.add_theme_stylebox_override("panel", cornice)
+	_faccia = TextureRect.new()
+	_faccia.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_faccia.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_faccia.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_riquadro_faccia.add_child(_faccia)
+	riga.add_child(_riquadro_faccia)
+
+	_nome_striscia = _etichetta(28, Color.WHITE)
+	_nome_striscia.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	riga.add_child(_nome_striscia)
+	_dettaglio_striscia = _etichetta(30, ORO)
+	_dettaglio_striscia.add_theme_font_override("font", carattere_titolo())
+	_dettaglio_striscia.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	riga.add_child(_dettaglio_striscia)
 
 
 func _pulsante(testo: String, scarto: Vector2, misura: Vector2, colore: Color,
@@ -1096,6 +1356,16 @@ func _accendi_la_partita() -> void:
 		_bottone_esci.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		_bottone_esci.add_theme_constant_override("icon_max_width", 33)
 	_bottone_esci.visible = true
+	# La parola grande si scalda adesso, trasparente, per tre fotogrammi: le sue lettere
+	# a 130 punti si disegnano la prima volta durante il conto alla rovescia, non nel
+	# colpo che porta in testa. E la faccia di chi gioca si legge qui, non allora.
+	if _tempo_parola <= 0.0:
+		_parola.add_theme_font_size_override("font_size", PAROLA_IN_PARTITA)
+		_parola.text = "SEI PRIMO! DOPPIO!"
+		_parola.modulate.a = 0.0
+		_parola.visible = true
+		_scaldo_parola = 3
+	faccia_di("TU")
 
 
 ## **Il tabellone** (misto 1): il cronometro in una lamella al centro, la posizione in

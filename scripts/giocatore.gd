@@ -274,6 +274,42 @@ func fantasma(acceso: bool) -> void:
 		_corpo.fantasma(acceso)
 
 
+## **La festa del podio** (tappa 14, blocco F): a partita finita chi gioca non si pilota
+## più e si guarda da un'altra camera. Si fermano la fisica e il giro di ogni fotogramma
+## (il corpo lo muove l'arena, con `festeggia`); il corpo si vede comunque, anche se la
+## partita è finita in prima persona o con le spalle al muro; e i muri diradati davanti
+## alla camera di chi gioca tornano pieni, perché da lì non guarda più nessuno. Spenta,
+## torna tutto com'era, e i tocchi arrivati nel frattempo non diventano un colpo.
+func in_festa(accesa: bool) -> void:
+	set_physics_process(not accesa)
+	set_process(not accesa)
+	velocity = Vector3.ZERO
+	if accesa:
+		Arena.sfuma(0.0)
+		Arena.avvicina(global_position)
+		_corpo_visibile.visible = true
+		_arma.visible = false
+		_linea.nascondi()
+		if _corpo != null:
+			_corpo.lampeggia(false)
+		if comandi != null and comandi.has_method("ricarica"):
+			comandi.call("ricarica", 0.0)
+		return
+	festeggia(0.0)
+	# La sfumatura si rifà da capo al primo fotogramma: l'arena l'ha azzerata.
+	_sfumatura = -1.0
+	if comandi != null and comandi.has_method("mira_consumata"):
+		comandi.call("mira_consumata")
+		comandi.call("fuoco_richiesto")
+		comandi.call("salto_richiesto")
+
+
+## Il salto della festa: il corpo sale di `quota` metri, l'anello e l'ombra restano a terra.
+func festeggia(quota: float) -> void:
+	if _corpo != null:
+		_corpo.position.y = quota
+
+
 ## L'hanno preso. Stesso conto di tutti: 25 punti, 50 se di sponda.
 ## Restituisce falso se era immune, così chi ha sparato sa se ha fatto punti.
 func incassa(muri: int, da: Object = null) -> bool:

@@ -245,6 +245,9 @@ var _targhetta: Label3D
 var _anello: MeshInstance3D
 var _nome_zitto := 0.0
 var _fantasma := false
+## La festa del podio (tappa 14, blocco F): fermo, senza contorno, e salta sul posto.
+var _festa := false
+var _quota_targhetta := 0.0
 
 
 static func crea(genitore: Node, dove: Vector3, livello: int = 1, chi := "BRACE") -> Avversario:
@@ -365,6 +368,29 @@ func immune() -> bool:
 ## Il corpo vero: serve all'arena, che ci accende la sagoma del radar.
 func corpo() -> Corpo:
 	return _corpo
+
+
+## **La festa del podio** (tappa 14, blocco F): a partita finita i primi tre non giocano
+## più e si guardano da vicino. La fisica si ferma (il corpo lo muove l'arena, con
+## `festeggia`) e il contorno lime si spegne: dice «avversario», e lì non serve più.
+## Nome e anello a terra restano.
+func in_festa(accesa: bool) -> void:
+	_festa = accesa
+	set_physics_process(not accesa)
+	velocity = Vector3.ZERO
+	if _corpo != null:
+		_corpo.lampeggia(false)
+	if not accesa:
+		festeggia(0.0)
+
+
+## Il salto della festa: il corpo sale di `quota` metri e il nome con lui; l'anello e
+## l'ombra restano a terra.
+func festeggia(quota: float) -> void:
+	if _corpo != null:
+		_corpo.position.y = quota
+	if _targhetta != null:
+		_targhetta.position.y = _quota_targhetta + quota
 
 
 ## Il FANTASMA (tappa 11, blocco B): il corpo diventa un velo e il nome sopra la testa
@@ -1054,6 +1080,7 @@ func _costruisci() -> void:
 		_targhetta.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
 		_targhetta.position.y = ALTEZZA_CORPO + 0.12
 		_targhetta.outline_modulate = Color(0.04, 0.06, 0.18, 0.92)
+	_quota_targhetta = _targhetta.position.y
 
 	# La canna del gioco: da qui parte il dardo, come sempre. Il lampo alla bocca lo
 	# fa il blaster del corpo, che sta nella mano e si muove con lei.
@@ -1113,6 +1140,8 @@ func _aggiorna_i_contorni() -> void:
 			global_position + Vector3(0, ALTEZZA_CORPO * 0.5, 0))
 	var spessore := clampf(distanza * SPESSORE_PER_METRO, 0.02, 0.14)
 	var quanto := clampf((PORTATA_ALONE - distanza) / DISSOLVENZA_ALONE, 0.0, 1.0)
+	if _festa:
+		quanto = 0.0
 	for contorno in _contorni:
 		var materiale: StandardMaterial3D = contorno["materiale"]
 		materiale.grow_amount = spessore * float(contorno["quota"])

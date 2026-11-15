@@ -128,10 +128,11 @@ static func scrivi(radice: Node, testa: String, righe: Array) -> void:
 			_scrivi_riga(tabellone, i + 1, testo)
 
 
-## Il pubblico salta: lo chiama l'arena quando la classifica cambia.
-static func tifa(radice: Node) -> void:
+## Il pubblico salta: lo chiama l'arena quando la classifica cambia, e per tutta la festa
+## del podio (`durata`, in secondi). Un tifo più corto non accorcia quello che c'è già.
+static func tifa(radice: Node, durata := TIFO) -> void:
 	if radice != null:
-		radice.set_meta("tifo", TIFO)
+		radice.set_meta("tifo", maxf(float(radice.get_meta("tifo", 0.0)), durata))
 
 
 ## Quello che si muove sulle tribune, a ogni fotogramma: i festoni che dondolano sempre,

@@ -286,6 +286,7 @@ func _l_arena() -> void:
 
 	_i_pavimenti(arena)
 	await _la_camera(arena)
+	await _lo_scatto_non_sposta_la_mira(arena)
 
 	# Le scritte ritagliate a soglia si vedono o non si vedono: una trasparenza sotto la
 	# soglia le ritaglia tutte. Il nome dipinto nel catino, a 0,42, dalla tappa 8 non si
@@ -761,6 +762,42 @@ func _la_camera(arena: Node) -> void:
 			fuori == 0, "%d volte troppo vicina su %d" % [fuori, prove])
 	_conta("e dalla testa alla spalla alla camera non si attraversa niente", attraversa == 0,
 			"%d tratti su %d %s" % [attraversa, prove * 2, dove_attraversa])
+
+
+## **Lo scatto della camera non sposta il tiro** (tappa 14, blocco E). Al colpo a segno il
+## campo si stringe di due gradi e mezzo per un decimo di secondo. La mira parte dalla
+## camera: lo stesso tiro, calcolato a camera ferma e nel colmo dello scatto, deve partire
+## dallo stesso punto e andare nello stesso verso. La premessa: lo scatto c'è davvero.
+func _lo_scatto_non_sposta_la_mira(arena: Node) -> void:
+	var giocatore: Giocatore = arena.call("giocatore")
+	giocatore.global_position = Vector3(2.0, 0.4, 20.0)
+	giocatore.velocity = Vector3.ZERO
+	giocatore.punta(30.0, -4.0)
+	for i in 3:
+		await physics_frame
+		await process_frame
+	giocatore.set_process(false)
+	giocatore.set_physics_process(false)
+	giocatore.set("_scossa", 0.0)
+	giocatore.call("_aggiorna_camera", 0.0)
+	var campo_fermo: float = giocatore.camera().fov
+	var fermo: Array = giocatore.call("_soluzione_di_tiro")
+	giocatore.set("_scossa", Giocatore.SCOSSA)
+	giocatore.call("_aggiorna_camera", 0.0)
+	var campo_scatto: float = giocatore.camera().fov
+	var scatto: Array = giocatore.call("_soluzione_di_tiro")
+	giocatore.set("_scossa", 0.0)
+	giocatore.call("_aggiorna_camera", 0.0)
+	giocatore.set_process(true)
+	giocatore.set_physics_process(true)
+	_conta("al colpo a segno il campo della camera si stringe (la premessa)",
+			campo_fermo - campo_scatto > Giocatore.SCATTO_CAMPO * 0.5,
+			"da %.1f a %.1f gradi" % [campo_fermo, campo_scatto])
+	_conta("e lo stesso tiro parte dallo stesso punto e va nello stesso verso",
+			(fermo[0] as Vector3).distance_to(scatto[0]) < 0.001
+			and (fermo[1] as Vector3).angle_to(scatto[1]) < 0.0001,
+			"partenza a %.3f m, verso a %.4f rad" % [(fermo[0] as Vector3).distance_to(scatto[0]),
+			(fermo[1] as Vector3).angle_to(scatto[1])])
 
 
 func _poligono(zona: Dictionary) -> PackedVector2Array:

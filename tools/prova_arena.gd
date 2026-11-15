@@ -854,6 +854,11 @@ func _il_cronometro_chiude() -> void:
 			fermi += 1
 	_conta("e nessuno gioca più", fermi == (_arena.call("avversari") as Array).size(),
 			"%d ancora in gioco" % ((_arena.call("avversari") as Array).size() - fermi))
+	# La festa del podio (tappa 14) c'è solo dove ci sono le tribune: è la controprova di
+	# `prova_aspetto`, che nel PARCO GONFIABILE la vuole.
+	var podio: Variant = (_arena.call("giocatore") as Giocatore).comandi.get("_podio")
+	_conta("nella palestra, senza tribune, il podio sale subito: niente festa",
+			not bool(_arena.call("in_festa")) and podio != null and (podio as Control).visible, "")
 
 	# In partita la classifica ne mostra quattro su sei, per non finire in mezzo al
 	# pollice sul telefono. Alla fine si aprono tutte: l'ordine d'arrivo è la cosa

@@ -302,6 +302,16 @@ var _arco_fra := 0
 var _orologio := 0.0
 var _fuori_ordine := -1
 var _attesa_fuori_ordine := 0.0
+## La festa del podio (tappa 14, blocco F): quanto ne resta, da quanto dura, chi festeggia
+## (`{"corpo", "posto", "nome"}`), la sua camera e il podio che aspetta la fine.
+var _festa := 0.0
+var _eta_festa := 0.0
+var _festa_aperta := false
+var _scoppi_fatti := 0
+var _festeggiati: Array[Dictionary] = []
+var _camera_festa: Camera3D
+var _podio_in_attesa := {}
+var _festa_saltata := -1
 
 
 func _ready() -> void:
@@ -1140,6 +1150,8 @@ func _process(delta: float) -> void:
 	_tempo_vivo += delta
 	Giocattolo.dondola(self, _tempo_vivo)
 	Tribune.muovi(get_node_or_null("tribune"), _tempo_vivo, delta)
+	if _festa_aperta:
+		_muovi_la_festa(delta)
 	_prossimo_tabellone -= delta
 	if _prossimo_tabellone <= 0.0:
 		_prossimo_tabellone = 0.25
@@ -1409,6 +1421,7 @@ func commuta_sfida() -> void:
 ## colpi fra avversari valgono punti**, e senza quello gli altri quattro sarebbero
 ## arredamento intorno al duello di sempre.
 func avvia_sfida() -> void:
+	_sciogli_la_festa()
 	_sfida = true
 	_finita = false
 	_gara = _modalita == Modalita.GARA
@@ -1526,6 +1539,7 @@ func _fai_entrare_il_prossimo() -> void:
 
 
 func chiudi_sfida() -> void:
+	_sciogli_la_festa()
 	_sonda.fermati("chiusa")
 	Suoni.ferma_la_musica()
 	Suoni.folla(false)
@@ -1831,8 +1845,13 @@ func _finisci_la_partita(per_traguardo := false) -> void:
 	var mia := posizione_mia()
 	# Il tempo sul podio solo a chi ha vinto (tappa 12, F2): «SEI 6° · IN 42,3 S» era il tempo
 	# del vincitore, e sembrava il tuo. Chi ha vinto si legge già nella prima riga.
-	_comandi.podio(righe, maxi(mia, 1), _tempo_impiegato() if per_traguardo and mia == 1 else "")
+	var tempo := _tempo_impiegato() if per_traguardo and mia == 1 else ""
 	Suoni.fine_partita(mia == 1)
+	# Dove ci sono le tribune lo scontro finisce con la festa, e il podio arriva dopo.
+	if _festa_possibile():
+		_apri_la_festa(righe, maxi(mia, 1), tempo)
+		return
+	_comandi.podio(righe, maxi(mia, 1), tempo)
 	Suoni.folla(false)
 
 
@@ -1841,6 +1860,215 @@ func _finisci_la_partita(per_traguardo := false) -> void:
 func rigioca() -> void:
 	_comandi.spegni_il_podio()
 	avvia_sfida()
+
+
+# ------------------------------------------------------------------ la festa
+
+## **La festa del podio** (tappa 14, blocco F). Dove ci sono le tribune — il PARCO
+## GONFIABILE — lo scontro non finisce più sul riquadro: per tre secondi e mezzo si
+## guardano i primi tre. La camera lascia la spalla di chi gioca e scende all'altezza
+## delle teste davanti alla gradinata ovest; i tre saltano col blaster in aria, il
+## pubblico salta con loro, sopra scoppiano i coriandoli nei loro colori, e in alto sta
+## la parola («HAI VINTO», «2° POSTO») con la faccia di chi ha vinto. Poi la camera sale
+## sull'arena e arriva il riquadro di sempre con RIGIOCA. Un tocco la salta.
+##
+## Nei corpi a cartone un'esultanza non c'è (c'è solo un cenno della testa): il salto è
+## il corpo che sale, con la posa del salto e il braccio del blaster alzato.
+## Gara e palla tengono il podio di prima: la tappa 14 riguarda lo scontro.
+const FESTA := 3.6
+## Fin qui la camera sta bassa; poi sale, in `FESTA_SALITA` secondi.
+const FESTA_BASSA := 2.2
+const FESTA_SALITA := 1.2
+## Nei primi decimi un tocco non la salta: è ancora il pollice che stava giocando.
+const FESTA_SORDA := 0.7
+## Il posto del primo: il tratto libero davanti alla gradinata ovest, col tabellone grande
+## della tribuna alle spalle. Tutti e tre guardano a est, verso il campo.
+const POSTO_FESTA := Vector3(-31.0, 0.0, -12.0)
+const GIRO_FESTA := -PI * 0.5
+## Il secondo e il terzo rispetto al primo: mezzo passo indietro, uno per lato.
+const POSTI_FESTA := [Vector3.ZERO, Vector3(-0.7, 0.0, 1.75), Vector3(-0.7, 0.0, -1.75)]
+## La camera, rispetto al posto del primo. Bassa: davanti ai tre, all'altezza delle
+## teste, che scivola di lato di sessanta centimetri; guarda sopra le teste, così i tre
+## stanno nella metà bassa dello schermo e parola e striscia sopra di loro, sul pubblico.
+## Alta: sopra il campo, con le due tribune sullo sfondo.
+const CAMERA_FESTA := Vector3(5.6, 1.3, 0.9)
+const DERIVA_FESTA := Vector3(0.0, 0.0, -0.6)
+const MIRA_FESTA := Vector3(0.0, 2.0, 0.0)
+const CAMERA_FESTA_ALTA := Vector3(30.0, 22.0, 12.0)
+const MIRA_FESTA_ALTA := Vector3(-2.0, 3.0, 0.0)
+const CAMPO_FESTA := 52.0
+const CAMPO_FESTA_ALTO := 60.0
+## I tre scoppi di coriandoli, in secondi dall'inizio.
+const SCOPPI_FESTA := [0.15, 1.0, 1.85]
+## Quanto salta ognuno dei tre, ogni quanto, e con che ritardo sul primo.
+const SALTI_FESTA := [{"alto": 0.55, "ogni": 0.62, "dopo": 0.0},
+	{"alto": 0.38, "ogni": 0.70, "dopo": 0.22}, {"alto": 0.38, "ogni": 0.66, "dopo": 0.41}]
+
+
+## La festa è in corso (la camera sui tre, il podio non ancora arrivato).
+func in_festa() -> bool:
+	return _festa > 0.0
+
+
+func _festa_possibile() -> bool:
+	return not _gara and not _palla and _comandi != null and _giocatore != null \
+			and get_node_or_null("tribune") != null
+
+
+func _apri_la_festa(righe: Array, posizione: int, tempo: String) -> void:
+	_festa_aperta = true
+	_podio_in_attesa = {"righe": righe, "posizione": posizione, "tempo": tempo}
+	_festa = FESTA
+	_eta_festa = 0.0
+	_scoppi_fatti = 0
+	_festeggiati.clear()
+	# Chi gioca si ferma comunque, anche fuori dal podio: la camera non è più la sua.
+	_giocatore.in_festa(true)
+	for i in mini(PODIO, righe.size()):
+		var corpo: Variant = _concorrenti[int(righe[i]["ordine"])]["corpo"]
+		if not is_instance_valid(corpo):
+			continue
+		var chi := corpo as Node3D
+		if chi != _giocatore:
+			chi.call("in_festa", true)
+		chi.global_position = POSTO_FESTA + POSTI_FESTA[i]
+		chi.rotation.y = GIRO_FESTA
+		_festeggiati.append({"corpo": chi, "posto": i, "nome": String(righe[i]["nome"])})
+	if _camera_festa == null:
+		_camera_festa = Camera3D.new()
+		_camera_festa.name = "camera_della_festa"
+		_camera_festa.near = 0.05
+		_camera_festa.far = 270.0
+		add_child(_camera_festa)
+	_metti_la_camera_della_festa(0.0)
+	_camera_festa.make_current()
+	# La parola e, sotto, la faccia di chi ha vinto coi suoi punti.
+	var vince: Dictionary = righe[0]
+	var nome := String(vince["nome"])
+	_comandi.annuncia("")
+	_comandi.festa(true)
+	_comandi.parola("HAI VINTO" if posizione == 1 else "%d° POSTO" % posizione, FESTA,
+			{"chi": nome, "testo": nome if posizione == 1 else "VINCE %s" % nome,
+			"punti": "%s PUNTI" % Comandi.valore_di(vince)}, true)
+	Tribune.tifa(get_node_or_null("tribune"), FESTA)
+
+
+## La festa, fotogramma per fotogramma: la camera, gli scoppi, e i tre che saltano. Finita
+## la festa i tre restano dove sono, a terra, finché la partita non riparte.
+func _muovi_la_festa(delta: float) -> void:
+	var in_corso := _festa > 0.0
+	if in_corso:
+		_eta_festa += delta
+		_festa = maxf(_festa - delta, 0.0)
+		_metti_la_camera_della_festa(_eta_festa)
+		while _scoppi_fatti < SCOPPI_FESTA.size() \
+				and _eta_festa >= float(SCOPPI_FESTA[_scoppi_fatti]):
+			_scoppi_fatti += 1
+			_scoppia_la_festa()
+	for voce in _festeggiati:
+		if not is_instance_valid(voce["corpo"]):
+			continue
+		var chi := voce["corpo"] as Node3D
+		var posto := int(voce["posto"])
+		var salto: Dictionary = SALTI_FESTA[posto]
+		var quota := 0.0
+		var pendenza := 0.0
+		var giro := 0.0
+		var da_quando := _eta_festa - float(salto["dopo"])
+		if in_corso and _festa > 0.0 and da_quando >= 0.0:
+			var ogni := float(salto["ogni"])
+			var quale := int(da_quando / ogni)
+			var u := fposmod(da_quando, ogni) / ogni
+			# Quattro quinti del salto in aria, l'ultimo a terra a riprendere lo slancio.
+			if u < 0.8:
+				var v := u / 0.8
+				quota = float(salto["alto"]) * 4.0 * v * (1.0 - v)
+				# Chi ha vinto, al terzo salto, fa un giro su se stesso.
+				if posto == 0 and quale == 2:
+					giro = TAU * smoothstep(0.0, 1.0, v)
+			# Il blaster in aria: fermo in alto chi ha vinto, su e giù gli altri due.
+			pendenza = deg_to_rad(55.0 if posto == 0
+					else 30.0 + 20.0 * sin(_eta_festa * 5.0 + float(posto)))
+		chi.call("festeggia", quota)
+		chi.rotation.y = GIRO_FESTA + giro
+		var corpo := chi.call("corpo") as Corpo
+		if corpo != null:
+			corpo.aggiorna(Vector3.ZERO, quota < 0.04, pendenza, delta)
+	if in_corso and _festa <= 0.0:
+		_chiudi_la_festa()
+
+
+## Dove sta la camera della festa dopo `eta` secondi, e dove guarda.
+func _metti_la_camera_della_festa(eta: float) -> void:
+	var sale := smoothstep(FESTA_BASSA, FESTA_BASSA + FESTA_SALITA, eta)
+	var bassa := POSTO_FESTA + CAMERA_FESTA + DERIVA_FESTA * clampf(eta / FESTA_BASSA, 0.0, 1.0)
+	var dove := bassa.lerp(POSTO_FESTA + CAMERA_FESTA_ALTA, sale)
+	var mira := (POSTO_FESTA + MIRA_FESTA).lerp(POSTO_FESTA + MIRA_FESTA_ALTA, sale)
+	_camera_festa.look_at_from_position(dove, mira)
+	_camera_festa.fov = lerpf(CAMPO_FESTA, CAMPO_FESTA_ALTO, sale)
+
+
+## Uno scoppio: sopra ognuno dei tre i coriandoli nel colore della sua tuta (TORO, che è
+## in nero, nel suo rosso) e uno sbuffo chiaro dietro i piedi. Dalla riserva di `Scintille`.
+func _scoppia_la_festa() -> void:
+	for voce in _festeggiati:
+		if not is_instance_valid(voce["corpo"]):
+			continue
+		var dove: Vector3 = (voce["corpo"] as Node3D).global_position
+		var dati: Dictionary = Corpo.PERSONAGGI.get(String(voce["nome"]), Corpo.PERSONAGGI["BRACE"])
+		var colore: Color = dati["tuta"]
+		if colore.get_luminance() < 0.2:
+			colore = dati["secondo"]
+		Scintille.presa(dove + Vector3(0.0, 2.0, 0.0), colore)
+		Scintille.spento(dove + Vector3(-0.5, 0.25, 0.0), Vector3.UP)
+
+
+## La festa finisce, da sola o con un tocco: la camera resta in alto sull'arena e arriva
+## il riquadro di sempre, con l'ordine d'arrivo e RIGIOCA.
+func _chiudi_la_festa() -> void:
+	_festa = 0.0
+	if _podio_in_attesa.is_empty():
+		return
+	var attesa := _podio_in_attesa
+	_podio_in_attesa = {}
+	_metti_la_camera_della_festa(FESTA)
+	_comandi.podio(attesa["righe"], int(attesa["posizione"]), String(attesa["tempo"]))
+	Suoni.folla(false)
+
+
+## La partita riparte, o si chiude: chi gioca torna alla sua camera e ai suoi comandi.
+## Gli avversari non c'è bisogno di rimetterli a posto: escono dal campo.
+func _sciogli_la_festa() -> void:
+	if not _festa_aperta:
+		return
+	_festa_aperta = false
+	_festa = 0.0
+	_podio_in_attesa = {}
+	for voce in _festeggiati:
+		if is_instance_valid(voce["corpo"]) and voce["corpo"] != _giocatore:
+			(voce["corpo"] as Node).call("in_festa", false)
+	_festeggiati.clear()
+	_giocatore.in_festa(false)
+	_giocatore.camera().make_current()
+	_comandi.festa(false)
+	_comandi.parola("")
+
+
+## **Un tocco salta la festa.** Si ferma qui: non deve diventare un colpo, né premere il
+## RIGIOCA che arriva sotto il dito. Sul telefono lo stesso tocco arriva due volte, come
+## finto mouse e come tocco: si fermano tutti e due.
+func _input(evento: InputEvent) -> void:
+	var premuto := (evento is InputEventScreenTouch and (evento as InputEventScreenTouch).pressed) \
+			or (evento is InputEventMouseButton and (evento as InputEventMouseButton).pressed)
+	if not premuto:
+		return
+	if _festa > 0.0:
+		get_viewport().set_input_as_handled()
+		if _eta_festa >= FESTA_SORDA:
+			_festa_saltata = Engine.get_process_frames()
+			_chiudi_la_festa()
+	elif _festa_saltata == Engine.get_process_frames():
+		get_viewport().set_input_as_handled()
 
 
 ## Si esce dalla partita e si torna all'ingresso, da dove si può rientrare.

@@ -51,6 +51,7 @@ func _lavora() -> void:
 		if variante == Aspetto.GONFIABILE:
 			_copre_le_scatole(arena, "GONFIABILE")
 			_niente_facce_doppie(arena, "GONFIABILE")
+			await _la_festa_del_podio(arena)
 		if variante == Aspetto.PISTA:
 			# Le gomme sono tonde su una scatola: fra due gomme la gomma sta fino a mezzo
 			# metro dietro la faccia del muro. Il resto della pista copre come i moduli.
@@ -386,6 +387,127 @@ func _confronta(arena: Node3D, visibili: Array, dietro := DIETRO) -> Array:
 	if dove_storti.size() > 0:
 		dove_peggiore += "; fuori misura su: " + ", ".join(PackedStringArray(dove_storti.keys()))
 	return [raggi, storti, peggiore, dove_peggiore]
+
+
+## **La festa del podio** (tappa 14, blocco F), dove ci sono le tribune. Lo scontro non
+## finisce sul riquadro: per tre secondi e mezzo la camera lascia chi gioca e guarda i
+## primi tre che saltano davanti alla gradinata, con la parola in alto; poi arriva il podio
+## di sempre. Qui si controlla quello che a occhio non si vede: che duri meno di quattro
+## secondi, che la camera non entri in niente e veda chi ha vinto, che RIGIOCA rimetta chi
+## gioca alla sua camera e ai suoi comandi, che un tocco la salti senza diventare un colpo
+## (ma non nei primi decimi, quando è ancora il pollice che giocava), e che in gara non
+## ci sia: la tappa 14 riguarda lo scontro.
+func _la_festa_del_podio(arena: Node3D) -> void:
+	var giocatore: Giocatore = arena.call("giocatore")
+	var comandi: Comandi = giocatore.comandi
+	var spazio := arena.get_world_3d().direct_space_state
+	var tribune := arena.get_node_or_null("tribune")
+	await _gioca_fino_alla_fine(arena, giocatore)
+	var inizio := Time.get_ticks_msec()
+	_conta("GONFIABILE: finito lo scontro parte la festa, e il podio aspetta",
+			bool(arena.call("in_festa")) and (comandi.get("_podio") == null
+			or not (comandi.get("_podio") as Control).visible), "in festa: %s" % arena.call("in_festa"))
+	var camera := arena.get_viewport().get_camera_3d()
+	_conta("la camera lascia chi gioca", camera != null and camera != giocatore.camera(), "")
+	_conta("in alto la parola: hai vinto tu", comandi.testo_parola() == "HAI VINTO",
+			comandi.testo_parola())
+	_conta("il pubblico delle tribune salta per tutta la festa",
+			tribune != null and float(tribune.get_meta("tifo", 0.0)) > Arena.FESTA - 0.5,
+			"%.1f s" % float(tribune.get_meta("tifo", 0.0)))
+	var lontani := 0
+	var podio: Array = (arena.call("classifica") as Array).slice(0, Arena.PODIO)
+	var concorrenti: Array = arena.get("_concorrenti")
+	for riga: Dictionary in podio:
+		var corpo: Node3D = concorrenti[int(riga["ordine"])]["corpo"]
+		if corpo.global_position.distance_to(Arena.POSTO_FESTA) > 2.5 or corpo.is_physics_processing():
+			lontani += 1
+	_conta("i primi tre stanno davanti alla gradinata, fermi", lontani == 0, "%d fuori posto" % lontani)
+
+	# Per tutta la festa: la camera non entra in niente, dal basso vede chi ha vinto, e
+	# chi ha vinto salta.
+	var dentro := 0
+	var coperto := 0
+	var salto := 0.0
+	var palla := PhysicsShapeQueryParameters3D.new()
+	palla.shape = _sfera(0.3)
+	palla.collision_mask = Strati.SOLIDO
+	while Time.get_ticks_msec() < inizio + 6000 and bool(arena.call("in_festa")):
+		palla.transform = Transform3D(Basis(), camera.global_position)
+		if not spazio.intersect_shape(palla, 1).is_empty():
+			dentro += 1
+		var testa := giocatore.global_position + Vector3(0, 1.4, 0)
+		if (Time.get_ticks_msec() - inizio) < int(Arena.FESTA_BASSA * 1000.0) and not spazio.intersect_ray(
+				PhysicsRayQueryParameters3D.create(camera.global_position, testa, Strati.SOLIDO)).is_empty():
+			coperto += 1
+		salto = maxf(salto, giocatore.corpo().position.y)
+		await process_frame
+	var durata := float(Time.get_ticks_msec() - inizio) / 1000.0
+	_conta("la camera della festa non entra in niente e vede chi ha vinto",
+			dentro == 0 and coperto == 0, "%d fotogrammi dentro un solido, %d coperta" % [dentro, coperto])
+	_conta("chi ha vinto salta (più di trenta centimetri)", salto > 0.3, "%.2f m" % salto)
+	_conta("la festa dura meno di quattro secondi, e poi sale il podio",
+			durata > 3.0 and durata < 4.0 and (comandi.get("_podio") as Control).visible
+			and comandi.testo_parola() == "", "%.1f s" % durata)
+	arena.call("rigioca")
+	await process_frame
+	await process_frame
+	_conta("RIGIOCA rimette chi gioca alla sua camera, ai suoi comandi e alla partenza",
+			arena.get_viewport().get_camera_3d() == giocatore.camera() and giocatore.is_physics_processing()
+			and giocatore.is_processing() and (comandi.get("_disegno") as Control).visible
+			and giocatore.corpo().position.y == 0.0
+			and giocatore.global_position.distance_to(Arena.POSTO_FESTA) > 5.0, "")
+
+	# Un tocco la salta. Nei primi decimi no: è ancora il pollice che stava giocando.
+	await _gioca_fino_alla_fine(arena, giocatore)
+	var schermo := root.get_visible_rect().size
+	_tocca(schermo * Vector2(0.6, 0.8))
+	await process_frame
+	_conta("un tocco nei primi decimi non salta la festa", bool(arena.call("in_festa")), "")
+	await create_timer(Arena.FESTA_SORDA + 0.1).timeout
+	_tocca(schermo * Vector2(0.6, 0.8))
+	await process_frame
+	_conta("dopo, un tocco la salta: sale il podio",
+			not bool(arena.call("in_festa")) and (comandi.get("_podio") as Control).visible, "")
+	_conta("e quel tocco non diventa un colpo", not comandi.fuoco_richiesto(), "")
+	arena.call("chiudi_sfida")
+	await process_frame
+
+	# In gara il podio sale subito, come prima.
+	arena.call("imposta_modalita", Modalita.GARA)
+	arena.call("avvia_sfida")
+	for i in 12:
+		await process_frame
+	arena.call("_finisci_la_partita", true)
+	_conta("GONFIABILE, in gara: niente festa, il podio sale subito",
+			not bool(arena.call("in_festa")) and (comandi.get("_podio") as Control).visible, "")
+	arena.call("chiudi_sfida")
+	arena.call("imposta_modalita", Modalita.SCONTRO)
+	arena.call("imposta_durata", Arena.DURATA_PARTITA)
+	await process_frame
+
+
+## Uno scontro da un secondo, con un colpo a segno di chi gioca: finisce col giocatore primo.
+func _gioca_fino_alla_fine(arena: Node3D, giocatore: Giocatore) -> void:
+	arena.call("imposta_durata", 1.0)
+	arena.call("avvia_sfida")
+	var scadenza := Time.get_ticks_msec() + 20000
+	while Time.get_ticks_msec() < scadenza and ((arena.call("avversari") as Array).size() < 5
+			or float(arena.call("conto_alla_rovescia")) > 0.0):
+		await process_frame
+	((arena.call("avversari") as Array)[0] as Avversario).call("incassa", 0, giocatore)
+	while Time.get_ticks_msec() < scadenza and not bool(arena.get("_finita")):
+		await process_frame
+	await process_frame
+
+
+## Un tocco breve in un punto dello schermo, come lo manda il telefono: giù e su.
+func _tocca(dove: Vector2) -> void:
+	for giu in [true, false]:
+		var tocco := InputEventScreenTouch.new()
+		tocco.index = 3
+		tocco.position = dove
+		tocco.pressed = giu
+		root.push_input(tocco)
 
 
 func _conta(cosa: String, esito: bool, dettaglio := "") -> void:
