@@ -74,9 +74,10 @@ const NUMERI := {"TU": 7, "BRACE": 3, "QUARZO": 9, "LAMPO": 11, "NEBBIA": 5, "TO
 ## Lo zaino, nelle unità del modello (alto 0,67): misura, quota del centro sopra l'osso
 ## del busto, e quanto sta dietro l'osso la schiena.
 const ZAINO := Vector3(0.27, 0.215, 0.13)
-const ZAINO_QUOTA := 0.03
+const ZAINO_QUOTA := 0.045
 const ZAINO_SCHIENA := 0.055
-const ZAINO_PATTA := 0.056
+const ZAINO_PATTA := 0.03
+const ZAINO_FASCIA := 0.054
 const DARDO_ZAINO := Color(1.0, 0.45, 0.10)
 const PUNTA_ZAINO := Color(0.10, 0.14, 0.34)
 
@@ -331,6 +332,13 @@ func lampeggia(acceso: bool) -> void:
 	# A cartone la tuta non ha la luce: l'immunità fa sparire e ricomparire il corpo.
 	if _cartone and _modello != null:
 		_modello.visible = not acceso
+
+
+## Se il corpo in questo momento si vede: chi è appena ricomparso lampeggia, e quello che
+## gli sta intorno (l'anello a terra, il nome) lampeggia con lui, o resta a terra un
+## anello senza nessuno sopra (tappa 14).
+func si_vede() -> bool:
+	return _modello == null or _modello.visible
 
 
 ## Dove sta la bocca del blaster in questo momento: la punta della scatola del
@@ -810,8 +818,11 @@ func _zaino_sulla_schiena() -> void:
 	var cima := centro.y + ZAINO.y * 0.5
 	# Il sacco, la patta di sopra che sporge, la tasca bassa e le due cinghie ai lati.
 	getto.scatola(ZAINO, 0.028, tinta, Transform3D(Basis(), centro), 2, 0.3)
-	getto.scatola(Vector3(ZAINO.x + 0.016, ZAINO_PATTA, ZAINO.z + 0.016), 0.016, PUNTA_ZAINO,
+	getto.scatola(Vector3(ZAINO.x + 0.016, ZAINO_PATTA, ZAINO.z + 0.016), 0.014, PUNTA_ZAINO,
 			Transform3D(Basis(), Vector3(0.0, cima - ZAINO_PATTA * 0.5 + 0.004, centro.z)), 2)
+	# La fascia del nome, in basso: il numero sta sopra, dove lo schermo non lo taglia.
+	getto.scatola(Vector3(ZAINO.x + 0.012, ZAINO_FASCIA, ZAINO.z + 0.012), 0.014, PUNTA_ZAINO,
+			Transform3D(Basis(), Vector3(0.0, centro.y - ZAINO.y * 0.5 + ZAINO_FASCIA * 0.5 - 0.004, centro.z)), 2)
 	for lato in [-1.0, 1.0]:
 		getto.scatola(Vector3(0.026, ZAINO.y * 0.78, ZAINO.z * 0.7), 0.01, secondo,
 				Transform3D(Basis(), Vector3(lato * (ZAINO.x * 0.5 + 0.004), centro.y - 0.012, centro.z)), 1)
@@ -839,11 +850,11 @@ func _zaino_sulla_schiena() -> void:
 			chiaro if tinta.get_luminance() < 0.6 else Color(0.06, 0.09, 0.22),
 			Color(0.04, 0.06, 0.16) if tinta.get_luminance() < 0.6 else chiaro)
 	numero.name = "Numero"
-	numero.position = Vector3(0.0, centro.y - ZAINO_PATTA * 0.5 - 0.004, faccia)
+	numero.position = Vector3(0.0, centro.y + (ZAINO_FASCIA - ZAINO_PATTA) * 0.5, faccia)
 	attacco.add_child(numero)
 	var nome := _scritta_di_schiena(chi, 0.042, chiaro, Color(0.04, 0.06, 0.16))
 	nome.name = "Nome"
-	nome.position = Vector3(0.0, cima - ZAINO_PATTA * 0.5 + 0.004, faccia - 0.009)
+	nome.position = Vector3(0.0, centro.y - ZAINO.y * 0.5 + ZAINO_FASCIA * 0.5 - 0.004, faccia - 0.007)
 	attacco.add_child(nome)
 
 

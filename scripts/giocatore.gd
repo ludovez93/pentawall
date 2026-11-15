@@ -95,6 +95,7 @@ var _mescola := 0.0             ## 0 = terza persona, 1 = prima
 var _sfumatura := -1.0
 var _in_prima := false
 var _ricarica := 0.0
+var _anello_a_terra: MeshInstance3D
 var _immunita := 0.0
 var _sensibilita_mouse := 0.0022
 var _corsa := 0.0               ## 0 fermo, 1 a piena velocità, lisciato
@@ -176,6 +177,8 @@ func _process(delta: float) -> void:
 	if _corpo != null:
 		_corpo.aggiorna(velocity, is_on_floor(), _pendenza, delta)
 		_corpo.lampeggia(_immunita > 0.0 and fmod(_immunita, 0.16) > 0.08)
+		if _anello_a_terra != null:
+			_anello_a_terra.visible = _corpo.si_vede()
 
 
 ## La mira, da qualunque parte arrivi: mouse o pollice.
@@ -609,7 +612,8 @@ func _costruisci() -> void:
 	_corpo_visibile.add_child(_corpo)
 	# L'anello bianco a terra di chi gioca (tappa 14), coi corpi a cartone.
 	if Aspetto.corpi_a_cartone():
-		_corpo_visibile.add_child(Corpo.anello_a_terra(Color(0.97, 0.97, 1.0)))
+		_anello_a_terra = Corpo.anello_a_terra(Color(0.97, 0.97, 1.0))
+		_corpo_visibile.add_child(_anello_a_terra)
 
 	# Il blaster della prima persona: lo stesso giocattolo che il corpo tiene in
 	# mano, davanti agli occhi. Sta nell'anima del gioco del 1999 e resta.

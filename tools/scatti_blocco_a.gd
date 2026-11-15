@@ -17,7 +17,7 @@ const CARTELLA := "res://scatti"
 ## Il primo avversario è quello a cui si tira. La prima inquadratura è quella dello scatto;
 ## le altre servono con `prova`, per sceglierla guardando.
 const INQUADRATURE := [
-	{"posto": Vector3(-18.5, 0.0, -11.0), "giro": 53.0,
+	{"posto": Vector3(-18.5, 0.0, -11.0), "giro": 50.0,
 			"avversari": [Vector2(6.0, -3.4), Vector2(7.5, -6.2), Vector2(3.4, 4.6), Vector2(12.0, 3.0)]},
 	{"posto": Vector3(-18.5, 0.0, -11.0), "giro": 60.0,
 			"avversari": [Vector2(8.0, 1.6), Vector2(6.0, -3.4), Vector2(11.5, 5.0)]},
@@ -63,6 +63,11 @@ func _lavora() -> void:
 	while Time.get_ticks_msec() < scadenza and float(arena.call("conto_alla_rovescia")) > 0.0:
 		await process_frame
 	var giocatore: Giocatore = arena.call("giocatore")
+	if argomenti.size() > 1 and argomenti[1] == "schiene":
+		await _schiene(arena, giocatore)
+		Aspetto.scegli(di_prima)
+		quit()
+		return
 	await _riposa(int(PARTITA * 30.0))
 	if prova:
 		for i in INQUADRATURE.size():
@@ -82,6 +87,50 @@ func _lavora() -> void:
 		print("blocco A: %s, scala %.2f" % ["scatto fatto" if fatto else "NESSUN COLPO A SEGNO", scala])
 	Aspetto.scegli(di_prima)
 	quit()
+
+
+## **I sei di schiena** (tappa 14, blocco C): i cinque avversari in fila a dodici metri,
+## girati come chi gioca, e poi a trenta. A dodici si deve dire chi è chi senza leggere i
+## nomi; a trenta nome e anello si devono ancora vedere. La partita si ferma: gli scatti
+## vogliono i corpi dove li si mette.
+func _schiene(arena: Node, giocatore: Giocatore) -> void:
+	await _riposa(20)
+	arena.set("_finita", true)
+	var avversari: Array = arena.call("avversari")
+	# Fermi davvero: senza la loro fisica non si girano a guardare chi gioca.
+	for bot in avversari:
+		(bot as Node).set_physics_process(false)
+	# A dodici metri tutti e cinque, a due metri e mezzo l'uno dall'altro, sul tratto
+	# libero davanti alla tribuna; a trenta solo tre, più larghi, perché i nomi hanno
+	# misura fissa sullo schermo e si coprirebbero. Trenta metri liberi nell'arena non ci
+	# sono: per quello scatto si spengono gli oggetti in campo (solo alla vista).
+	for prova in [[12.0, 5, 2.4, Vector3(-18.5, 0.0, -11.0), 85.0],
+			[30.0, 3, 4.4, Vector3(-21.0, 0.0, 12.0), 0.0]]:
+		var lontano := float(prova[0])
+		var quanti := int(prova[1])
+		var posto: Vector3 = prova[3]
+		var giro := float(prova[4])
+		var avanti := Vector3(0, 0, -1).rotated(Vector3.UP, deg_to_rad(giro))
+		var destra := Vector3(1, 0, 0).rotated(Vector3.UP, deg_to_rad(giro))
+		var oggetti := arena.get_node_or_null("oggetti_gonfiabili") as Node3D
+		if oggetti != null:
+			oggetti.visible = lontano < 20.0
+		for f in 24:
+			giocatore.global_position = posto
+			giocatore.velocity = Vector3.ZERO
+			giocatore.punta(giro, -9.0)
+			giocatore.set("_immunita", 0.0)
+			for i in avversari.size():
+				var bot := avversari[i] as Avversario
+				bot.set("_immunita", 0.0)
+				bot.velocity = Vector3.ZERO
+				bot.rotation.y = deg_to_rad(giro)
+				if i < quanti:
+					bot.global_position = posto + avanti * lontano 							+ destra * (-0.6 + float(prova[2]) * (float(i) - float(quanti - 1) * 0.5))
+				else:
+					bot.global_position = Vector3(30.0, 0.0, 20.0 + 3.0 * float(i))
+			await process_frame
+		await _scatta("C14-schiene-%dm.png" % int(lontano))
 
 
 ## Mette chi gioca e gli avversari al loro posto nell'inquadratura.

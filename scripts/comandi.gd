@@ -216,6 +216,13 @@ func _muovi_le_etichette(delta: float) -> void:
 		etichetta.position = dove - etichetta.size * 0.5 \
 				- Vector2(0.0, _alza_etichette + SALITA_ETICHETTA * quota)
 		etichetta.modulate.a = clampf((1.0 - quota) * 2.2, 0.0, 1.0)
+		# **Due scritte non si coprono mai** (tappa 14): il cartello al centro ha il suo
+		# posto, e un'etichetta dei punti che ci finirebbe sopra passa sotto di lui. Era
+		# «SEI PRIMO» sopra «+25 · DIRETTO», nello stesso colpo che porta in testa.
+		if _pannello_avviso != null and _pannello_avviso.visible:
+			var cartello := _pannello_avviso.get_global_rect().grow(6.0)
+			if cartello.intersects(etichetta.get_global_rect()):
+				etichetta.global_position.y = cartello.end.y
 
 
 func _unhandled_input(evento: InputEvent) -> void:

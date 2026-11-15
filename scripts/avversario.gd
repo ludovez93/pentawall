@@ -1043,6 +1043,10 @@ func _costruisci() -> void:
 		_anello = Corpo.anello_a_terra(Color(ALONI[alone_scelto]["colore"]))
 		_aspetto.add_child(_anello)
 		_targhetta.outline_size = 46
+		# Il nome sta sopra la testa a ogni distanza: ha misura fissa sullo schermo, e
+		# centrato sul suo punto da lontano scendeva a coprire la faccia.
+		_targhetta.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+		_targhetta.position.y = ALTEZZA_CORPO + 0.12
 		_targhetta.outline_modulate = Color(0.04, 0.06, 0.18, 0.92)
 
 	# La canna del gioco: da qui parte il dardo, come sempre. Il lampo alla bocca lo
@@ -1126,7 +1130,7 @@ func _aggiorna_i_contorni() -> void:
 		# Il nome ha la sua misura fissa sullo schermo e si legge fino a quaranta metri, in
 		# tutte le arene (tappa 12, D1): chi ci gioca si vede da lontano. Il contorno no.
 		var nome := clampf((PORTATA_NOMI_APERTA - distanza) / DISSOLVENZA_ALONE, 0.0, 1.0)
-		_targhetta.visible = nome > 0.0 and not _fantasma
+		_targhetta.visible = nome > 0.0 and not _fantasma and (_corpo == null or _corpo.si_vede())
 		_targhetta.modulate.a = 0.95 * nome
 		_targhetta.outline_modulate.a = (0.92 if _anello != null else 0.85) * nome
 		if _anello != null:
