@@ -145,6 +145,7 @@ func _nelle_rampe() -> void:
 		await physics_frame
 	var pianta: Dictionary = arena.call("pianta")
 	_nessun_pavimento_sopra(arena, pianta)
+	_nessun_bordo_sul_vuoto(arena)
 	await _le_rampe_si_salgono(arena, pianta)
 	arena.queue_free()
 	await process_frame
@@ -225,6 +226,67 @@ func _le_rampe_si_salgono(arena: Node3D, pianta: Dictionary) -> void:
 		_conta("«%s»: dove ci si ferma c'è un muro, mai un gradino" % r["nome"],
 				su_un_gradino.is_empty(), "; ".join(su_un_gradino))
 	g.comandi = null
+
+
+## **Da dove si sta in piedi non si cade nel vuoto.** Sotto l'arena non c'è niente, e
+## chi esce dal pavimento cade per sempre. Dal telefono, il 21/11/2026: *«l'ultima
+## partita mi ha fatto cadere nel vuoto ancora una volta»*. Era la fascia di 80 cm fra i
+## muri del catino e i pavimenti delle ali e del portico, nata il 06/10/2026 quando
+## l'arena è passata da 66 a 80 metri (la fessura è cresciuta con lei, il corpo no): ai
+## capi, dove comincia la rampa, si allargava in un triangolo in cui il corpo passava.
+## Una griglia ogni 25 cm (la fessura più stretta che conta è larga quanto il corpo,
+## 84): per ogni piano su cui si sta in piedi si guardano le quattro colonne accanto, e
+## se alla stessa altezza c'è aria e sotto non c'è niente, quello è un bordo sul vuoto.
+## La mappa fine, per sapere dove, la fa `tools/scansione_buchi.gd`.
+func _nessun_bordo_sul_vuoto(arena: Node3D) -> void:
+	var spazio := arena.get_world_3d().direct_space_state
+	var passo := 0.25
+	var mezza := 39.9
+	var n := int(mezza * 2.0 / passo) + 1
+	var bordi: Array[String] = []
+	for i in n:
+		for j in n:
+			var x := -mezza + i * passo
+			var z := -mezza + j * passo
+			for h in _piani_in_piedi(spazio, x, z):
+				for v: Vector2 in [Vector2(passo, 0), Vector2(-passo, 0), Vector2(0, passo), Vector2(0, -passo)]:
+					var accanto := Vector3(x + v.x, h + 0.3, z + v.y)
+					if not _aria(spazio, accanto):
+						continue
+					var giu := PhysicsRayQueryParameters3D.create(accanto,
+							Vector3(accanto.x, -30.0, accanto.z), Strati.SOLIDO)
+					if spazio.intersect_ray(giu).is_empty() and bordi.size() < 400:
+						bordi.append("(%.2f, %.2f) a quota %.1f" % [accanto.x, accanto.z, h])
+	_conta("da dove si sta in piedi non si cade nel vuoto", bordi.is_empty(),
+			"%d bordi sul vuoto, per esempio %s" % [bordi.size(), ", ".join(bordi.slice(0, 4))])
+
+
+## Le quote su cui si sta in piedi in una colonna: pendenza sotto i 45°, un corpo di
+## spazio sopra la testa, sotto i tetti delle ali (7,6: sopra ci sono le fasce dei soffitti).
+func _piani_in_piedi(spazio: PhysicsDirectSpaceState3D, x: float, z: float) -> Array[float]:
+	var fuori: Array[float] = []
+	var da := 30.0
+	for k in 16:
+		var giu := PhysicsRayQueryParameters3D.create(Vector3(x, da, z), Vector3(x, -6.0, z),
+				Strati.SOLIDO)
+		var colpo := spazio.intersect_ray(giu)
+		if colpo.is_empty():
+			break
+		var y: float = (colpo["position"] as Vector3).y
+		if (colpo["normal"] as Vector3).y > 0.7 and y < 7.6 and y > -2.6:
+			var su := PhysicsRayQueryParameters3D.create(Vector3(x, y + 0.05, z),
+					Vector3(x, y + Giocatore.ALTEZZA_CORPO, z), Strati.SOLIDO)
+			if spazio.intersect_ray(su).is_empty() and _aria(spazio, Vector3(x, y + 0.05, z)):
+				fuori.append(y)
+		da = y - 0.02
+	return fuori
+
+
+func _aria(spazio: PhysicsDirectSpaceState3D, punto: Vector3) -> bool:
+	var q := PhysicsPointQueryParameters3D.new()
+	q.position = punto
+	q.collision_mask = Strati.SOLIDO
+	return spazio.intersect_point(q, 1).is_empty()
 
 
 ## Corre lungo la rampa: torna quanto ha fatto e se si è fermato prima della fine.
